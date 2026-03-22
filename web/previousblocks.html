@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 100%;">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
+    <link rel="icon" type="image/png" href="/branding/quail-ultra.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="stylesheet" href="/vendor/bootstrap/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/quail-ui.css">
+</head>
+
+<body class="q-shell" data-requires-pack="true" style="height: 100%;">
+    <div class="container-fluid d-flex flex-column" style="height: 100%;">
+        <div class="row q-topbar">
+            <div class="col-lg-4 d-flex align-items-center">
+                <button class="q-back-btn btn" id="btn-back" type="button">&lsaquo;</button>
+                <div class="q-brand">
+                    <div class="q-brand-mark">Q</div>
+                    <div class="q-brand-copy">
+                        <p class="q-brand-title">Quail Ultra</p>
+                        <p class="q-brand-subtitle">Block History</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-8 d-flex justify-content-lg-end justify-content-start mt-3 mt-lg-0">
+                <ul class="nav nav-pills q-nav-pills">
+                    <li class="nav-item" id="navbtn-overview"><a class="nav-link" href="#">Overview</a></li>
+                    <li class="nav-item" id="navbtn-newblock"><a class="nav-link" href="#">New Block</a></li>
+                    <li class="nav-item" id="navbtn-prevblocks"><a class="nav-link active" href="#">Previous Blocks</a></li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="q-panel" style="margin: 0 8px 24px;">
+            <div class="q-panel-header">
+                <div>
+                    <p class="q-panel-title">Previous Blocks</p>
+                    <p class="q-panel-subtitle">Resume incomplete sessions or reopen completed blocks directly into the updated review interface.</p>
+                </div>
+            </div>
+            <div class="q-panel-body q-table-wrap">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead id="tableheader">
+                            <tr>
+                                <th>Block #</th>
+                                <th>Mode</th>
+                                <th>State</th>
+                                <th>% Correct</th>
+                                <th>Num Qs</th>
+                                <th>Q Pool</th>
+                                <th>Tags</th>
+                                <th>Start Time</th>
+                                <th>Open</th>
+                                <th>Delete</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablebody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="qlistModal" tabindex="-1" aria-labelledby="qlistModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="qlistModalLabel"></h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <p id="qlistModalP"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</body>
+
+<script src="/vendor/jquery/dist/jquery.min.js"></script>
+<script src="/vendor/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/js/lib/live-api.js"></script>
+<script src="/js/lib/live-compat.js"></script>
+<script src="/js/pages/previousblocks.js"></script>
+</html>

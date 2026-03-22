@@ -1,0 +1,13 @@
+services:
+  quail-ultra-live:
+    build: .
+    container_name: quail-ultra-live
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: "3000"
+      SESSION_SECRET: "change-this-before-production"
+      ALLOW_REGISTRATION: "true"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
