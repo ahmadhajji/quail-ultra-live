@@ -1,6 +1,6 @@
 let $ = window.jQuery
-const MAX_FOLDER_BATCH_BYTES = 24 * 1024 * 1024
-const MAX_FOLDER_BATCH_FILES = 200
+const MAX_FOLDER_BATCH_BYTES = 4 * 1024 * 1024
+const MAX_FOLDER_BATCH_FILES = 40
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(function ignoreRegistrationError(error) {
