@@ -155,8 +155,10 @@ async function uploadFolder() {
       await window.QuailLive.uploadFolderImportBatch(sessionId, formData)
     }
 
-    setPackStatus('Finalizing Study Pack...')
-    await window.QuailLive.completeFolderImport(sessionId)
+    setPackStatus('Finalizing Study Pack on the server...')
+    await window.QuailLive.completeFolderImport(sessionId, function updateFinalizeStatus(message) {
+      setPackStatus(message || 'Finalizing Study Pack on the server...')
+    })
     $('#folder-input').val('')
     $('#pack-name').val('')
     await renderStudyPacks()

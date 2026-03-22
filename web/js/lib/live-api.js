@@ -10,6 +10,12 @@
   let syncBanner
   let sessionCache
 
+  function delay(ms) {
+    return new Promise(function resolveAfterDelay(resolve) {
+      window.setTimeout(resolve, ms)
+    })
+  }
+
   function openDb() {
     if (!dbPromise) {
       dbPromise = new Promise(function initialize(resolve, reject) {
@@ -256,10 +262,27 @@
     })
   }
 
-  async function completeFolderImport(sessionId) {
-    const payload = await request(`/api/study-packs/import/folder-session/${encodeURIComponent(sessionId)}/complete`, {
+  async function getFolderImportStatus(sessionId) {
+    return request(`/api/study-packs/import/folder-session/${encodeURIComponent(sessionId)}`)
+  }
+
+  async function completeFolderImport(sessionId, onProgress) {
+    let payload = await request(`/api/study-packs/import/folder-session/${encodeURIComponent(sessionId)}/complete`, {
       method: 'POST'
     })
+
+    while (payload && payload.status === 'finalizing') {
+      if (typeof onProgress === 'function') {
+        onProgress('Finalizing Study Pack on the server...')
+      }
+      await delay(1500)
+      payload = await getFolderImportStatus(sessionId)
+    }
+
+    if (!payload || payload.status !== 'completed' || !payload.pack) {
+      throw new Error(payload && payload.error ? payload.error : 'Import failed')
+    }
+
     return payload.pack
   }
 

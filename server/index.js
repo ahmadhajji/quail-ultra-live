@@ -185,7 +185,11 @@ async function createImportSession(userId, requestedName) {
     userId: userId,
     requestedName: requestedName,
     tempRoot: tempRoot,
-    uploadRoot: uploadRoot
+    uploadRoot: uploadRoot,
+    state: 'uploading',
+    error: '',
+    pack: null,
+    createdAt: nowIso()
   })
 
   return sessionId
@@ -197,7 +201,66 @@ async function cleanupImportSession(sessionId) {
     return
   }
   importSessions.delete(sessionId)
-  await fsp.rm(session.tempRoot, { recursive: true, force: true })
+  if (session.tempRoot) {
+    await fsp.rm(session.tempRoot, { recursive: true, force: true })
+  }
+}
+
+function summarizeImportSession(session) {
+  return {
+    sessionId: session.id,
+    status: session.state,
+    error: session.error || '',
+    pack: session.pack || null
+  }
+}
+
+function scheduleImportSessionExpiry(sessionId) {
+  const timer = setTimeout(function expireImportSession() {
+    importSessions.delete(sessionId)
+  }, 1000 * 60 * 15)
+
+  if (typeof timer.unref === 'function') {
+    timer.unref()
+  }
+}
+
+function finalizeImportSession(sessionId) {
+  const session = importSessions.get(sessionId)
+  if (!session || session.state !== 'uploading') {
+    return
+  }
+
+  session.state = 'finalizing'
+  session.error = ''
+  console.log(`Finalizing study-pack import session ${sessionId}`)
+
+  ;(async function runImportFinalization() {
+    const startedAt = Date.now()
+
+    try {
+      const pack = await finalizeImportedPack(session.userId, session.uploadRoot, session.requestedName)
+      session.pack = packSummary(pack)
+      session.state = 'completed'
+      console.log(`Completed study-pack import session ${sessionId} in ${Date.now() - startedAt}ms`)
+    } catch (error) {
+      session.error = error && error.message ? error.message : 'Import failed'
+      session.state = 'failed'
+      console.error(`Failed study-pack import session ${sessionId}`, error)
+    } finally {
+      if (session.tempRoot) {
+        await fsp.rm(session.tempRoot, { recursive: true, force: true })
+      }
+      session.tempRoot = ''
+      session.uploadRoot = ''
+      scheduleImportSessionExpiry(sessionId)
+    }
+  })().catch(function onImportFinalizationError(error) {
+    session.error = error && error.message ? error.message : 'Import failed'
+    session.state = 'failed'
+    console.error(`Unexpected import finalization error for session ${sessionId}`, error)
+    scheduleImportSessionExpiry(sessionId)
+  })
 }
 
 function multerErrorMessage(error) {
@@ -351,6 +414,9 @@ app.post('/api/study-packs/import/folder-session/:sessionId/files', requireAuth,
   if (!session) {
     return jsonError(res, 404, 'Import session not found')
   }
+  if (session.state !== 'uploading') {
+    return jsonError(res, 409, 'Import session is no longer accepting files')
+  }
   if (!req.files || req.files.length === 0) {
     return jsonError(res, 400, 'Select folder files to upload')
   }
@@ -365,20 +431,34 @@ app.post('/api/study-packs/import/folder-session/:sessionId/complete', requireAu
     return jsonError(res, 404, 'Import session not found')
   }
 
-  try {
-    const pack = await finalizeImportedPack(req.user.id, session.uploadRoot, session.requestedName)
-    res.json({ pack: packSummary(pack) })
-  } catch (error) {
-    jsonError(res, 400, error.message || 'Import failed')
-  } finally {
-    await cleanupImportSession(req.params.sessionId)
+  if (session.state === 'uploading') {
+    finalizeImportSession(req.params.sessionId)
   }
+
+  const summary = summarizeImportSession(session)
+  if (summary.status === 'finalizing') {
+    return res.status(202).json(summary)
+  }
+
+  res.json(summary)
+})
+
+app.get('/api/study-packs/import/folder-session/:sessionId', requireAuth, async function getFolderImportStatus(req, res) {
+  const session = getImportSession(req.params.sessionId, req.user.id)
+  if (!session) {
+    return jsonError(res, 404, 'Import session not found')
+  }
+
+  res.json(summarizeImportSession(session))
 })
 
 app.delete('/api/study-packs/import/folder-session/:sessionId', requireAuth, async function cancelFolderImport(req, res) {
   const session = getImportSession(req.params.sessionId, req.user.id)
   if (!session) {
     return jsonError(res, 404, 'Import session not found')
+  }
+  if (session.state === 'finalizing') {
+    return jsonError(res, 409, 'Import is currently being finalized')
   }
   await cleanupImportSession(req.params.sessionId)
   res.json({ ok: true })
