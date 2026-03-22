@@ -1,5 +1,5 @@
-const STATIC_CACHE = 'quail-live-static-v3'
-const RUNTIME_CACHE = 'quail-live-runtime-v3'
+const STATIC_CACHE = 'quail-live-static-v4'
+const RUNTIME_CACHE = 'quail-live-runtime-v4'
 const STATIC_ASSETS = [
   '/',
   '/overview.html',

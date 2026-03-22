@@ -33,6 +33,33 @@ function setPackStatus(message, isError) {
   $('#packError').text(isError ? (message || '') : '')
 }
 
+function formatFolderSelection(files) {
+  const selectedFiles = Array.from(files || [])
+  if (selectedFiles.length === 0) {
+    return 'No folder selected yet.'
+  }
+
+  const rootName = selectedFiles[0].webkitRelativePath
+    ? selectedFiles[0].webkitRelativePath.split('/')[0]
+    : selectedFiles[0].name
+  return `${rootName} selected · ${selectedFiles.length} file${selectedFiles.length === 1 ? '' : 's'} ready to upload`
+}
+
+function formatZipSelection(file) {
+  if (!file) {
+    return 'No zip selected yet.'
+  }
+  const sizeMb = ((file.size || 0) / (1024 * 1024)).toFixed(1)
+  return `${file.name} · ${sizeMb} MB`
+}
+
+function syncFileSelectionLabels() {
+  const folderFiles = $('#folder-input').get(0).files
+  const zipFile = $('#zip-input').get(0).files[0]
+  $('#folder-selection').text(formatFolderSelection(folderFiles))
+  $('#zip-selection').text(formatZipSelection(zipFile))
+}
+
 function buildFolderUploadBatches(fileList) {
   const files = Array.from(fileList || [])
   const batches = []
@@ -160,6 +187,7 @@ async function uploadFolder() {
       setPackStatus(message || 'Finalizing Study Pack on the server...')
     })
     $('#folder-input').val('')
+    syncFileSelectionLabels()
     $('#pack-name').val('')
     await renderStudyPacks()
     setPackStatus('Study Pack imported.')
@@ -191,6 +219,7 @@ async function uploadZip() {
     setPackStatus('Uploading zip and rebuilding Study Pack...')
     await window.QuailLive.importStudyPack(formData)
     $('#zip-input').val('')
+    syncFileSelectionLabels()
     $('#pack-name').val('')
     await renderStudyPacks()
     setPackStatus('Study Pack imported.')
@@ -215,6 +244,11 @@ $('#btn-import-zip').on('click', function onZipUpload() {
   uploadZip()
 })
 
+$('.q-file-trigger').on('click', function onFileTriggerClick() {
+  const inputId = $(this).data('file-target')
+  $(`#${inputId}`).trigger('click')
+})
+
 $('#btn-logout').on('click', async function onLogoutClick() {
   await window.QuailLive.logout()
   await refreshSessionView()
@@ -225,6 +259,11 @@ $('#auth-password').on('keydown', function onPasswordKeydown(event) {
     submitAuth('login')
   }
 })
+
+$('#folder-input').on('change', syncFileSelectionLabels)
+$('#zip-input').on('change', syncFileSelectionLabels)
+
+syncFileSelectionLabels()
 
 refreshSessionView().catch(function onInitError(error) {
   setAuthError(error.message || 'Unable to initialize the home screen.')

@@ -13,15 +13,36 @@ The current branch goal is:
 
 ## Current Branch
 
-- Repo target: `ahmadhajji/quail-ultra`
-- Working branch: `codex/uworld-tutor-ui`
+- Repo target: `ahmadhajji/quail-ultra-live`
+- Default branch: `main`
+- Current checked-out branch when this note was updated: `main`
+
+## Repo Reality Check
+
+This repository is not the original Electron desktop app.
+
+- `quail-ultra` is the upstream desktop-oriented line.
+- `quail-ultra-live` is the account-backed web fork.
+- This repo keeps the same qbank format and broad solving flow, but runs as:
+  - Express on the server
+  - jQuery/HTML/CSS in the browser
+  - SQLite plus on-disk files under `data/`
+
+Agents should not assume Electron packaging or desktop-only persistence when working in this repo.
 
 ## Architecture
 
-Quail Ultra is still a local Electron app.
+Quail Ultra Live is a browser app backed by an Express server.
+
+- `server/index.js`
+  Main server entry point, auth/session setup, Study Pack import/export routes, pack asset serving, progress API, and folder-import session handling.
+- `shared/`
+  Qbank compatibility helpers and progress normalization shared across the web flow.
+- `web/`
+  Browser app pages, shared JS utilities, service worker, and CSS.
 
 - `main.js`
-  Main Electron process, qbank loading, progress persistence, IPC handlers, window routing.
+  Legacy desktop entry point kept for compatibility/reference from the original line, not the deployed web server.
 - `newblock.html` / `newblock.js`
   Block builder and session creation flow.
 - `examview.html` / `examview.js`
@@ -274,12 +295,24 @@ npm start
 Useful checks:
 
 ```bash
+curl http://localhost:3000/api/health
 node --check main.js
 node --check newblock.js
 node --check examview.js
 node --check previousblocks.js
 node --check overview.js
+npm run check
 ```
+
+For this repo, the most relevant manual smoke path is the web flow:
+
+1. Register or sign in.
+2. Import a Study Pack folder or zip.
+3. Open the pack.
+4. Start a Tutor block and confirm immediate explanation reveal.
+5. Start a Timed or Untimed block and confirm explanations stay hidden until block finish.
+6. Open Previous Blocks and verify resume/review continuity.
+7. Open Overview and confirm stats update.
 
 Packaging:
 
@@ -303,6 +336,7 @@ Manual smoke path:
 
 - Prefer `rg` for code search.
 - Use `apply_patch` for manual edits.
+- Treat this repo as the web deployment project first; do not blindly follow Electron-only assumptions from upstream.
 - Do not rewrite the app into a framework.
 - Preserve backward compatibility for `progress.json`.
 - Treat `quail-ui.css` as the shared styling layer for the new UI.
@@ -310,6 +344,111 @@ Manual smoke path:
 - When adjusting timer behavior, verify Tutor, Timed, Untimed, pause, resume, and finished-block states separately.
 - When changing answer rendering, test against real `*-q.html` files because choice text may be embedded in the question stem markup.
 
+## Deployment Runbook
+
+The current production deployment is the Debian homelab instance exposed through Cloudflare Tunnel.
+
+### SSH Access
+
+- Host: `10.5.5.10`
+- User: `ahmad`
+- SSH command: `ssh ahmad@10.5.5.10`
+- Auth is currently password-based.
+- Do not commit or write the plaintext password into tracked files. Retrieve it from the user or a secure local secret source when needed.
+
+### Server Paths
+
+- App checkout: `/home/ahmad/apps/quail-ultra-live`
+- Persistent app data: `/home/ahmad/apps/quail-ultra-live/data`
+- Server env file: `/home/ahmad/apps/quail-ultra-live/.env`
+- Cloudflare Tunnel config: `/etc/cloudflared/config.yml`
+
+### Docker Deployment
+
+The server deploy is Compose-based.
+
+From `/home/ahmad/apps/quail-ultra-live`:
+
+```bash
+git pull
+docker compose up -d --build
+docker compose logs -f --tail=200
+```
+
+Important runtime details:
+
+- `compose.yaml` binds the app to `127.0.0.1:${PORT:-3000}:3000`
+- persistent files live in `./data`
+- required env values:
+  - `SESSION_SECRET`
+  - `ALLOW_REGISTRATION`
+  - `PORT`
+
+Recommended production flow:
+
+1. Keep `ALLOW_REGISTRATION=true` only long enough to create the first account.
+2. Flip it to `false` in `.env`.
+3. Re-run `docker compose up -d`.
+
+### Health Checks
+
+Useful checks on the server:
+
+```bash
+curl http://127.0.0.1:3000/api/health
+docker compose ps
+docker compose logs --tail=200
+```
+
+Useful checks from elsewhere:
+
+```bash
+curl https://quail.clinicalvault.me/api/health
+```
+
+### Cloudflare Tunnel
+
+The public hostname is:
+
+- `https://quail.clinicalvault.me`
+
+The tunnel ingress must forward to the local app and keep chunked encoding disabled for uploads.
+
+Relevant ingress shape in `/etc/cloudflared/config.yml`:
+
+```yaml
+ingress:
+  - hostname: quail.clinicalvault.me
+    service: http://localhost:3000
+    originRequest:
+      disableChunkedEncoding: true
+  - service: http_status:404
+```
+
+After changing the tunnel config:
+
+```bash
+sudo cloudflared tunnel ingress validate /etc/cloudflared/config.yml
+sudo systemctl restart cloudflared
+sudo systemctl --no-pager --full status cloudflared
+```
+
+### Upload Caveat
+
+For this deployment, `disableChunkedEncoding: true` is not optional.
+
+Without it, multipart folder uploads through Cloudflare Tunnel can stall on the first batch even when the origin app is healthy. This was the root cause of the public upload failure for the real test bank at:
+
+- `/Users/ahmadhajji/Documents/IM1-quail-qbank`
+
+That bank was later verified to upload successfully through the live public endpoint after the tunnel change.
+
 ## Current Working Tree Note
 
-At the time this file was written, the working tree includes the UWorld-style UI implementation and related docs changes, and `package-lock.json` also reflects local `npm install` churn.
+At the time this file was updated:
+
+- repo remote was `git@github.com:ahmadhajji/quail-ultra-live.git`
+- default branch was `main`
+- public deployment was live at `quail.clinicalvault.me`
+- folder upload batching and async finalization had been added for public imports
+- Cloudflare Tunnel required `disableChunkedEncoding: true` for reliable multipart uploads
