@@ -1,4 +1,6 @@
 let $ = window.jQuery
+const MAX_FOLDER_BATCH_BYTES = 24 * 1024 * 1024
+const MAX_FOLDER_BATCH_FILES = 200
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(function ignoreRegistrationError(error) {
@@ -29,6 +31,39 @@ function setAuthError(message) {
 function setPackStatus(message, isError) {
   $('#packLoading').text(isError ? '' : (message || ''))
   $('#packError').text(isError ? (message || '') : '')
+}
+
+function buildFolderUploadBatches(fileList) {
+  const files = Array.from(fileList || [])
+  const batches = []
+  let currentBatch = []
+  let currentBytes = 0
+
+  for (const file of files) {
+    if ((file.size || 0) > 95 * 1024 * 1024) {
+      throw new Error(`"${file.name}" is too large to upload through the current public endpoint.`)
+    }
+
+    const wouldOverflow = currentBatch.length > 0 && (
+      currentBatch.length >= MAX_FOLDER_BATCH_FILES ||
+      (currentBytes + (file.size || 0)) > MAX_FOLDER_BATCH_BYTES
+    )
+
+    if (wouldOverflow) {
+      batches.push(currentBatch)
+      currentBatch = []
+      currentBytes = 0
+    }
+
+    currentBatch.push(file)
+    currentBytes += file.size || 0
+  }
+
+  if (currentBatch.length > 0) {
+    batches.push(currentBatch)
+  }
+
+  return batches
 }
 
 function packCard(pack) {
@@ -104,24 +139,36 @@ async function uploadFolder() {
     setPackStatus('Choose a folder first.', true)
     return
   }
-
-  const formData = new FormData()
-  formData.append('importType', 'folder')
-  formData.append('packName', $('#pack-name').val().trim())
-
-  for (const file of files) {
-    const relativePath = file.webkitRelativePath || file.name
-    formData.append('files', file, relativePath)
-  }
+  let sessionId = ''
 
   try {
-    setPackStatus('Uploading folder and building Study Pack...')
-    await window.QuailLive.importStudyPack(formData)
+    const batches = buildFolderUploadBatches(files)
+    sessionId = await window.QuailLive.beginFolderImport($('#pack-name').val().trim())
+
+    for (let index = 0; index < batches.length; index += 1) {
+      const formData = new FormData()
+      for (const file of batches[index]) {
+        const relativePath = file.webkitRelativePath || file.name
+        formData.append('files', file, relativePath)
+      }
+      setPackStatus(`Uploading folder batch ${index + 1} of ${batches.length}...`)
+      await window.QuailLive.uploadFolderImportBatch(sessionId, formData)
+    }
+
+    setPackStatus('Finalizing Study Pack...')
+    await window.QuailLive.completeFolderImport(sessionId)
     $('#folder-input').val('')
     $('#pack-name').val('')
     await renderStudyPacks()
     setPackStatus('Study Pack imported.')
   } catch (error) {
+    if (sessionId) {
+      try {
+        await window.QuailLive.cancelFolderImport(sessionId)
+      } catch (cancelError) {
+        console.warn('Unable to cancel folder import session.', cancelError)
+      }
+    }
     setPackStatus(error.message || 'Folder import failed', true)
   }
 }

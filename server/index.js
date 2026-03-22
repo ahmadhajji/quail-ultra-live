@@ -38,6 +38,7 @@ const upload = multer({
     files: 20000
   }
 })
+const uploadAny = upload.any()
 
 function nowIso() {
   return new Date().toISOString()
@@ -74,6 +75,7 @@ function initDb() {
 }
 
 let db
+const importSessions = new Map()
 
 function jsonError(res, status, message) {
   res.status(status).json({ error: message })
@@ -162,6 +164,57 @@ async function extractZipBuffer(targetDir, buffer) {
     .pipe(unzipper.Extract({ path: targetDir }))
     .promise()
   await fsp.unlink(zipPath)
+}
+
+function getImportSession(sessionId, userId) {
+  const session = importSessions.get(sessionId)
+  if (!session || session.userId !== userId) {
+    return null
+  }
+  return session
+}
+
+async function createImportSession(userId, requestedName) {
+  const sessionId = crypto.randomUUID()
+  const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'quail-ultra-live-import-'))
+  const uploadRoot = path.join(tempRoot, 'upload')
+  await fsp.mkdir(uploadRoot, { recursive: true })
+
+  importSessions.set(sessionId, {
+    id: sessionId,
+    userId: userId,
+    requestedName: requestedName,
+    tempRoot: tempRoot,
+    uploadRoot: uploadRoot
+  })
+
+  return sessionId
+}
+
+async function cleanupImportSession(sessionId) {
+  const session = importSessions.get(sessionId)
+  if (!session) {
+    return
+  }
+  importSessions.delete(sessionId)
+  await fsp.rm(session.tempRoot, { recursive: true, force: true })
+}
+
+function multerErrorMessage(error) {
+  if (!(error instanceof multer.MulterError)) {
+    return error && error.message ? error.message : 'Upload failed'
+  }
+
+  switch (error.code) {
+    case 'LIMIT_FILE_SIZE':
+      return 'One of the uploaded files exceeded the 100 MB per-file limit.'
+    case 'LIMIT_FILE_COUNT':
+      return 'Too many files were selected for a single upload request.'
+    case 'LIMIT_UNEXPECTED_FILE':
+      return 'Unexpected upload field received.'
+    default:
+      return error.message || 'Upload failed'
+  }
 }
 
 async function finalizeImportedPack(userId, importRoot, requestedName) {
@@ -288,7 +341,50 @@ app.get('/api/study-packs', requireAuth, function listPacks(req, res) {
   res.json({ packs: rows.map(packSummary) })
 })
 
-app.post('/api/study-packs/import', requireAuth, upload.any(), async function importPack(req, res) {
+app.post('/api/study-packs/import/folder-session', requireAuth, async function beginFolderImport(req, res) {
+  const sessionId = await createImportSession(req.user.id, req.body.packName)
+  res.json({ sessionId: sessionId })
+})
+
+app.post('/api/study-packs/import/folder-session/:sessionId/files', requireAuth, uploadAny, async function addFolderImportFiles(req, res) {
+  const session = getImportSession(req.params.sessionId, req.user.id)
+  if (!session) {
+    return jsonError(res, 404, 'Import session not found')
+  }
+  if (!req.files || req.files.length === 0) {
+    return jsonError(res, 400, 'Select folder files to upload')
+  }
+
+  await writeUploadFiles(session.uploadRoot, req.files)
+  res.json({ ok: true, filesReceived: req.files.length })
+})
+
+app.post('/api/study-packs/import/folder-session/:sessionId/complete', requireAuth, async function completeFolderImport(req, res) {
+  const session = getImportSession(req.params.sessionId, req.user.id)
+  if (!session) {
+    return jsonError(res, 404, 'Import session not found')
+  }
+
+  try {
+    const pack = await finalizeImportedPack(req.user.id, session.uploadRoot, session.requestedName)
+    res.json({ pack: packSummary(pack) })
+  } catch (error) {
+    jsonError(res, 400, error.message || 'Import failed')
+  } finally {
+    await cleanupImportSession(req.params.sessionId)
+  }
+})
+
+app.delete('/api/study-packs/import/folder-session/:sessionId', requireAuth, async function cancelFolderImport(req, res) {
+  const session = getImportSession(req.params.sessionId, req.user.id)
+  if (!session) {
+    return jsonError(res, 404, 'Import session not found')
+  }
+  await cleanupImportSession(req.params.sessionId)
+  res.json({ ok: true })
+})
+
+app.post('/api/study-packs/import', requireAuth, uploadAny, async function importPack(req, res) {
   const importType = req.body.importType === 'zip' ? 'zip' : 'folder'
   const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'quail-ultra-live-'))
 
@@ -448,6 +544,24 @@ app.delete('/api/study-packs/:packId', requireAuth, async function deletePack(re
   db.prepare('DELETE FROM study_packs WHERE id = ?').run(row.id)
   await fsp.rm(path.dirname(row.workspace_path), { recursive: true, force: true })
   res.json({ ok: true })
+})
+
+app.use(function apiErrorHandler(error, req, res, next) {
+  if (!req.path.startsWith('/api/')) {
+    return next(error)
+  }
+
+  if (res.headersSent) {
+    return next(error)
+  }
+
+  if (error instanceof multer.MulterError) {
+    const status = error.code === 'LIMIT_FILE_SIZE' ? 413 : 400
+    return jsonError(res, status, multerErrorMessage(error))
+  }
+
+  console.error(error)
+  return jsonError(res, 500, error && error.message ? error.message : 'Internal server error')
 })
 
 app.get('/', function root(_req, res) {

@@ -94,22 +94,58 @@
     return `/api/study-packs/${packId}/file/${relativePath.split('/').map(encodeURIComponent).join('/')}`
   }
 
-  async function request(url, options) {
-    const response = await window.fetch(url, Object.assign({ credentials: 'include' }, options || {}))
+  async function parseResponseBody(response) {
     const contentType = response.headers.get('content-type') || ''
-    let body = null
-
     if (contentType.includes('application/json')) {
-      body = await response.json()
-    } else if (!response.ok) {
-      body = { error: await response.text() }
+      return response.json()
     }
 
+    const text = await response.text()
+    return text ? { text: text } : null
+  }
+
+  function summarizeTextError(text) {
+    const normalized = String(text || '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    if (!normalized) {
+      return ''
+    }
+
+    if (normalized.includes('413 Request Entity Too Large')) {
+      return 'Upload request was too large for the current endpoint.'
+    }
+
+    return normalized.slice(0, 220)
+  }
+
+  function buildRequestError(response, body) {
+    let message = ''
+
+    if (body && typeof body.error === 'string' && body.error.trim()) {
+      message = body.error.trim()
+    } else if (body && typeof body.text === 'string') {
+      message = summarizeTextError(body.text)
+    }
+
+    if (!message) {
+      message = `Request failed with ${response.status}`
+    }
+
+    const error = new Error(message)
+    error.status = response.status
+    error.body = body
+    return error
+  }
+
+  async function request(url, options) {
+    const response = await window.fetch(url, Object.assign({ credentials: 'include' }, options || {}))
+    const body = await parseResponseBody(response)
+
     if (!response.ok) {
-      const error = new Error(body && body.error ? body.error : `Request failed with ${response.status}`)
-      error.status = response.status
-      error.body = body
-      throw error
+      throw buildRequestError(response, body)
     }
 
     return body
@@ -197,19 +233,40 @@
   }
 
   async function importStudyPack(formData) {
-    const response = await window.fetch('/api/study-packs/import', {
+    const payload = await request('/api/study-packs/import', {
       method: 'POST',
-      credentials: 'include',
       body: formData
     })
-    const payload = await response.json()
-    if (!response.ok) {
-      const error = new Error(payload.error || 'Import failed')
-      error.status = response.status
-      error.body = payload
-      throw error
-    }
     return payload.pack
+  }
+
+  async function beginFolderImport(packName) {
+    const payload = await request('/api/study-packs/import/folder-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ packName: packName || '' })
+    })
+    return payload.sessionId
+  }
+
+  async function uploadFolderImportBatch(sessionId, formData) {
+    await request(`/api/study-packs/import/folder-session/${encodeURIComponent(sessionId)}/files`, {
+      method: 'POST',
+      body: formData
+    })
+  }
+
+  async function completeFolderImport(sessionId) {
+    const payload = await request(`/api/study-packs/import/folder-session/${encodeURIComponent(sessionId)}/complete`, {
+      method: 'POST'
+    })
+    return payload.pack
+  }
+
+  async function cancelFolderImport(sessionId) {
+    await request(`/api/study-packs/import/folder-session/${encodeURIComponent(sessionId)}`, {
+      method: 'DELETE'
+    })
   }
 
   async function deleteStudyPack(packId) {
@@ -538,8 +595,11 @@
   }
 
   window.QuailLive = {
+    beginFolderImport: beginFolderImport,
     buildPageUrl: buildPageUrl,
     buildPackFileUrl: buildPackFileUrl,
+    cancelFolderImport: cancelFolderImport,
+    completeFolderImport: completeFolderImport,
     deleteStudyPack: deleteStudyPack,
     flushDirtyProgress: flushDirtyProgress,
     getCurrentPackId: getCurrentPackId,
@@ -555,6 +615,7 @@
     request: request,
     setPackCache: setPackCache,
     showSyncBanner: showSyncBanner,
-    STORE_PREFIX: STORE_PREFIX
+    STORE_PREFIX: STORE_PREFIX,
+    uploadFolderImportBatch: uploadFolderImportBatch
   }
 })(window)
