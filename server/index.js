@@ -22,6 +22,7 @@ const {
 } = require('../shared/qbank')
 
 const ROOT_DIR = path.resolve(__dirname, '..')
+const DIST_DIR = path.join(ROOT_DIR, 'dist')
 const WEB_DIR = path.join(ROOT_DIR, 'web')
 const DATA_DIR = path.join(ROOT_DIR, 'data')
 const PACKS_DIR = path.join(DATA_DIR, 'study-packs')
@@ -29,12 +30,21 @@ const DB_PATH = path.join(DATA_DIR, 'quail-ultra-live.db')
 const PORT = parseInt(process.env.PORT || '3000', 10)
 const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-session-secret-change-me'
 const ALLOW_REGISTRATION = process.env.ALLOW_REGISTRATION !== 'false'
+const MAX_UPLOAD_FILE_SIZE = 1024 * 1024 * 1024
 
 const app = express()
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage: multer.diskStorage({
+    destination: function destination(_req, _file, callback) {
+      callback(null, os.tmpdir())
+    },
+    filename: function filename(_req, file, callback) {
+      const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')
+      callback(null, `${Date.now()}-${crypto.randomUUID()}-${safeName}`)
+    }
+  }),
   limits: {
-    fileSize: 1024 * 1024 * 100,
+    fileSize: MAX_UPLOAD_FILE_SIZE,
     files: 20000
   }
 })
@@ -152,18 +162,21 @@ async function writeUploadFiles(targetDir, files) {
       throw new Error(`Invalid upload path: ${relativeName}`)
     }
     await fsp.mkdir(path.dirname(absolutePath), { recursive: true })
-    await fsp.writeFile(absolutePath, file.buffer)
+    if (file.path) {
+      await fsp.copyFile(file.path, absolutePath)
+      await fsp.unlink(file.path).catch(function ignoreUnlinkError() {})
+    } else {
+      await fsp.writeFile(absolutePath, file.buffer)
+    }
   }
 }
 
-async function extractZipBuffer(targetDir, buffer) {
+async function extractZipFile(targetDir, zipPath) {
   await fsp.mkdir(targetDir, { recursive: true })
-  const zipPath = path.join(targetDir, 'upload.zip')
-  await fsp.writeFile(zipPath, buffer)
   await fs.createReadStream(zipPath)
     .pipe(unzipper.Extract({ path: targetDir }))
     .promise()
-  await fsp.unlink(zipPath)
+  await fsp.unlink(zipPath).catch(function ignoreUnlinkError() {})
 }
 
 function getImportSession(sessionId, userId) {
@@ -270,7 +283,7 @@ function multerErrorMessage(error) {
 
   switch (error.code) {
     case 'LIMIT_FILE_SIZE':
-      return 'One of the uploaded files exceeded the 100 MB per-file limit.'
+      return 'One of the uploaded files exceeded the current per-file upload limit.'
     case 'LIMIT_FILE_COUNT':
       return 'Too many files were selected for a single upload request.'
     case 'LIMIT_UNEXPECTED_FILE':
@@ -326,6 +339,7 @@ app.use(session({
 }))
 
 app.use('/vendor', express.static(path.join(ROOT_DIR, 'node_modules')))
+app.use('/assets', express.static(path.join(DIST_DIR, 'assets')))
 app.use('/branding', express.static(path.join(WEB_DIR, 'branding')))
 app.use('/js', express.static(path.join(WEB_DIR, 'js')))
 app.use('/manifest.webmanifest', express.static(path.join(WEB_DIR, 'manifest.webmanifest')))
@@ -473,7 +487,7 @@ app.post('/api/study-packs/import', requireAuth, uploadAny, async function impor
       if (!req.files || req.files.length !== 1) {
         return jsonError(res, 400, 'Provide exactly one zip file')
       }
-      await extractZipBuffer(tempRoot, req.files[0].buffer)
+      await extractZipFile(tempRoot, req.files[0].path)
     } else {
       if (!req.files || req.files.length === 0) {
         return jsonError(res, 400, 'Select a study-pack folder to upload')
@@ -645,11 +659,15 @@ app.use(function apiErrorHandler(error, req, res, next) {
 })
 
 app.get('/', function root(_req, res) {
-  res.sendFile(path.join(WEB_DIR, 'index.html'))
+  res.sendFile(path.join(DIST_DIR, 'index.html'))
 })
 
 app.get('/:page(overview|newblock|previousblocks|examview|loadbank).html', function htmlPages(req, res) {
-  res.sendFile(path.join(WEB_DIR, `${req.params.page}.html`))
+  if (req.params.page === 'loadbank') {
+    res.sendFile(path.join(WEB_DIR, 'loadbank.html'))
+    return
+  }
+  res.sendFile(path.join(DIST_DIR, `${req.params.page}.html`))
 })
 
 async function bootstrap() {

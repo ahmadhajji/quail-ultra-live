@@ -1,7 +1,32 @@
-const STATIC_CACHE = 'quail-live-static-v5'
-const RUNTIME_CACHE = 'quail-live-runtime-v5'
+const STATIC_CACHE = 'quail-live-static-v4'
+const RUNTIME_CACHE = 'quail-live-runtime-v4'
+const STATIC_ASSETS = [
+  '/',
+  '/overview.html',
+  '/newblock.html',
+  '/previousblocks.html',
+  '/examview.html',
+  '/quail-ui.css',
+  '/TextHighlighter.js',
+  '/vendor/jquery/dist/jquery.min.js',
+  '/vendor/bootstrap/dist/css/bootstrap.min.css',
+  '/vendor/bootstrap/dist/js/bootstrap.bundle.min.js',
+  '/js/lib/live-api.js',
+  '/js/lib/live-compat.js',
+  '/js/pages/index.js',
+  '/js/pages/overview.js',
+  '/js/pages/newblock.js',
+  '/js/pages/previousblocks.js',
+  '/js/pages/examview.js',
+  '/branding/quail-ultra.png'
+]
 
 self.addEventListener('install', function onInstall(event) {
+  event.waitUntil(
+    caches.open(STATIC_CACHE).then(function cacheAssets(cache) {
+      return cache.addAll(STATIC_ASSETS)
+    })
+  )
   self.skipWaiting()
 })
 
@@ -47,29 +72,10 @@ self.addEventListener('fetch', function onFetch(event) {
     return
   }
 
-  const isNavigation = request.mode === 'navigate'
-  const isStaticAsset = url.pathname === '/' ||
-    url.pathname.endsWith('.html') ||
-    url.pathname.startsWith('/assets/') ||
-    url.pathname.startsWith('/vendor/') ||
-    url.pathname === '/quail-ui.css' ||
-    url.pathname === '/TextHighlighter.js' ||
-    url.pathname === '/manifest.webmanifest' ||
-    url.pathname.startsWith('/branding/')
-
-  if (isNavigation || isStaticAsset) {
+  if (STATIC_ASSETS.includes(url.pathname)) {
     event.respondWith(
-      caches.open(STATIC_CACHE).then(function staticCache(cache) {
-        return fetch(request)
-          .then(function fromNetwork(response) {
-            cache.put(request, response.clone())
-            return response
-          })
-          .catch(function fromCache() {
-            return cache.match(request).then(function resolveCached(cached) {
-              return cached || caches.match('/')
-            })
-          })
+      caches.match(request).then(function fromStatic(cached) {
+        return cached || fetch(request)
       })
     )
   }

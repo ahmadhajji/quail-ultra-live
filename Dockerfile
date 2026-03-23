@@ -1,4 +1,4 @@
-FROM node:25-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
@@ -7,6 +7,8 @@ RUN npm ci
 
 COPY server ./server
 COPY shared ./shared
+COPY frontend ./frontend
+COPY tsconfig.json ./
 COPY web ./web
 
 EXPOSE 3000
