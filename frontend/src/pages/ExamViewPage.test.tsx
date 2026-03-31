@@ -62,7 +62,8 @@ describe('ExamViewPage', () => {
       expect(htmlHelpers.fetchQuestionAssets).toHaveBeenCalled()
     })
 
-    await userEvent.click(screen.getByRole('button', { name: /alpha/i }))
+    const alphaChoice = screen.getAllByRole('button', { name: /alpha/i })[0]!
+    await userEvent.click(alphaChoice)
     await userEvent.click(screen.getByRole('button', { name: 'Submit Answer' }))
 
     expect(await screen.findByText('Explanation')).toBeInTheDocument()
