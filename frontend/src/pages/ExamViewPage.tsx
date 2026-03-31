@@ -204,6 +204,7 @@ export function ExamViewPage() {
       nextBlock.elapsedtime = timerBaseElapsedRef.current
     })
     await persistInfo(next)
+    navigate('previousblocks', { pack: packId })
   }
 
   function updateTimerDisplay(): void {
