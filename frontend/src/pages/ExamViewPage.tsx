@@ -52,6 +52,7 @@ export function ExamViewPage() {
   const currentState = block?.questionStates[selectedQnum]
   const currentAnswer = block?.answers[selectedQnum] ?? ''
   const explanationVisible = Boolean(block && currentState && (block.complete || (block.mode === 'tutor' && currentState.revealed)))
+  const tutorReviewReady = Boolean(block && !block.complete && block.mode === 'tutor' && block.blockqlist.every((_, index) => block.questionStates[index]?.submitted))
 
   useEffect(() => {
     if (block) {
@@ -479,7 +480,7 @@ export function ExamViewPage() {
                 setSelectedQnum(nextIndex)
                 await persistInfo(next)
               } else {
-                await finishBlock(false)
+                await finishBlock(tutorReviewReady)
               }
             }}
           >
@@ -651,7 +652,7 @@ export function ExamViewPage() {
                       } else if (block.complete) {
                         navigate('previousblocks', { pack: packId })
                       } else {
-                        await finishBlock(false)
+                        await finishBlock(tutorReviewReady)
                       }
                     }}
                   >
@@ -708,7 +709,7 @@ export function ExamViewPage() {
               <span>Suspend</span>
             </button>
           ) : null}
-          <button className="btn btn-footer-tool" type="button" onClick={() => void finishBlock(false)}>
+          <button className="btn btn-footer-tool" type="button" onClick={() => void finishBlock(tutorReviewReady)}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /></svg>
             <span>{block.complete ? 'Back' : 'End Block'}</span>
           </button>
