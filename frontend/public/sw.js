@@ -51,7 +51,6 @@ self.addEventListener('fetch', function onFetch(event) {
   const isStaticAsset = url.pathname === '/' ||
     url.pathname.endsWith('.html') ||
     url.pathname.startsWith('/assets/') ||
-    url.pathname.startsWith('/vendor/') ||
     url.pathname === '/quail-ui.css' ||
     url.pathname === '/TextHighlighter.js' ||
     url.pathname === '/manifest.webmanifest' ||

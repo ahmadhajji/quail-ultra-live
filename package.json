@@ -12,7 +12,7 @@
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
     "test:smoke": "playwright test",
-    "check": "npm run typecheck && node --check server/index.js && node --check shared/progress.js && node --check shared/qbank.js && node --check web/js/lib/live-api.js && node --check web/js/lib/live-compat.js && node --check web/js/pages/index.js && node --check web/js/pages/overview.js && node --check web/js/pages/newblock.js && node --check web/js/pages/previousblocks.js && node --check web/js/pages/examview.js && node --check web/js/pages/loadbank.js && npm run test"
+    "check": "npm run build && npm run typecheck && node --check server/index.js && node --check shared/progress.js && node --check shared/qbank.js && npm run test"
   },
   "engines": {
     "node": "24.x"
@@ -20,7 +20,8 @@
   "keywords": [
     "quail",
     "usmle",
-    "electron-migration",
+    "react",
+    "express",
     "study-pack"
   ],
   "author": "Ahmad Hajji",

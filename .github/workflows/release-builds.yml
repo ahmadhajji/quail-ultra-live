@@ -1,82 +1,25 @@
-name: Release Builds
+name: Web Checks
 
 on:
-  workflow_dispatch:
+  pull_request:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
-  build-mac:
-    runs-on: macos-14
+  build-and-test:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Install icon build dependencies
-        run: python -m pip install --upgrade pip pillow
-
-      - name: Build macOS Apple Silicon distribution artifacts
-        run: npm run build:mac-dmg
-
-      - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: quail-ultra-macos-arm64
-          path: |
-            dist/Quail Ultra-*.zip
-            dist/Quail Ultra-*.dmg
-
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Install icon build dependencies
-        run: python -m pip install --upgrade pip pillow
-
-      - name: Generate icon assets
-        run: python scripts/prepare_quail_ultra_icon.py
-
-      - name: Build Windows release artifacts
-        run: npm run build:win-release
-
-      - name: Create Windows bundle with read me
-        shell: pwsh
-        run: |
-          $version = node -p "require('./package.json').version"
-          New-Item -ItemType Directory -Force -Path "dist/release-bundle" | Out-Null
-          Copy-Item "RELEASE_PACKAGE_README.txt" "dist/release-bundle/Quail Ultra Read Me.txt"
-          Copy-Item "dist/Quail Ultra-$version-setup.exe" "dist/release-bundle/"
-          Compress-Archive -Path "dist/release-bundle/*" -DestinationPath "dist/Quail Ultra-$version-windows-bundle.zip" -Force
-
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: quail-ultra-windows-x64
-          path: |
-            dist/Quail Ultra-*.zip
-            dist/Quail Ultra-*-setup.exe
+      - name: Run repo checks
+        run: npm run check

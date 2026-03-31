@@ -8,7 +8,7 @@ const repoRoot = path.resolve(frontendRoot, '..')
 export default defineConfig({
   root: frontendRoot,
   plugins: [react()],
-  publicDir: false,
+  publicDir: path.resolve(frontendRoot, 'public'),
   build: {
     outDir: path.resolve(repoRoot, 'dist'),
     emptyOutDir: true,

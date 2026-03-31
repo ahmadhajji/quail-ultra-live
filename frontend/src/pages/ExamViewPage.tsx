@@ -52,6 +52,8 @@ export function ExamViewPage() {
   const currentState = block?.questionStates[selectedQnum]
   const currentAnswer = block?.answers[selectedQnum] ?? ''
   const explanationVisible = Boolean(block && currentState && (block.complete || (block.mode === 'tutor' && currentState.revealed)))
+  const questionMarkup = useMemo(() => ({ __html: questionHtml }), [questionHtml])
+  const explanationMarkup = useMemo(() => ({ __html: explanationHtml }), [explanationHtml])
 
   useEffect(() => {
     if (block) {
@@ -110,6 +112,41 @@ export function ExamViewPage() {
       return
     }
     await syncProgress(packId, next.progress)
+  }
+
+  function persistHighlights(mutator: (nextBlock: NonNullable<typeof block>) => void): void {
+    const current = qbankinfoRef.current
+    if (!current) {
+      return
+    }
+
+    const next = structuredClone(current)
+    const nextBlock = next.progress.blockhist[blockKey]
+    if (!nextBlock) {
+      return
+    }
+
+    mutator(nextBlock)
+    qbankinfoRef.current = next
+    void persistInfo(next)
+  }
+
+  function bindHighlightRemoval(highlight: HTMLElement, highlighter: TextHighlighter, defer = false): void {
+    const attach = () => {
+      highlight.onclick = () => {
+        highlighter.removeHighlights(highlight)
+        persistHighlights((nextBlock) => {
+          nextBlock.highlights[selectedQnum] = highlighter.serializeHighlights()
+        })
+      }
+    }
+
+    if (defer) {
+      window.setTimeout(attach, 0)
+      return
+    }
+
+    attach()
   }
 
   function questionLocked(currentBlock = block, index = selectedQnum): boolean {
@@ -327,7 +364,7 @@ export function ExamViewPage() {
   }, [questionHtml, selectedQnum])
 
   useEffect(() => {
-    if (!block || !questionBodyRef.current) {
+    if (!block || !questionBodyRef.current || !questionHtml) {
       return
     }
 
@@ -338,33 +375,17 @@ export function ExamViewPage() {
     const highlighter = new TextHighlighter(questionBodyRef.current, {
       color: highlightColor,
       onAfterHighlight: (_range, highlights) => {
-        const next = mutateCurrentInfo((draft) => {
-          const nextBlock = draft.progress.blockhist[blockKey]!
+        persistHighlights((nextBlock) => {
           nextBlock.highlights[selectedQnum] = highlighter.serializeHighlights()
         })
-        void persistInfo(next)
         highlights.forEach((highlight) => {
-          highlight.onclick = () => {
-            highlighter.removeHighlights(highlight)
-            const updated = mutateCurrentInfo((draft) => {
-              const nextBlock = draft.progress.blockhist[blockKey]!
-              nextBlock.highlights[selectedQnum] = highlighter.serializeHighlights()
-            })
-            void persistInfo(updated)
-          }
+          bindHighlightRemoval(highlight, highlighter, true)
         })
       }
     })
     highlighter.deserializeHighlights(block.highlights[selectedQnum] ?? '[]')
     highlighter.getHighlights().forEach((highlight) => {
-      highlight.onclick = () => {
-        highlighter.removeHighlights(highlight)
-        const next = mutateCurrentInfo((draft) => {
-          const nextBlock = draft.progress.blockhist[blockKey]!
-          nextBlock.highlights[selectedQnum] = highlighter.serializeHighlights()
-        })
-        void persistInfo(next)
-      }
+      bindHighlightRemoval(highlight, highlighter)
     })
     highlighterRef.current = highlighter
 
@@ -540,7 +561,7 @@ export function ExamViewPage() {
           <section className="exam-panel exam-panel-continuous">
             <div ref={scrollRef} id="continuousScroll" className="exam-scroll exam-scroll-continuous">
               <section className="exam-section">
-                <div ref={questionBodyRef} className="exam-question-body" dangerouslySetInnerHTML={{ __html: questionHtml }} />
+                <div ref={questionBodyRef} className="exam-question-body" dangerouslySetInnerHTML={questionMarkup} />
               </section>
 
               <section className="exam-section exam-answer-section">
@@ -671,7 +692,7 @@ export function ExamViewPage() {
                   </div>
                   <span className={`exam-state-pill ${explanationVisible ? 'review' : 'awaiting'}`}>{explanationVisible ? (block.complete ? 'Review' : 'Revealed') : 'Hidden'}</span>
                 </div>
-                <div className="exam-explanation-body" dangerouslySetInnerHTML={{ __html: explanationHtml }} />
+                <div className="exam-explanation-body" dangerouslySetInnerHTML={explanationMarkup} />
               </section>
             </div>
           </section>

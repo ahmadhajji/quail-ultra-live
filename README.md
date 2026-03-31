@@ -1,15 +1,15 @@
 # Quail Ultra Live
 
-Quail Ultra Live is the account-backed web fork of Quail Ultra. It keeps the original qbank format and the same block-building and solving flow, but moves the product into a browser app with sign-in, Study Pack import/export, and local-first sync.
+Quail Ultra Live is a React and Express web service for working through Quail-compatible study packs in the browser. It keeps the original qbank format and solving flow, but the app itself is now a live web product rather than a desktop package.
 
 ## What This Repo Contains
 
+- `frontend/`
+  Vite and React app entrypoints, pages, shared client logic, and public assets that build into `dist/`.
 - `server/`
   Express server for auth, Study Pack import/export, qbank asset serving, and progress persistence.
 - `shared/`
-  Qbank compatibility and progress helpers extracted from the desktop app logic.
-- `web/`
-  Browser version of the Quail Ultra UI, still based on HTML, CSS, jQuery, and the existing page flow.
+  Shared qbank compatibility and progress helpers used by both the server and the React client.
 
 ## Core Product Model
 
@@ -31,15 +31,22 @@ Quail Ultra Live is the account-backed web fork of Quail Ultra. It keeps the ori
 
 ```bash
 npm install
+npm run dev
+```
+
+The local app serves on `http://localhost:3000`.
+
+For a production-style local run:
+
+```bash
 npm start
 ```
 
-The server runs on `http://localhost:3000`.
-
-Useful check:
+Useful checks:
 
 ```bash
 npm run check
+npm test
 ```
 
 ## Deployment
@@ -58,10 +65,10 @@ Recommended environment variables:
 - `ALLOW_REGISTRATION`
 - `PORT`
 
-Expose the container through your preferred reverse proxy or Cloudflare Tunnel.
+Expose the service through your preferred reverse proxy or Cloudflare Tunnel.
 
 ## Notes
 
 - Session storage uses the default in-memory Express session store in this initial cut. Restarting the container signs users out, but saved Study Pack data remains because it is stored on disk and in SQLite under `data/`.
 - Offline behavior is local-first for cached packs and queued progress updates. Study Pack file warming happens in the background once a pack is opened online.
-- The desktop Electron repo remains the reference line; this repo is the separate web conversion project.
+- Desktop Electron packaging and release artifacts are intentionally not part of this repo anymore.

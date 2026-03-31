@@ -9,6 +9,8 @@ const DB_NAME = 'quail-ultra-live'
 const DB_VERSION = 1
 const PACK_STORE = 'packs'
 const DIRTY_STORE = 'dirty-progress'
+const PACK_REQUEST_TIMEOUT_MS = 5000
+const PROGRESS_REQUEST_TIMEOUT_MS = 5000
 
 let dbPromise: Promise<IDBDatabase> | undefined
 let sessionCache: User | null | undefined
@@ -65,8 +67,31 @@ async function parseResponseBody(response: Response): Promise<unknown> {
   return text ? { text } : null
 }
 
-async function request<T>(url: string, schema: z.ZodType<T>, options?: RequestInit): Promise<T> {
-  const response = await window.fetch(url, { credentials: 'include', ...(options ?? {}) })
+async function fetchWithTimeout(url: string, options?: RequestInit, timeoutMs?: number): Promise<Response> {
+  if (!timeoutMs || timeoutMs <= 0) {
+    return window.fetch(url, options)
+  }
+
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    return await window.fetch(url, {
+      ...(options ?? {}),
+      signal: controller.signal
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('Request timed out.')
+    }
+    throw error
+  } finally {
+    window.clearTimeout(timeoutId)
+  }
+}
+
+async function request<T>(url: string, schema: z.ZodType<T>, options?: RequestInit, timeoutMs?: number): Promise<T> {
+  const response = await fetchWithTimeout(url, { credentials: 'include', ...(options ?? {}) }, timeoutMs)
   const body = await parseResponseBody(response)
   if (!response.ok) {
     let message = `Request failed with ${response.status}`
@@ -80,8 +105,8 @@ async function request<T>(url: string, schema: z.ZodType<T>, options?: RequestIn
   return schema.parse(body)
 }
 
-async function requestRaw(url: string, options?: RequestInit): Promise<unknown> {
-  const response = await window.fetch(url, { credentials: 'include', ...(options ?? {}) })
+async function requestRaw(url: string, options?: RequestInit, timeoutMs?: number): Promise<unknown> {
+  const response = await fetchWithTimeout(url, { credentials: 'include', ...(options ?? {}) }, timeoutMs)
   const body = await parseResponseBody(response)
   if (!response.ok) {
     let message = `Request failed with ${response.status}`
@@ -285,7 +310,7 @@ export async function deleteStudyPack(packId: string): Promise<void> {
 
 async function fetchQbankInfo(packId: string, blockKey: string): Promise<QbankInfo> {
   const query = blockKey ? `?block=${encodeURIComponent(blockKey)}` : ''
-  const payload = await request(`/api/study-packs/${packId}/qbankinfo${query}`, qbankInfoResponseSchema)
+  const payload = await request(`/api/study-packs/${packId}/qbankinfo${query}`, qbankInfoResponseSchema, undefined, PACK_REQUEST_TIMEOUT_MS)
   const normalized = normalizeQbankInfo(payload.qbankinfo)
   await setPackCache(packId, normalized, payload.pack)
   return normalized
@@ -325,7 +350,7 @@ async function resolveConflict(packId: string, progress: ProgressRecord, body: u
         baseRevision: conflictPayload.serverRevision,
         force: true
       })
-    })
+    }, PROGRESS_REQUEST_TIMEOUT_MS)
     await updateCachedProgress(packId, progress, payload.revision)
     await idbDelete(DIRTY_STORE, packId)
     showSyncBanner('success', 'Local changes kept. The server version was overwritten.')
@@ -398,7 +423,7 @@ export async function syncProgress(packId: string, progress: ProgressRecord): Pr
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ progress, baseRevision })
-    })
+    }, PROGRESS_REQUEST_TIMEOUT_MS)
     await updateCachedProgress(packId, progress, payload.revision)
     await idbDelete(DIRTY_STORE, packId)
     showSyncBanner('success', 'Synced')
@@ -429,7 +454,7 @@ export async function flushDirtyProgress(): Promise<void> {
           progress: dirtyEntry.progress,
           baseRevision: dirtyEntry.baseRevision
         })
-      })
+      }, PROGRESS_REQUEST_TIMEOUT_MS)
       await updateCachedProgress(dirtyEntry.packId, dirtyEntry.progress, payload.revision)
       await idbDelete(DIRTY_STORE, dirtyEntry.packId)
     } catch (error) {
