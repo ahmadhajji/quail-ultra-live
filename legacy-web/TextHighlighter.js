@@ -942,7 +942,7 @@
      */
     TextHighlighter.createWrapper = function (options) {
         var span = document.createElement('span');
-        span.style.setProperty('background-color', options.color, 'important');
+        span.style.backgroundColor = options.color;
         span.className = options.highlightedClass;
         return span;
     };

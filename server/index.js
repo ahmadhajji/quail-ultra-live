@@ -23,6 +23,7 @@ const {
 
 const ROOT_DIR = path.resolve(__dirname, '..')
 const DIST_DIR = path.join(ROOT_DIR, 'dist')
+const WEB_DIR = path.join(ROOT_DIR, 'web')
 const DATA_DIR = path.join(ROOT_DIR, 'data')
 const PACKS_DIR = path.join(DATA_DIR, 'study-packs')
 const DB_PATH = path.join(DATA_DIR, 'quail-ultra-live.db')
@@ -337,7 +338,14 @@ app.use(session({
   }
 }))
 
-app.use(express.static(DIST_DIR, { index: false }))
+app.use('/vendor', express.static(path.join(ROOT_DIR, 'node_modules')))
+app.use('/assets', express.static(path.join(DIST_DIR, 'assets')))
+app.use('/branding', express.static(path.join(WEB_DIR, 'branding')))
+app.use('/js', express.static(path.join(WEB_DIR, 'js')))
+app.use('/manifest.webmanifest', express.static(path.join(WEB_DIR, 'manifest.webmanifest')))
+app.use('/sw.js', express.static(path.join(WEB_DIR, 'sw.js')))
+app.use('/quail-ui.css', express.static(path.join(WEB_DIR, 'quail-ui.css')))
+app.use('/TextHighlighter.js', express.static(path.join(WEB_DIR, 'TextHighlighter.js')))
 
 app.get('/api/health', function health(_req, res) {
   res.json({ ok: true })
@@ -654,7 +662,11 @@ app.get('/', function root(_req, res) {
   res.sendFile(path.join(DIST_DIR, 'index.html'))
 })
 
-app.get('/:page(overview|newblock|previousblocks|examview).html', function htmlPages(req, res) {
+app.get('/:page(overview|newblock|previousblocks|examview|loadbank).html', function htmlPages(req, res) {
+  if (req.params.page === 'loadbank') {
+    res.sendFile(path.join(WEB_DIR, 'loadbank.html'))
+    return
+  }
   res.sendFile(path.join(DIST_DIR, `${req.params.page}.html`))
 })
 

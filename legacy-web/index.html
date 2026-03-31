@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 100%;">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
+    <title>Quail Ultra Live</title>
+    <link rel="icon" type="image/png" href="/branding/quail-ultra.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="stylesheet" href="/vendor/bootstrap/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/quail-ui.css">
+</head>
+<body class="q-shell q-live-home" style="min-height: 100%;">
+    <div class="container-fluid d-flex flex-column" style="min-height: 100vh;">
+        <div class="row q-topbar">
+            <div class="col-lg-6 d-flex align-items-center">
+                <div class="q-brand">
+                    <div class="q-brand-mark">Q</div>
+                    <div class="q-brand-copy">
+                        <p class="q-brand-title">Quail Ultra Live</p>
+                        <p class="q-brand-subtitle">Account-backed Study Packs</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6 d-flex justify-content-lg-end justify-content-start mt-3 mt-lg-0 align-items-center">
+                <span id="currentUserLabel" class="q-helper-copy mr-3"></span>
+                <button id="btn-logout" class="btn btn-outline-light btn-sm d-none" type="button">Sign Out</button>
+            </div>
+        </div>
+
+        <div class="q-live-grid">
+            <section id="authPanel" class="q-panel q-live-panel q-live-panel-auth">
+                <div class="q-panel-header">
+                    <div>
+                        <p class="q-panel-title">Account Access</p>
+                        <p class="q-panel-subtitle">Sign in to your account, or create one if this is your first time using the web fork.</p>
+                    </div>
+                </div>
+                <div class="q-panel-body">
+                    <div class="q-form-grid">
+                        <div class="q-metric-box">
+                            <div class="q-metric-label">Username</div>
+                            <input id="auth-username" class="q-input" type="text" autocomplete="username">
+                        </div>
+                        <div class="q-metric-box">
+                            <div class="q-metric-label">Password</div>
+                            <input id="auth-password" class="q-input" type="password" autocomplete="current-password">
+                        </div>
+                    </div>
+                    <div class="mt-4 d-flex flex-wrap q-home-auth-actions">
+                        <button id="btn-login" class="btn btn-primary mr-2 mb-2" type="button">Sign In</button>
+                        <button id="btn-register" class="btn btn-outline-primary mb-2" type="button">Create Account</button>
+                    </div>
+                    <p id="authError" class="q-error-copy mt-3 mb-0"></p>
+                </div>
+            </section>
+
+            <section id="packsPanel" class="q-panel q-live-panel q-live-panel-packs d-none">
+                <div class="q-panel-header">
+                    <div>
+                        <p class="q-panel-title">Study Packs</p>
+                        <p class="q-panel-subtitle">Import your qbank folder or zip once, reopen it from any device, and export a compatible archive whenever you want.</p>
+                    </div>
+                </div>
+                <div class="q-panel-body">
+                    <div class="q-form-grid">
+                        <div class="q-metric-box">
+                            <div class="q-metric-label">Study Pack Name</div>
+                            <input id="pack-name" class="q-input" type="text" placeholder="Kaplan Step 1 Pack">
+                            <p class="q-helper-copy mt-2 mb-0">Leave blank to reuse the uploaded folder or zip name.</p>
+                        </div>
+                    </div>
+
+                    <div class="q-import-grid mt-4">
+                        <div class="q-metric-box">
+                            <div class="q-metric-label">Import Folder</div>
+                            <p class="q-helper-copy">Choose an existing Quail/Quail Ultra folder containing your qbank files and optional `progress.json`.</p>
+                            <div class="q-file-picker">
+                                <input id="folder-input" class="q-input-file q-input-file-hidden" type="file" webkitdirectory directory multiple>
+                                <button class="btn btn-outline-primary q-file-trigger" data-file-target="folder-input" type="button">Choose Folder</button>
+                                <div id="folder-selection" class="q-file-selection">No folder selected yet.</div>
+                            </div>
+                            <button id="btn-import-folder" class="btn btn-primary mt-3" type="button">Upload Folder</button>
+                        </div>
+                        <div class="q-metric-box">
+                            <div class="q-metric-label">Import Zip</div>
+                            <p class="q-helper-copy">Upload a zip export of an existing Study Pack when you want to restore or move it.</p>
+                            <div class="q-file-picker">
+                                <input id="zip-input" class="q-input-file q-input-file-hidden" type="file" accept=".zip,application/zip">
+                                <button class="btn btn-outline-primary q-file-trigger" data-file-target="zip-input" type="button">Choose Zip</button>
+                                <div id="zip-selection" class="q-file-selection">No zip selected yet.</div>
+                            </div>
+                            <button id="btn-import-zip" class="btn btn-outline-primary mt-3" type="button">Upload Zip</button>
+                        </div>
+                    </div>
+
+                    <p id="packError" class="q-error-copy mt-3 mb-0"></p>
+                    <div id="packLoading" class="q-helper-copy mt-3"></div>
+
+                    <div class="q-panel mt-4 q-nested-panel">
+                        <div class="q-panel-header">
+                            <div>
+                                <p class="q-panel-title">Available Study Packs</p>
+                                <p class="q-panel-subtitle">Open a pack to use the same overview, block builder, and exam flow as the desktop app.</p>
+                            </div>
+                        </div>
+                        <div class="q-panel-body">
+                            <div id="emptyPacks" class="q-helper-copy">No study packs uploaded yet.</div>
+                            <div id="studyPackList" class="q-pack-list"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script src="/vendor/jquery/dist/jquery.min.js"></script>
+    <script src="/vendor/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/js/lib/live-api.js"></script>
+    <script src="/js/pages/index.js"></script>
+</body>
+</html>

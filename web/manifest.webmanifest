@@ -1,0 +1,15 @@
+{
+  "name": "Quail Ultra Live",
+  "short_name": "Quail Live",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f7fc",
+  "theme_color": "#335e9c",
+  "icons": [
+    {
+      "src": "/branding/quail-ultra.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

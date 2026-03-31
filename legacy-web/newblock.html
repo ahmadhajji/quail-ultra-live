@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 100%;">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
+    <link rel="icon" type="image/png" href="/branding/quail-ultra.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="stylesheet" href="/vendor/bootstrap/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/quail-ui.css">
+</head>
+
+<body class="q-shell" data-requires-pack="true" style="height: 100%;">
+    <div class="container-fluid d-flex flex-column" style="height: 100%;">
+        <div class="row q-topbar">
+            <div class="col-lg-4 d-flex align-items-center">
+                <button class="q-back-btn btn" id="btn-back" type="button">&lsaquo;</button>
+                <div class="q-brand">
+                    <div class="q-brand-mark">Q</div>
+                    <div class="q-brand-copy">
+                        <p class="q-brand-title">Quail Ultra</p>
+                        <p class="q-brand-subtitle">Session Builder</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-8 d-flex justify-content-lg-end justify-content-start mt-3 mt-lg-0">
+                <ul class="nav nav-pills q-nav-pills">
+                    <li class="nav-item" id="navbtn-overview"><a class="nav-link" href="#">Overview</a></li>
+                    <li class="nav-item" id="navbtn-newblock"><a class="nav-link active" href="#">New Block</a></li>
+                    <li class="nav-item" id="navbtn-prevblocks"><a class="nav-link" href="#">Previous Blocks</a></li>
+                </ul>
+            </div>
+        </div>
+
+        <div id="spinner" class="d-flex flex-column flex-grow-1 justify-content-center align-items-center">
+            <div class="spinner-border" style="width: 72px; height: 72px;" role="status"></div>
+        </div>
+
+        <div id="pagecontent" class="flex-fill d-none">
+            <div class="q-page-grid">
+                <div class="q-stack">
+                    <div class="q-panel">
+                        <div class="q-panel-header">
+                            <div>
+                                <p class="q-panel-title">Study Mode</p>
+                                <p class="q-panel-subtitle">Choose whether this block behaves like guided tutoring or delayed review.</p>
+                            </div>
+                            <span class="q-badge" id="modeSummaryBadge">Tutor mode</span>
+                        </div>
+                        <div class="q-panel-body">
+                            <div id="btngrp-mode" class="q-mode-grid">
+                                <button class="q-mode-btn active" id="btn-mode-tutor" type="button">
+                                    <span class="q-mode-kicker">Immediate Review</span>
+                                    <span class="q-mode-title">Tutor</span>
+                                    <span class="q-mode-copy">Submit one question at a time, reveal the rationale instantly, and move through the block as guided review.</span>
+                                </button>
+                                <button class="q-mode-btn" id="btn-mode-timed" type="button">
+                                    <span class="q-mode-kicker">Exam Simulation</span>
+                                    <span class="q-mode-title">Timed</span>
+                                    <span class="q-mode-copy">Hide explanations until the end of the block and count down with a per-question time limit.</span>
+                                </button>
+                                <button class="q-mode-btn" id="btn-mode-untimed" type="button">
+                                    <span class="q-mode-kicker">Delayed Review</span>
+                                    <span class="q-mode-title">Untimed</span>
+                                    <span class="q-mode-copy">Work through the block without a timer, then flip into full review when you end the session.</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="q-panel">
+                        <div class="q-panel-header">
+                            <div>
+                                <p class="q-panel-title">Question Pool</p>
+                                <p class="q-panel-subtitle">Build focused blocks from unseen, incorrect, flagged, full-bank, or custom ID lists.</p>
+                            </div>
+                        </div>
+                        <div class="q-panel-body">
+                            <div id="btngrp-qpool" class="q-segmented" role="group">
+                                <button class="btn btn-primary" id="btn-qpool-unused" type="button">Unused</button>
+                                <button class="btn btn-light" id="btn-qpool-incorrects" type="button">Incorrects</button>
+                                <button class="btn btn-light" id="btn-qpool-flagged" type="button">Flagged</button>
+                                <button class="btn btn-light" id="btn-qpool-all" type="button">All</button>
+                                <button class="btn btn-light" id="btn-qpool-custom" type="button">Custom IDs</button>
+                            </div>
+                            <div id="div-qpool-customids" class="mt-3">
+                                <p class="q-helper-copy mb-2">Paste question IDs separated by commas. Grouping rules still apply when related questions must stay together.</p>
+                                <textarea id="textarea-qpool-customids" class="q-textarea"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="tagscard" class="q-panel">
+                        <div class="q-panel-header">
+                            <div>
+                                <p class="q-panel-title">Subjects and Filters</p>
+                                <p class="q-panel-subtitle">Keep all subtags enabled for broad coverage or narrow the block to a specific slice of the bank.</p>
+                            </div>
+                        </div>
+                        <div class="q-panel-body">
+                            <div id="btngrp-tags" class="q-segmented" role="group">
+                                <button class="btn btn-primary" id="btn-tags-all" type="button">All Tags</button>
+                                <button class="btn btn-light" id="btn-tags-filtered" type="button" disabled>Filtered</button>
+                            </div>
+                            <div class="accordion q-accordion mt-3" role="tablist" id="accordion-tags"></div>
+                        </div>
+                    </div>
+
+                    <div class="q-panel">
+                        <div class="q-panel-header">
+                            <div>
+                                <p class="q-panel-title">Block Settings</p>
+                                <p class="q-panel-subtitle">Keep the test builder compact, but expose the control points that matter for compatibility with existing Quail Ultra banks.</p>
+                            </div>
+                        </div>
+                        <div class="q-panel-body">
+                            <div class="q-form-grid">
+                                <div class="q-metric-box">
+                                    <div class="q-metric-label">Question Count</div>
+                                    <div class="q-inline-metric">
+                                        <input type="text" id="textinput-block-numques" class="q-input" style="max-width: 130px;">
+                                        <span class="q-helper-copy">questions</span>
+                                    </div>
+                                    <div class="q-inline-metric">
+                                        <span id="numAvailableQues" class="q-badge">0</span>
+                                        <span class="q-helper-copy">available with the current pool and filters</span>
+                                    </div>
+                                </div>
+                                <div class="q-metric-box">
+                                    <div class="q-metric-label">Timing</div>
+                                    <div id="timed-info">
+                                        <div class="q-inline-metric">
+                                            <input id="textinput-block-timeperq" type="text" class="q-input" style="max-width: 130px;">
+                                            <span class="q-helper-copy">seconds per question</span>
+                                        </div>
+                                    </div>
+                                    <p id="timed-copy" class="q-helper-copy mb-0 mt-3">Tutor and untimed sessions track elapsed time without enforcing a limit.</p>
+                                </div>
+                            </div>
+                            <div class="mt-4">
+                                <div class="custom-control custom-switch mb-3">
+                                    <input type="checkbox" class="custom-control-input" id="toggle-block-sequential" />
+                                    <label class="custom-control-label" for="toggle-block-sequential">Present question IDs sequentially instead of randomizing them.</label>
+                                </div>
+                            </div>
+                            <div class="mt-4 d-flex justify-content-start">
+                                <button class="btn btn-primary q-start-btn" id="btn-startblock" type="button">Start Block</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="q-side-summary">
+                    <div class="q-panel">
+                        <div class="q-panel-header">
+                            <div>
+                                <p class="q-panel-title">Session Snapshot</p>
+                                <p class="q-panel-subtitle">A compact summary of how the block will behave once it opens.</p>
+                            </div>
+                        </div>
+                        <div class="q-panel-body">
+                            <div class="q-summary-list">
+                                <div class="q-summary-item">
+                                    <strong id="summaryMode">Tutor mode</strong>
+                                    <span id="summaryModeCopy">Submit each question individually and reveal the explanation immediately after you lock the answer.</span>
+                                </div>
+                                <div class="q-summary-item">
+                                    <strong id="summaryPool">Unused questions</strong>
+                                    <span id="summaryPoolCopy">The current pool starts from unseen items, then narrows further if you apply subject filters.</span>
+                                </div>
+                                <div class="q-summary-item">
+                                    <strong id="summaryFilters">All subjects included</strong>
+                                    <span id="summaryFiltersCopy">Filter buckets are intersected across tag groups, so every enabled axis must match.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="q-panel">
+                        <div class="q-panel-header">
+                            <div>
+                                <p class="q-panel-title">Compatibility Notes</p>
+                                <p class="q-panel-subtitle">Quail Ultra remains BYO question bank, so this UI layer preserves the existing HTML and JSON bank format.</p>
+                            </div>
+                        </div>
+                        <div class="q-panel-body">
+                            <p class="q-helper-copy mb-3">The builder still honors grouped questions, custom ID lists, pane definitions, and saved progress from older Quail sessions.</p>
+                            <p class="q-helper-copy mb-0">Legacy blocks will load with derived defaults for mode and review layout, so existing progress files remain readable.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+<script src="/vendor/jquery/dist/jquery.min.js"></script>
+<script src="/vendor/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/js/lib/live-api.js"></script>
+<script src="/js/lib/live-compat.js"></script>
+<script src="/js/pages/newblock.js"></script>
+</html>

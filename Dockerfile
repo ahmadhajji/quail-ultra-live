@@ -9,6 +9,7 @@ COPY server ./server
 COPY shared ./shared
 COPY frontend ./frontend
 COPY tsconfig.json ./
+COPY web ./web
 
 EXPOSE 3000
 

@@ -301,7 +301,7 @@ export function HomePage() {
                 <div className="q-panel-header">
                   <div>
                     <p className="q-panel-title">Available Study Packs</p>
-                    <p className="q-panel-subtitle">Open a pack to use the same overview, block builder, and exam flow in the live web app.</p>
+                    <p className="q-panel-subtitle">Open a pack to use the same overview, block builder, and exam flow as the desktop app.</p>
                   </div>
                 </div>
                 <div className="q-panel-body">
