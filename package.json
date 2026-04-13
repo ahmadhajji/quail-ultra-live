@@ -9,9 +9,11 @@
     "start:server": "node server/index.js",
     "dev": "concurrently \"vite build --watch --mode development --config frontend/vite.config.ts\" \"node --watch server/index.js\"",
     "typecheck": "tsc --project tsconfig.json --noEmit",
+    "validate:qbank": "node scripts/validate-qbank.js",
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
     "test:smoke": "playwright test",
+    "test:smoke:local": "npm run build && playwright test",
     "check": "npm run typecheck && node --check server/index.js && node --check shared/progress.js && node --check shared/qbank.js && node --check web/js/lib/live-api.js && node --check web/js/lib/live-compat.js && node --check web/js/pages/index.js && node --check web/js/pages/overview.js && node --check web/js/pages/newblock.js && node --check web/js/pages/previousblocks.js && node --check web/js/pages/examview.js && node --check web/js/pages/loadbank.js && npm run test"
   },
   "engines": {

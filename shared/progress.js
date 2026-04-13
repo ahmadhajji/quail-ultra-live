@@ -33,6 +33,11 @@ function normalizeBlockRecord(block, choices) {
     highlights.push('[]')
   }
 
+  const notes = Array.isArray(normalized.notes) ? normalized.notes.slice(0, blockqlist.length) : []
+  while (notes.length < blockqlist.length) {
+    notes.push('')
+  }
+
   const mode = deriveBlockMode(normalized)
   const questionStates = Array.isArray(normalized.questionStates) ? normalized.questionStates.slice(0, blockqlist.length) : []
   while (questionStates.length < blockqlist.length) {
@@ -58,6 +63,7 @@ function normalizeBlockRecord(block, choices) {
 
   normalized.answers = answers
   normalized.highlights = highlights
+  normalized.notes = notes
   normalized.mode = mode
   normalized.questionStates = resolvedQuestionStates
   normalized.reviewLayout = normalized.reviewLayout || 'split'
@@ -206,6 +212,7 @@ function startBlock(qbankinfo, blockqlist, preferences) {
     blockqlist: blockqlist,
     answers: Array(blockqlist.length).fill(''),
     highlights: Array(blockqlist.length).fill('[]'),
+    notes: Array(blockqlist.length).fill(''),
     questionStates: Array(blockqlist.length).fill(null).map(createEmptyQuestionState),
     complete: false,
     timelimit: timelimit,

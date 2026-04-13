@@ -1,9 +1,6 @@
-export interface PageParams {
-  pack?: string
-  block?: string
-}
+export type PageParams = Record<string, string | undefined>
 
-export type PageName = 'index' | 'overview' | 'newblock' | 'previousblocks' | 'examview'
+export type PageName = 'index' | 'overview' | 'newblock' | 'previousblocks' | 'examview' | 'admin'
 
 export function getCurrentPackId(): string {
   return new URLSearchParams(window.location.search).get('pack') ?? ''

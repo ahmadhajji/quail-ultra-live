@@ -40,7 +40,12 @@ Useful check:
 
 ```bash
 npm run check
+npm run test:smoke:local
 ```
+
+Step-by-step workflow and CI/CD notes:
+
+- [Development Workflow](docs/development-workflow.md)
 
 ## Deployment
 

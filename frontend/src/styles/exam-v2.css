@@ -1,0 +1,72 @@
+body[data-exam-ui="v2"] .exam-v2-shell {
+  --qx-panel-bg: #f7fbff;
+  --qx-panel-border: #c7d7ea;
+  --qx-panel-heading: #27496d;
+}
+
+body[data-exam-ui="v2"] .exam-v2-stage {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) 320px;
+}
+
+body[data-exam-ui="v2"] .exam-v2-workspace {
+  min-width: 0;
+}
+
+body[data-exam-ui="v2"] .exam-v2-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 16px 18px 0;
+  min-width: 0;
+}
+
+body[data-exam-ui="v2"] .exam-v2-drawer-card {
+  background: var(--qx-panel-bg, #ffffff);
+  border: 1px solid var(--qx-panel-border, rgba(40, 68, 109, 0.16));
+  border-radius: 14px;
+  padding: 14px;
+}
+
+body[data-exam-ui="v2"] .exam-v2-drawer-title {
+  margin: 0 0 6px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--qx-panel-heading, #365377);
+}
+
+body[data-exam-ui="v2"] .exam-v2-drawer-copy {
+  margin: 0 0 10px;
+  color: #5f6f86;
+  font-size: 0.9rem;
+}
+
+body[data-exam-ui="v2"] .exam-v2-note-input {
+  width: 100%;
+  min-height: 160px;
+  border: 1px solid #c8d4e4;
+  border-radius: 10px;
+  padding: 10px 12px;
+  resize: vertical;
+  background: #fff;
+  color: #1f2d3d;
+}
+
+body[data-exam-ui="v2"] .exam-v2-panes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 1180px) {
+  body[data-exam-ui="v2"] .exam-v2-stage {
+    grid-template-columns: 88px minmax(0, 1fr);
+  }
+
+  body[data-exam-ui="v2"] .exam-v2-drawer {
+    grid-column: 1 / -1;
+    padding: 0 16px 16px;
+  }
+}
