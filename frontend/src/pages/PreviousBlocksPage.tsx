@@ -7,12 +7,6 @@ import { usePackPage } from '../lib/usePackPage'
 import type { BlockRecord } from '../types/domain'
 
 function modeLabel(mode: BlockRecord['mode']): string {
-  if (mode === 'timed') {
-    return 'Timed'
-  }
-  if (mode === 'untimed') {
-    return 'Untimed'
-  }
   return 'Tutor'
 }
 

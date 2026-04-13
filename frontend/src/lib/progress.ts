@@ -15,16 +15,7 @@ type LooseProgressRecord = {
 } & Record<string, unknown>
 
 export function deriveBlockMode(block: Partial<BlockRecord> & { timelimit?: number; showans?: boolean }): Mode {
-  if (block.mode === 'timed' || block.mode === 'untimed' || block.mode === 'tutor') {
-    return block.mode
-  }
-  if (block.timelimit !== undefined && block.timelimit !== -1) {
-    return 'timed'
-  }
-  if (block.showans) {
-    return 'tutor'
-  }
-  return 'untimed'
+  return 'tutor'
 }
 
 export function createEmptyQuestionState(): QuestionState {
@@ -94,7 +85,7 @@ export function normalizeBlockRecord(block: LegacyBlockRecord, choices: QbankInf
     notes,
     questionStates,
     complete: Boolean(block.complete),
-    timelimit: block.timelimit === undefined ? (mode === 'timed' ? 0 : -1) : asFiniteNumber(block.timelimit, -1),
+    timelimit: -1,
     elapsedtime: asFiniteNumber(block.elapsedtime, 0),
     numcorrect: asFiniteNumber(block.numcorrect, 0),
     mode,
@@ -103,7 +94,7 @@ export function normalizeBlockRecord(block: LegacyBlockRecord, choices: QbankInf
     allsubtagsenabled: block.allsubtagsenabled !== false,
     starttime: typeof block.starttime === 'string' ? block.starttime : new Date().toLocaleString(),
     currentquesnum: asFiniteNumber(block.currentquesnum, 0),
-    showans: block.showans !== undefined ? Boolean(block.showans) : mode === 'tutor',
+    showans: true,
     reviewLayout: block.reviewLayout === 'stacked' ? 'stacked' : 'split'
   }
 }

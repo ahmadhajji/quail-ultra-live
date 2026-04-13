@@ -40,6 +40,9 @@ describe('NewBlockPage', () => {
 
   it('starts a tutor block with grouped questions preserved', async () => {
     render(<NewBlockPage />)
+    expect(screen.getByRole('button', { name: /Tutor/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Timed/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Untimed/i })).not.toBeInTheDocument()
     await userEvent.clear(screen.getByDisplayValue(''))
     const inputs = screen.getAllByRole('textbox')
     await userEvent.type(inputs[0]!, '1')
