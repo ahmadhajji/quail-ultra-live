@@ -1,7 +1,8 @@
 import { PackTopBar } from '../components/PackTopBar'
 import { LoadingScreen } from '../components/LoadingScreen'
-import { resetPack, syncProgress } from '../lib/api'
+import { resetPack } from '../lib/api'
 import { navigate } from '../lib/navigation'
+import { normalizeProgress } from '../lib/progress'
 import { usePackPage } from '../lib/usePackPage'
 
 function formatPercent(part: number, total: number): string {
@@ -130,12 +131,17 @@ export function OverviewPage() {
                 return
               }
               await resetPack(packId)
-              const emptyProgress = {
-                blockhist: {},
-                tagbuckets: qbankinfo.progress.tagbuckets
-              }
-              await syncProgress(packId, emptyProgress)
-              window.location.reload()
+              setQbankinfo((current) => {
+                if (!current) {
+                  return current
+                }
+                const next = structuredClone(current)
+                next.progress = normalizeProgress({
+                  blockhist: {},
+                  tagbuckets: {}
+                }, next)
+                return next
+              })
             }}
           >
             Reset Question Bank

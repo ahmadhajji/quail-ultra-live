@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
   cancelFolderImport: vi.fn(),
   completeFolderImport: vi.fn(),
   deleteStudyPack: vi.fn(),
+  getAuthConfig: vi.fn(),
   getSession: vi.fn(),
   importStudyPack: vi.fn(),
   listStudyPacks: vi.fn(),
@@ -30,7 +31,8 @@ describe('HomePage', () => {
   })
 
   it('renders study packs for authenticated users and opens a pack', async () => {
-    api.getSession.mockResolvedValue({ id: 'u1', username: 'ahmad', createdAt: 'now' })
+    api.getSession.mockResolvedValue({ id: 'u1', username: 'ahmad', email: '', role: 'admin', status: 'active', createdAt: 'now' })
+    api.getAuthConfig.mockResolvedValue({ registrationMode: 'invite-only' })
     api.listStudyPacks.mockResolvedValue([{ id: 'pack-1', name: 'Pack', questionCount: 40, revision: 2, createdAt: 'now', updatedAt: 'now' }])
     render(<HomePage />)
 
@@ -41,7 +43,8 @@ describe('HomePage', () => {
 
   it('submits login credentials', async () => {
     api.getSession.mockResolvedValue(null)
-    api.login.mockResolvedValue({ id: 'u1', username: 'ahmad', createdAt: 'now' })
+    api.getAuthConfig.mockResolvedValue({ registrationMode: 'closed' })
+    api.login.mockResolvedValue({ id: 'u1', username: 'ahmad', email: '', role: 'user', status: 'active', createdAt: 'now' })
     api.listStudyPacks.mockResolvedValue([])
     render(<HomePage />)
 

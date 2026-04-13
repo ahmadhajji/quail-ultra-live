@@ -59,6 +59,11 @@ export function normalizeBlockRecord(block: LegacyBlockRecord, choices: QbankInf
     highlights.push('[]')
   }
 
+  const notes = asStringArray(block.notes).slice(0, blockqlist.length)
+  while (notes.length < blockqlist.length) {
+    notes.push('')
+  }
+
   const mode = deriveBlockMode(block)
   const sourceStates = Array.isArray(block.questionStates) ? block.questionStates : []
   const questionStates: QuestionState[] = []
@@ -86,6 +91,7 @@ export function normalizeBlockRecord(block: LegacyBlockRecord, choices: QbankInf
     blockqlist,
     answers,
     highlights,
+    notes,
     questionStates,
     complete: Boolean(block.complete),
     timelimit: block.timelimit === undefined ? (mode === 'timed' ? 0 : -1) : asFiniteNumber(block.timelimit, -1),

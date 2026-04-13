@@ -115,6 +115,8 @@ async function loadWorkspaceData(workspaceDir) {
   const choices = await readJson(path.join(workspaceDir, 'choices.json'))
   const groups = await readJson(path.join(workspaceDir, 'groups.json'))
   const panes = await readJson(path.join(workspaceDir, 'panes.json'))
+  const questionMetaPath = path.join(workspaceDir, 'question-meta.json')
+  const questionMeta = await exists(questionMetaPath) ? await readJson(questionMetaPath) : {}
 
   let progress
   const progressPath = path.join(workspaceDir, 'progress.json')
@@ -134,6 +136,7 @@ async function loadWorkspaceData(workspaceDir) {
     choices: choices,
     groups: groups,
     panes: panes,
+    questionMeta: questionMeta,
     progress: progress
   }
 
