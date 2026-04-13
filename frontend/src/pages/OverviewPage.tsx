@@ -1,7 +1,8 @@
 import { PackTopBar } from '../components/PackTopBar'
 import { LoadingScreen } from '../components/LoadingScreen'
-import { resetPack, syncProgress } from '../lib/api'
+import { resetPack } from '../lib/api'
 import { navigate } from '../lib/navigation'
+import { normalizeProgress } from '../lib/progress'
 import { usePackPage } from '../lib/usePackPage'
 
 function formatPercent(part: number, total: number): string {
@@ -32,17 +33,9 @@ export function OverviewPage() {
   let pausedBlocks = 0
   let totalTime = 0
   let tutorBlocks = 0
-  let timedBlocks = 0
-  let untimedBlocks = 0
 
   Object.values(qbankinfo.progress.blockhist).forEach((block) => {
-    if (block.mode === 'timed') {
-      timedBlocks += 1
-    } else if (block.mode === 'untimed') {
-      untimedBlocks += 1
-    } else {
-      tutorBlocks += 1
-    }
+    tutorBlocks += 1
 
     if (block.complete) {
       completeBlocks += 1
@@ -101,8 +94,6 @@ export function OverviewPage() {
             <tr><td>Completed</td><td>{completeBlocks}</td></tr>
             <tr><td>Paused</td><td>{pausedBlocks}</td></tr>
             <tr><td>Tutor Blocks</td><td>{tutorBlocks}</td></tr>
-            <tr><td>Timed Blocks</td><td>{timedBlocks}</td></tr>
-            <tr><td>Untimed Blocks</td><td>{untimedBlocks}</td></tr>
           </tbody></table></div></div>
         </div>
         <div className="q-panel">
@@ -130,12 +121,17 @@ export function OverviewPage() {
                 return
               }
               await resetPack(packId)
-              const emptyProgress = {
-                blockhist: {},
-                tagbuckets: qbankinfo.progress.tagbuckets
-              }
-              await syncProgress(packId, emptyProgress)
-              window.location.reload()
+              setQbankinfo((current) => {
+                if (!current) {
+                  return current
+                }
+                const next = structuredClone(current)
+                next.progress = normalizeProgress({
+                  blockhist: {},
+                  tagbuckets: {}
+                }, next)
+                return next
+              })
             }}
           >
             Reset Question Bank

@@ -3,9 +3,9 @@ import { createEmptyQuestionState, deriveBlockMode, getNextBlockKey, normalizeBl
 
 describe('progress helpers', () => {
   it('derives block mode from legacy fields', () => {
-    expect(deriveBlockMode({ timelimit: 120 })).toBe('timed')
+    expect(deriveBlockMode({ timelimit: 120 })).toBe('tutor')
     expect(deriveBlockMode({ showans: true })).toBe('tutor')
-    expect(deriveBlockMode({})).toBe('untimed')
+    expect(deriveBlockMode({})).toBe('tutor')
   })
 
   it('normalizes legacy block records safely', () => {
@@ -44,7 +44,7 @@ describe('progress helpers', () => {
       choices: { '1': { options: ['A'], correct: 'A' } }
     })
 
-    expect(progress.blockhist['1']?.mode).toBe('untimed')
+    expect(progress.blockhist['1']?.mode).toBe('tutor')
     expect(getNextBlockKey({
       ...progress,
       blockhist: {

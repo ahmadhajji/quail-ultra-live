@@ -1,18 +1,57 @@
 import { z } from 'zod'
-import { authResponseSchema, importSessionSchema, manifestResponseSchema, qbankInfoResponseSchema, qbankInfoSchema, revisionResponseSchema, sessionResponseSchema, startBlockResponseSchema, studyPackSchema, studyPacksResponseSchema } from './schemas'
+import { adminUserSchema, adminUsersResponseSchema, appSettingsResponseSchema, authConfigSchema, authResponseSchema, importSessionSchema, inviteCreationResponseSchema, invitesResponseSchema, manifestResponseSchema, qbankInfoResponseSchema, qbankInfoSchema, revisionResponseSchema, sessionResponseSchema, startBlockResponseSchema, studyPackSchema, studyPacksResponseSchema } from './schemas'
 import { getCurrentBlockKey } from './navigation'
+import { ProgressSyncCoordinator } from './progress-sync'
 import { normalizeProgress } from './progress'
 import { STORE_PREFIX, WARM_PREFIX, localStore } from './store'
-import type { CachedPackEntry, DirtyProgressEntry, ProgressRecord, QbankInfo, StartBlockPreferences, StudyPackSummary, User } from '../types/domain'
+import type { AdminUser, AppSettings, CachedPackEntry, DirtyProgressEntry, InviteCreationResult, InviteRecord, ProgressRecord, QbankInfo, StartBlockPreferences, StudyPackSummary, SyncMetadata, SyncProgressOptions, SyncProgressResult, User, UserRole, UserStatus } from '../types/domain'
 
 const DB_NAME = 'quail-ultra-live'
 const DB_VERSION = 1
 const PACK_STORE = 'packs'
 const DIRTY_STORE = 'dirty-progress'
 const PROGRESS_REQUEST_TIMEOUT_MS = 5000
+const SYNC_INSTANCE_KEY = `${STORE_PREFIX}sync-instance-id`
 
 let dbPromise: Promise<IDBDatabase> | undefined
 let sessionCache: User | null | undefined
+let authConfigCache: AppSettings | undefined
+const syncMutationSeqByPack = new Map<string, number>()
+
+function getSyncInstanceId(): string {
+  let instanceId = window.localStorage.getItem(SYNC_INSTANCE_KEY)
+  if (!instanceId) {
+    instanceId = window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    window.localStorage.setItem(SYNC_INSTANCE_KEY, instanceId)
+  }
+  return instanceId
+}
+
+function nextSyncMetadata(packId: string): SyncMetadata {
+  const nextSeq = (syncMutationSeqByPack.get(packId) ?? 0) + 1
+  syncMutationSeqByPack.set(packId, nextSeq)
+  return {
+    clientInstanceId: getSyncInstanceId(),
+    clientMutationSeq: nextSeq,
+    clientUpdatedAt: new Date().toISOString()
+  }
+}
+
+function syncMetadataFromDirtyEntry(entry: DirtyProgressEntry): SyncMetadata {
+  return {
+    clientInstanceId: entry.clientInstanceId,
+    clientMutationSeq: entry.clientMutationSeq,
+    clientUpdatedAt: entry.clientUpdatedAt
+  }
+}
+
+function compactSyncOptions(options: SyncProgressOptions): SyncProgressOptions {
+  return {
+    ...(options.immediate !== undefined ? { immediate: options.immediate } : {}),
+    ...(options.keepalive !== undefined ? { keepalive: options.keepalive } : {}),
+    ...(options.silent !== undefined ? { silent: options.silent } : {})
+  }
+}
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
@@ -121,11 +160,13 @@ async function requestRaw(url: string, options?: RequestInit, timeoutMs?: number
 
 function normalizeQbankInfo(qbankinfo: z.infer<typeof qbankInfoSchema>): QbankInfo {
   const normalizedProgress = normalizeProgress(qbankinfo.progress, qbankinfo)
-  return {
-    ...qbankinfo,
+  const { questionMeta, ...rest } = qbankinfo
+  const normalizedBase = {
+    ...rest,
     progress: normalizedProgress,
     blockToOpen: qbankinfo.blockToOpen || getCurrentBlockKey()
   }
+  return questionMeta ? { ...normalizedBase, questionMeta } : normalizedBase
 }
 
 function openDb(): Promise<IDBDatabase> {
@@ -201,12 +242,8 @@ async function setPackCache(packId: string, qbankinfo: QbankInfo, packMeta: Stud
   })
 }
 
-async function setDirtyProgress(packId: string, progress: ProgressRecord, baseRevision: number): Promise<void> {
-  await idbPut<DirtyProgressEntry>(DIRTY_STORE, {
-    packId,
-    progress,
-    baseRevision
-  })
+async function setDirtyProgress(entry: DirtyProgressEntry): Promise<void> {
+  await idbPut<DirtyProgressEntry>(DIRTY_STORE, entry)
 }
 
 export function buildPackFileUrl(packId: string, relativePath: string): string {
@@ -222,6 +259,15 @@ export async function getSession(force = false): Promise<User | null> {
   return sessionCache
 }
 
+export async function getAuthConfig(force = false): Promise<AppSettings> {
+  if (!force && authConfigCache) {
+    return authConfigCache
+  }
+  const payload = await request('/api/auth/config', authConfigSchema)
+  authConfigCache = payload.settings
+  return authConfigCache
+}
+
 export async function login(username: string, password: string): Promise<User> {
   const payload = await request('/api/auth/login', authResponseSchema, {
     method: 'POST',
@@ -232,11 +278,11 @@ export async function login(username: string, password: string): Promise<User> {
   return payload.user
 }
 
-export async function register(username: string, password: string): Promise<User> {
+export async function register(username: string, password: string, email: string, inviteToken: string): Promise<User> {
   const payload = await request('/api/auth/register', authResponseSchema, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password })
+    body: JSON.stringify({ username, password, email, inviteToken })
   })
   sessionCache = payload.user
   return payload.user
@@ -245,6 +291,7 @@ export async function register(username: string, password: string): Promise<User
 export async function logout(): Promise<void> {
   await requestRaw('/api/auth/logout', { method: 'POST' })
   sessionCache = null
+  authConfigCache = undefined
 }
 
 export async function listStudyPacks(): Promise<StudyPackSummary[]> {
@@ -329,42 +376,42 @@ async function updateCachedProgress(packId: string, progress: ProgressRecord, re
   await setPackCache(packId, cached.qbankinfo, cached.packMeta)
 }
 
-async function resolveConflict(packId: string, progress: ProgressRecord, body: unknown): Promise<number> {
-  const conflictPayload = z.object({
-    error: z.string(),
-    serverRevision: z.number(),
-    qbankinfo: qbankInfoSchema.optional()
-  }).parse(body)
-
-  const useLocal = window.confirm(
-    'A newer version of this study pack exists on the server.\n\nPress OK to keep your local changes and overwrite the server.\nPress Cancel to discard local changes and reload the server version.'
-  )
-
-  if (useLocal) {
-    const payload = await request('/api/study-packs/' + packId + '/progress', revisionResponseSchema, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        progress,
-        baseRevision: conflictPayload.serverRevision,
-        force: true
-      })
-    })
-    await updateCachedProgress(packId, progress, payload.revision)
-    await idbDelete(DIRTY_STORE, packId)
-    showSyncBanner('success', 'Local changes kept. The server version was overwritten.')
-    window.setTimeout(() => showSyncBanner(null, ''), 2200)
-    return payload.revision
+async function sendProgressEntry(entry: DirtyProgressEntry, options: SyncProgressOptions = {}): Promise<SyncProgressResult> {
+  if (!window.navigator.onLine) {
+    await setDirtyProgress(entry)
+    if (!options.silent) {
+      showSyncBanner('warning', 'Offline: progress saved locally and queued for sync.')
+    }
+    return { queued: true }
   }
 
-  if (conflictPayload.qbankinfo) {
-    await setPackCache(packId, normalizeQbankInfo(conflictPayload.qbankinfo), null)
+  const payload = await request(`/api/study-packs/${entry.packId}/progress`, revisionResponseSchema, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      progress: entry.progress,
+      baseRevision: entry.baseRevision,
+      ...syncMetadataFromDirtyEntry(entry)
+    }),
+    ...(options.keepalive !== undefined ? { keepalive: options.keepalive } : {})
+  }, PROGRESS_REQUEST_TIMEOUT_MS)
+
+  await updateCachedProgress(entry.packId, entry.progress, payload.revision)
+  await idbDelete(DIRTY_STORE, entry.packId)
+
+  if (!options.silent) {
+    showSyncBanner('success', 'All changes saved.')
+    window.setTimeout(() => showSyncBanner(null, ''), 1200)
   }
-  await idbDelete(DIRTY_STORE, packId)
-  showSyncBanner('warning', 'Server version restored. Reloading this study pack.')
-  window.location.reload()
-  return conflictPayload.serverRevision
+
+  return {
+    revision: payload.revision,
+    ...(payload.applied !== undefined ? { applied: payload.applied } : {}),
+    ...(payload.serverAcceptedAt !== undefined ? { serverAcceptedAt: payload.serverAcceptedAt } : {})
+  }
 }
+
+const progressSyncCoordinator = new ProgressSyncCoordinator(sendProgressEntry)
 
 export async function loadPack(packId: string, blockKey: string): Promise<QbankInfo> {
   try {
@@ -406,59 +453,66 @@ export async function warmPackInBackground(packId: string, revision: number): Pr
   }
 }
 
-export async function syncProgress(packId: string, progress: ProgressRecord): Promise<{ queued?: boolean; revision?: number }> {
+function buildDirtyProgressEntry(packId: string, progress: ProgressRecord, baseRevision: number): DirtyProgressEntry {
+  const metadata = nextSyncMetadata(packId)
+  return {
+    packId,
+    progress,
+    baseRevision,
+    queuedAt: metadata.clientUpdatedAt,
+    ...metadata
+  }
+}
+
+export async function syncProgress(packId: string, progress: ProgressRecord, options: SyncProgressOptions = {}): Promise<SyncProgressResult> {
   const cached = await getPackCache(packId)
   const baseRevision = cached?.qbankinfo.revision ?? 0
   await updateCachedProgress(packId, progress)
+  const entry = buildDirtyProgressEntry(packId, progress, baseRevision)
+  await setDirtyProgress(entry)
 
   if (!window.navigator.onLine) {
-    await setDirtyProgress(packId, progress, baseRevision)
-    showSyncBanner('warning', 'Offline: progress saved locally and queued for sync.')
+    if (!options.silent) {
+      showSyncBanner('warning', 'Offline: progress saved locally and queued for sync.')
+    }
     return { queued: true }
   }
 
   try {
-    const payload = await request(`/api/study-packs/${packId}/progress`, revisionResponseSchema, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ progress, baseRevision })
-    }, PROGRESS_REQUEST_TIMEOUT_MS)
-    await updateCachedProgress(packId, progress, payload.revision)
-    await idbDelete(DIRTY_STORE, packId)
-    showSyncBanner('success', 'Synced')
-    window.setTimeout(() => showSyncBanner(null, ''), 900)
-    return payload
-  } catch (error) {
-    if (error instanceof RequestError && error.status === 409) {
-      const revision = await resolveConflict(packId, progress, error.body)
-      return { revision }
+    if (!options.silent) {
+      showSyncBanner('info', options.immediate ? 'Syncing changes...' : 'Saving locally. Sync pending...')
     }
-    await setDirtyProgress(packId, progress, baseRevision)
-    showSyncBanner('warning', 'Saved locally. Sync will retry when the connection returns.')
+    return await progressSyncCoordinator.queue(entry, options)
+  } catch (error) {
+    await setDirtyProgress(entry)
+    if (!options.silent) {
+      showSyncBanner('warning', 'Saved locally. Sync will retry when the connection returns.')
+    }
     return { queued: true }
   }
 }
 
-export async function flushDirtyProgress(): Promise<void> {
+export async function flushDirtyProgress(options: SyncProgressOptions = {}): Promise<void> {
   if (!window.navigator.onLine) {
     return
   }
-  const entries = await idbGetAll<DirtyProgressEntry>(DIRTY_STORE)
+  await progressSyncCoordinator.flushAll({
+    ...compactSyncOptions(options),
+    immediate: true
+  })
+
+  const entries = (await idbGetAll<DirtyProgressEntry>(DIRTY_STORE))
+    .sort((left, right) => left.queuedAt.localeCompare(right.queuedAt))
   for (const dirtyEntry of entries) {
     try {
-      const payload = await request(`/api/study-packs/${dirtyEntry.packId}/progress`, revisionResponseSchema, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          progress: dirtyEntry.progress,
-          baseRevision: dirtyEntry.baseRevision
-        })
-      }, PROGRESS_REQUEST_TIMEOUT_MS)
-      await updateCachedProgress(dirtyEntry.packId, dirtyEntry.progress, payload.revision)
-      await idbDelete(DIRTY_STORE, dirtyEntry.packId)
+      await sendProgressEntry(dirtyEntry, {
+        ...compactSyncOptions(options),
+        immediate: true,
+        silent: true
+      })
     } catch (error) {
-      if (error instanceof RequestError && error.status === 409) {
-        await resolveConflict(dirtyEntry.packId, dirtyEntry.progress, error.body)
+      if (!(error instanceof RequestError)) {
+        continue
       }
     }
   }
@@ -467,8 +521,8 @@ export async function flushDirtyProgress(): Promise<void> {
 function getStartBlockPreferences(): StartBlockPreferences {
   const qpoolSetting = localStore.getString('qpool-setting') ?? 'btn-qpool-unused'
   return {
-    mode: (localStore.getString('mode-setting') as StartBlockPreferences['mode'] | undefined) ?? 'tutor',
-    timeperq: localStore.getString('timeperq-setting') ?? '0',
+    mode: 'tutor',
+    timeperq: '0',
     qpoolstr: {
       'btn-qpool-unused': 'Unused',
       'btn-qpool-incorrects': 'Incorrects',
@@ -516,6 +570,99 @@ export async function resetPack(packId: string): Promise<number> {
   return payload.revision
 }
 
+export async function listAdminUsers(): Promise<AdminUser[]> {
+  const payload = await request('/api/admin/users', adminUsersResponseSchema)
+  return payload.users
+}
+
+export async function createAdminUser(input: {
+  username: string
+  password: string
+  email: string
+  role: UserRole
+}): Promise<AdminUser> {
+  const payload = await requestRaw('/api/admin/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input)
+  })
+  return z.object({ user: adminUserSchema }).parse(payload).user
+}
+
+export async function updateAdminUser(userId: string, input: {
+  email?: string
+  role?: UserRole
+  status?: UserStatus
+}): Promise<AdminUser> {
+  const payload = await requestRaw(`/api/admin/users/${encodeURIComponent(userId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input)
+  })
+  return z.object({ user: adminUserSchema }).parse(payload).user
+}
+
+export async function deleteAdminUser(userId: string): Promise<void> {
+  await requestRaw(`/api/admin/users/${encodeURIComponent(userId)}`, {
+    method: 'DELETE'
+  })
+}
+
+export async function listUserPacks(userId: string): Promise<StudyPackSummary[]> {
+  const payload = await requestRaw(`/api/admin/users/${encodeURIComponent(userId)}/packs`)
+  return z.object({ packs: z.array(studyPackSchema) }).parse(payload).packs
+}
+
+export async function deleteAdminPack(packId: string): Promise<void> {
+  await requestRaw(`/api/admin/packs/${encodeURIComponent(packId)}`, {
+    method: 'DELETE'
+  })
+  await idbDelete(PACK_STORE, packId)
+  await idbDelete(DIRTY_STORE, packId)
+}
+
+export async function listInvites(): Promise<InviteRecord[]> {
+  const payload = await request('/api/admin/invites', invitesResponseSchema)
+  return payload.invites
+}
+
+export async function createInvite(input: {
+  email: string
+  role: UserRole
+  expiresInDays?: number
+}): Promise<InviteCreationResult> {
+  return request('/api/admin/invites', inviteCreationResponseSchema, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input)
+  })
+}
+
+export async function revokeInvite(inviteId: string): Promise<void> {
+  await requestRaw(`/api/admin/invites/${encodeURIComponent(inviteId)}/revoke`, {
+    method: 'POST'
+  })
+}
+
+export async function getAppSettings(force = false): Promise<AppSettings> {
+  if (!force && authConfigCache) {
+    return authConfigCache
+  }
+  const payload = await request('/api/admin/settings', appSettingsResponseSchema)
+  authConfigCache = payload.settings
+  return authConfigCache
+}
+
+export async function updateAppSettings(settings: AppSettings): Promise<AppSettings> {
+  const payload = await request('/api/admin/settings', appSettingsResponseSchema, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ settings })
+  })
+  authConfigCache = payload.settings
+  return authConfigCache
+}
+
 export function registerServiceWorker(): void {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch((error) => {
@@ -527,7 +674,22 @@ export function registerServiceWorker(): void {
 export function installOnlineSyncHandler(): void {
   window.addEventListener('online', () => {
     showSyncBanner('info', 'Connection restored. Syncing queued progress...')
-    void flushDirtyProgress().then(() => showSyncBanner(null, ''))
+    void flushDirtyProgress({ immediate: true, silent: true }).then(() => showSyncBanner(null, ''))
+  })
+
+  const flushLifecycleChanges = () => {
+    void flushDirtyProgress({
+      immediate: true,
+      keepalive: true,
+      silent: true
+    })
+  }
+
+  window.addEventListener('pagehide', flushLifecycleChanges)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      flushLifecycleChanges()
+    }
   })
 }
 
