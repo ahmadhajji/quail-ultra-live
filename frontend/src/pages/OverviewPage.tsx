@@ -33,17 +33,9 @@ export function OverviewPage() {
   let pausedBlocks = 0
   let totalTime = 0
   let tutorBlocks = 0
-  let timedBlocks = 0
-  let untimedBlocks = 0
 
   Object.values(qbankinfo.progress.blockhist).forEach((block) => {
-    if (block.mode === 'timed') {
-      timedBlocks += 1
-    } else if (block.mode === 'untimed') {
-      untimedBlocks += 1
-    } else {
-      tutorBlocks += 1
-    }
+    tutorBlocks += 1
 
     if (block.complete) {
       completeBlocks += 1
@@ -102,8 +94,6 @@ export function OverviewPage() {
             <tr><td>Completed</td><td>{completeBlocks}</td></tr>
             <tr><td>Paused</td><td>{pausedBlocks}</td></tr>
             <tr><td>Tutor Blocks</td><td>{tutorBlocks}</td></tr>
-            <tr><td>Timed Blocks</td><td>{timedBlocks}</td></tr>
-            <tr><td>Untimed Blocks</td><td>{untimedBlocks}</td></tr>
           </tbody></table></div></div>
         </div>
         <div className="q-panel">

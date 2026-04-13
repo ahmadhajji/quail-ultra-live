@@ -10,12 +10,6 @@ import { ExamShellV2 } from '../components/exam/ExamShellV2'
 import type { Mode, QbankInfo, SyncProgressOptions } from '../types/domain'
 
 function modeLabel(mode: Mode): string {
-  if (mode === 'timed') {
-    return 'Timed'
-  }
-  if (mode === 'untimed') {
-    return 'Untimed'
-  }
   return 'Tutor'
 }
 

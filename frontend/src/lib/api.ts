@@ -521,8 +521,8 @@ export async function flushDirtyProgress(options: SyncProgressOptions = {}): Pro
 function getStartBlockPreferences(): StartBlockPreferences {
   const qpoolSetting = localStore.getString('qpool-setting') ?? 'btn-qpool-unused'
   return {
-    mode: (localStore.getString('mode-setting') as StartBlockPreferences['mode'] | undefined) ?? 'tutor',
-    timeperq: localStore.getString('timeperq-setting') ?? '0',
+    mode: 'tutor',
+    timeperq: '0',
     qpoolstr: {
       'btn-qpool-unused': 'Unused',
       'btn-qpool-incorrects': 'Incorrects',

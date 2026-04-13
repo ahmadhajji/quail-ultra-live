@@ -5,7 +5,7 @@ import { startBlock } from '../lib/api'
 import { navigate } from '../lib/navigation'
 import { localStore } from '../lib/store'
 import { usePackPage } from '../lib/usePackPage'
-import type { Mode, QbankInfo } from '../types/domain'
+import type { QbankInfo } from '../types/domain'
 
 type PoolSetting = 'btn-qpool-unused' | 'btn-qpool-incorrects' | 'btn-qpool-flagged' | 'btn-qpool-all' | 'btn-qpool-custom'
 
@@ -25,11 +25,7 @@ const qpoolSummaryCopy: Record<PoolSetting, [string, string]> = {
   'btn-qpool-custom': ['Custom question IDs', 'This block is driven by the IDs you pasted, which is useful for recreating specific sets or checklists.']
 }
 
-const modeSummaryCopy: Record<Mode, [string, string]> = {
-  tutor: ['Tutor mode', 'Submit each question individually and reveal the explanation immediately after you lock the answer.'],
-  timed: ['Timed mode', 'Work through the full block with a countdown, then convert the session into review when you end it.'],
-  untimed: ['Untimed mode', 'Hide explanations while solving, but remove the clock so the block behaves like delayed review instead of exam simulation.']
-}
+const tutorModeSummary: [string, string] = ['Tutor mode', 'Submit each question individually and reveal the explanation immediately after you lock the answer.']
 
 function filterInt(value: string): number | undefined {
   if (/^[-+]?(\d+|Infinity)$/.test(value)) {
@@ -39,26 +35,14 @@ function filterInt(value: string): number | undefined {
   return undefined
 }
 
-function getStoredMode(): Mode {
-  const explicit = localStore.getString('mode-setting')
-  if (explicit === 'timed' || explicit === 'untimed' || explicit === 'tutor') {
-    return explicit
-  }
-  const timed = localStore.get<boolean>('timed-setting') ?? false
-  const showAnswers = localStore.get<boolean>('showans-setting') ?? true
-  if (timed) {
-    return 'timed'
-  }
-  if (showAnswers) {
-    return 'tutor'
-  }
-  return 'untimed'
+function getStoredMode(): 'tutor' {
+  return 'tutor'
 }
 
-function setStoredMode(mode: Mode): void {
-  localStore.set('mode-setting', mode)
-  localStore.set('timed-setting', mode === 'timed')
-  localStore.set('showans-setting', mode === 'tutor')
+function setStoredMode(): void {
+  localStore.set('mode-setting', 'tutor')
+  localStore.set('timed-setting', false)
+  localStore.set('showans-setting', true)
 }
 
 function getRandom(values: string[], count: number): string[] {
@@ -154,7 +138,7 @@ function handleGrouped(qbankinfo: QbankInfo, blockqlist: string[]): string[] {
 
 export function NewBlockPage() {
   const { loading, packId, qbankinfo } = usePackPage()
-  const [mode, setMode] = useState<Mode>(getStoredMode())
+  const [mode] = useState<'tutor'>(getStoredMode())
   const [qpoolSetting, setQpoolSetting] = useState<PoolSetting>((localStore.getString('qpool-setting') as PoolSetting | undefined) ?? 'btn-qpool-unused')
   const [customIds, setCustomIds] = useState(localStore.getString('custom-ids-setting') ?? '')
   const [numQuestionsText, setNumQuestionsText] = useState(String(localStore.get<number>('numq-setting') ?? ''))
@@ -165,7 +149,7 @@ export function NewBlockPage() {
   const [expandedTags, setExpandedTags] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
-    setStoredMode(mode)
+    setStoredMode()
   }, [mode])
 
   useEffect(() => {
@@ -345,25 +329,17 @@ export function NewBlockPage() {
               <div className="q-panel-header">
                 <div>
                   <p className="q-panel-title">Study Mode</p>
-                  <p className="q-panel-subtitle">Choose whether this block behaves like guided tutoring or delayed review.</p>
+                  <p className="q-panel-subtitle">This build now uses tutor mode only. Timed and untimed sessions are deprecated because they were not reliable.</p>
                 </div>
-                <span className="q-badge">{modeSummaryCopy[mode][0]}</span>
+                <span className="q-badge">{tutorModeSummary[0]}</span>
               </div>
               <div className="q-panel-body">
                 <div className="q-mode-grid">
-                  {(['tutor', 'timed', 'untimed'] as const).map((entryMode) => (
-                    <button key={entryMode} className={`q-mode-btn ${mode === entryMode ? 'active' : ''}`} type="button" onClick={() => setMode(entryMode)}>
-                      <span className="q-mode-kicker">{entryMode === 'tutor' ? 'Immediate Review' : entryMode === 'timed' ? 'Exam Simulation' : 'Delayed Review'}</span>
-                      <span className="q-mode-title">{entryMode.charAt(0).toUpperCase() + entryMode.slice(1)}</span>
-                      <span className="q-mode-copy">
-                        {entryMode === 'tutor'
-                          ? 'Submit one question at a time, reveal the rationale instantly, and move through the block as guided review.'
-                          : entryMode === 'timed'
-                            ? 'Hide explanations until the end of the block and count down with a per-question time limit.'
-                            : 'Work through the block without a timer, then flip into full review when you end the session.'}
-                      </span>
-                    </button>
-                  ))}
+                  <button className="q-mode-btn active" type="button">
+                    <span className="q-mode-kicker">Immediate Review</span>
+                    <span className="q-mode-title">Tutor</span>
+                    <span className="q-mode-copy">Submit one question at a time, reveal the rationale instantly, and move through the block as guided review.</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -542,18 +518,8 @@ export function NewBlockPage() {
                   </div>
                   <div className="q-metric-box">
                     <div className="q-metric-label">Timing</div>
-                    {mode === 'timed' ? (
-                      <div>
-                        <div className="q-inline-metric">
-                          <input className="q-input" style={{ maxWidth: 130 }} value={timePerQuestionText} onChange={(event) => setTimePerQuestionText(event.target.value)} />
-                          <span className="q-helper-copy">seconds per question</span>
-                        </div>
-                      </div>
-                    ) : null}
                     <p className="q-helper-copy mb-0 mt-3">
-                      {mode === 'timed'
-                        ? 'Timed blocks reveal the explanation only after you end the block or run out of time.'
-                        : 'This mode still records elapsed time, but it does not enforce a block timer.'}
+                      Tutor mode records elapsed time for the block and reveals the explanation immediately after each submission.
                     </p>
                   </div>
                 </div>
@@ -578,7 +544,7 @@ export function NewBlockPage() {
                         window.alert(`Error parsing question list: ${available.error}`)
                         return
                       }
-                      if (!selectedNumQuestions || (mode === 'timed' && !selectedTimePerQuestion)) {
+                      if (!selectedNumQuestions) {
                         window.alert('Invalid settings')
                         return
                       }
@@ -621,8 +587,8 @@ export function NewBlockPage() {
               <div className="q-panel-body">
                 <div className="q-summary-list">
                   <div className="q-summary-item">
-                    <strong>{modeSummaryCopy[mode][0]}</strong>
-                    <span>{modeSummaryCopy[mode][1]}</span>
+                    <strong>{tutorModeSummary[0]}</strong>
+                    <span>{tutorModeSummary[1]}</span>
                   </div>
                   <div className="q-summary-item">
                     <strong>{selectedPoolSummary[0]}</strong>

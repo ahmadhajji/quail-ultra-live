@@ -1,14 +1,5 @@
 function deriveBlockMode(block) {
-  if (block.mode) {
-    return block.mode
-  }
-  if (block.timelimit !== undefined && block.timelimit !== -1) {
-    return 'timed'
-  }
-  if (block.showans) {
-    return 'tutor'
-  }
-  return 'untimed'
+  return 'tutor'
 }
 
 function createEmptyQuestionState() {
@@ -38,7 +29,7 @@ function normalizeBlockRecord(block, choices) {
     notes.push('')
   }
 
-  const mode = deriveBlockMode(normalized)
+  const mode = 'tutor'
   const questionStates = Array.isArray(normalized.questionStates) ? normalized.questionStates.slice(0, blockqlist.length) : []
   while (questionStates.length < blockqlist.length) {
     questionStates.push(createEmptyQuestionState())
@@ -67,8 +58,8 @@ function normalizeBlockRecord(block, choices) {
   normalized.mode = mode
   normalized.questionStates = resolvedQuestionStates
   normalized.reviewLayout = normalized.reviewLayout || 'split'
-  normalized.showans = normalized.showans !== undefined ? normalized.showans : (mode === 'tutor')
-  normalized.timelimit = normalized.timelimit !== undefined ? normalized.timelimit : (mode === 'timed' ? 0 : -1)
+  normalized.showans = true
+  normalized.timelimit = -1
   normalized.elapsedtime = normalized.elapsedtime || 0
   normalized.numcorrect = normalized.numcorrect || 0
   normalized.currentquesnum = normalized.currentquesnum || 0
@@ -204,9 +195,8 @@ function startBlock(qbankinfo, blockqlist, preferences) {
   }
 
   const blockKey = getNextBlockKey(progress)
-  const mode = preferences.mode || 'tutor'
-  const timeperq = parseInt(preferences.timeperq || 0, 10)
-  const timelimit = mode === 'timed' ? timeperq * blockqlist.length : -1
+  const mode = 'tutor'
+  const timelimit = -1
 
   progress.blockhist[blockKey] = {
     blockqlist: blockqlist,
@@ -224,7 +214,7 @@ function startBlock(qbankinfo, blockqlist, preferences) {
     allsubtagsenabled: preferences.allsubtagsenabled !== false,
     starttime: new Date().toLocaleString(),
     currentquesnum: 0,
-    showans: mode === 'tutor',
+    showans: true,
     reviewLayout: 'split'
   }
 
