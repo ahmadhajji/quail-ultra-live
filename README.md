@@ -40,7 +40,16 @@ Useful check:
 
 ```bash
 npm run check
+npm run test:smoke:local
 ```
+
+Standing project tracker:
+
+- [Product Roadmap And Change Tracker](ROADMAP.md)
+
+Step-by-step workflow and CI/CD notes:
+
+- [Development Workflow](docs/development-workflow.md)
 
 ## Deployment
 

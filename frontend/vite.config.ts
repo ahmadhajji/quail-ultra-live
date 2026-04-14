@@ -15,6 +15,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         index: path.resolve(frontendRoot, 'index.html'),
+        admin: path.resolve(frontendRoot, 'admin.html'),
         overview: path.resolve(frontendRoot, 'overview.html'),
         newblock: path.resolve(frontendRoot, 'newblock.html'),
         previousblocks: path.resolve(frontendRoot, 'previousblocks.html'),

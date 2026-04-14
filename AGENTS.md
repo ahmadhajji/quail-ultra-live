@@ -344,6 +344,271 @@ Manual smoke path:
 - When adjusting timer behavior, verify Tutor, Timed, Untimed, pause, resume, and finished-block states separately.
 - When changing answer rendering, test against real `*-q.html` files because choice text may be embedded in the question stem markup.
 
+## Codex Workflow Rules
+
+This repo should support a simple solo vibe-coding loop with Codex.
+
+Core rule:
+
+- user talks to Codex
+- Codex implements change on feature branch
+- Codex runs local automated checks
+- Codex opens local app for manual user review when asked
+- user explicitly approves
+- Codex pushes branch, opens PR, waits for CI
+- user explicitly approves deploy
+- Codex deploys production from merged `main`
+
+Do not skip those approval boundaries:
+
+- do not deploy to production without explicit user approval
+- do not merge to `main` without explicit user approval
+- do not discard uncommitted work unless user explicitly asks
+
+If working tree is already dirty:
+
+- preserve current work
+- do not switch branches blindly
+- if needed, checkpoint current work first on current branch
+
+If working tree is clean and user starts a new feature:
+
+- create a feature branch first
+- branch naming should default to `codex/<short-feature-name>`
+
+## Simple User Intents
+
+Future agents in this repo should interpret these user requests like this:
+
+### 1. "Implement feature ..." / "Make navbar blue" / "Change X"
+
+Expected agent behavior:
+
+1. inspect current branch and working tree
+2. create feature branch if safe and needed
+3. implement requested change
+4. run:
+
+```bash
+npm run check
+npm run test:smoke:local
+```
+
+5. report what changed and whether checks passed
+6. stop there unless user asks to test locally, ship, or deploy
+
+### 2. "Test local" / "Open local" / "Let me test it"
+
+Expected agent behavior:
+
+1. first run automated checks:
+
+```bash
+npm run check
+npm run test:smoke:local
+```
+
+2. if green, start local app for manual review
+3. open browser to local app for user
+4. do not commit, merge, or deploy yet
+
+Preferred local review flow:
+
+```bash
+npm run dev
+```
+
+Then open:
+
+```bash
+http://127.0.0.1:3000
+```
+
+If a lighter server-only preview is better:
+
+```bash
+npm run build
+npm run start:server
+```
+
+Then open same local URL.
+
+### 3. "Looks good" / "Feature done" / "Take next step"
+
+Expected agent behavior:
+
+1. summarize current diff
+2. commit on feature branch
+3. push branch to GitHub
+4. open PR into `main`
+5. tell user CI is running
+6. wait for PR checks to pass before merge
+
+### 4. "Ship it" / "Merge it"
+
+Expected agent behavior:
+
+1. confirm PR exists
+2. confirm CI is green
+3. merge PR into `main`
+4. pull/sync local `main` if needed
+5. stop before production deploy unless user also approved deploy
+
+### 5. "Deploy" / "Deploy production" / "Push live"
+
+Expected agent behavior:
+
+1. confirm change is already merged into `main`
+2. confirm latest `main` CI is green
+3. deploy production
+4. run production health check
+5. report live result
+
+Production deploy should prefer GitHub Actions workflow `Deploy Production`.
+Fallback is direct server SSH deploy only if GitHub Actions deploy path is unavailable.
+
+## Required Local Checks
+
+Before a feature is handed back for review, future agents should run:
+
+```bash
+npm run check
+npm run test:smoke:local
+```
+
+What they cover:
+
+- `npm run check`
+  - TypeScript typecheck
+  - JS syntax checks
+  - Vitest unit/integration tests
+- `npm run test:smoke:local`
+  - production build
+  - local Express server boot
+  - Playwright browser smoke tests
+
+Manual review still matters after automated checks.
+
+## Git And PR Flow
+
+Solo safe flow for this repo:
+
+1. start from latest `main`
+2. create feature branch
+3. make change
+4. run local automated checks
+5. open local app for manual review when user asks
+6. user approves feature
+7. commit feature branch
+8. push feature branch
+9. open PR into `main`
+10. let CI run
+11. if CI passes and user approves, merge PR
+12. if user approves deploy, deploy latest `main`
+
+Useful commands:
+
+```bash
+git switch main
+git pull --ff-only origin main
+git switch -c codex/<feature-name>
+git status
+git add -A
+git commit -m "Short clear message"
+git push -u origin codex/<feature-name>
+```
+
+## CI/CD Expectations
+
+Repo CI should protect both PRs and `main`.
+
+Expected GitHub Actions:
+
+- `CI`
+  - `Validate`
+  - `Browser Smoke`
+  - `Docker Build`
+- `Deploy Production`
+  - manual trigger only
+  - deploy from `main`
+
+Future agents should prefer this deploy order:
+
+1. PR CI green
+2. merge to `main`
+3. `main` CI green
+4. manual production deploy
+
+`main` should stay branch-protected:
+
+- no direct pushes
+- PR required
+- CI checks required before merge
+
+Production deploy workflow should be manual only, and should recover from dirty tracked files on server by backing up server diff metadata, then resetting tracked files to `origin/main` before rebuild. Untracked runtime files like `.env` must remain untouched.
+Backup artifacts should be written outside repo worktree, for example under `$HOME/.quail-ultra-live-deploy-backups`, so server checkout stays clean.
+
+## Deployment Server Integration Status
+
+Target production server:
+
+- host: `10.5.5.10`
+- user: `ahmad`
+- app path: `/home/ahmad/apps/quail-ultra-live`
+
+Target deploy model:
+
+- GitHub Actions deploy job SSHes into server
+- server pulls latest `origin/main`
+- server runs `docker compose up -d --build`
+- server checks `http://127.0.0.1:3000/api/health`
+
+Required GitHub repository secrets:
+
+- `DEPLOY_HOST`
+- `DEPLOY_PORT`
+- `DEPLOY_USER`
+- `DEPLOY_PATH`
+- `DEPLOY_SSH_KEY`
+
+Important:
+
+- do not store deploy private keys in repo
+- do not store SSH password in tracked files
+- prefer SSH key auth for GitHub Actions deploys
+- add deploy public key to server `~/.ssh/authorized_keys`
+
+If server is still password-only and no SSH key works:
+
+- agent should say server-side integration is blocked on password or manual key installation
+- agent may still prepare GitHub-side secrets and workflow files first
+
+Current deploy-key path on local machine:
+
+- private key: `~/.ssh/quail-ultra-live-actions_ed25519`
+- public key: `~/.ssh/quail-ultra-live-actions_ed25519.pub`
+
+Current public key to install on server:
+
+```text
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJUspJVMvGwvcjuPdL+FwlXBmcqSPMScw2C6VfRumsZD github-actions-quail-ultra-live
+```
+
+Once password or trusted SSH access is available, install it on server with:
+
+```bash
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+printf '%s\n' 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJUspJVMvGwvcjuPdL+FwlXBmcqSPMScw2C6VfRumsZD github-actions-quail-ultra-live' >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+```
+
+Then verify:
+
+```bash
+ssh -i ~/.ssh/quail-ultra-live-actions_ed25519 ahmad@10.5.5.10 'hostname && whoami'
+```
+
 ## Deployment Runbook
 
 The current production deployment is the Debian homelab instance exposed through Cloudflare Tunnel.

@@ -7,6 +7,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 coverage/
+playwright-report/
+test-results/
 scripts/__pycache__/
 *.pyc
 data/

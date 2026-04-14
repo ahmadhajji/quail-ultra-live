@@ -25,12 +25,49 @@ export function createQbankInfoFixture(): QbankInfo {
     panes: {
       Reference: { file: 'pane.html', prefs: 'width=600,height=400' }
     },
+    questionMeta: {
+      '101': {
+        source: {
+          deck_id: 'deck-1',
+          slide_number: 12,
+          question_index: 1,
+          question_id: '12.1'
+        },
+        source_group_id: 'deck-1:12',
+        source_slide: {
+          asset_path: 'source-slides/deck-1__slide_12.png',
+          expandable: true
+        },
+        slide_consensus: {
+          status: 'consensus'
+        },
+        fact_check: {
+          status: 'disputed',
+          note: 'Flagged by fact-check.',
+          sources: ['https://example.com/source'],
+          model: 'gpt-5.4'
+        },
+        choice_text_by_letter: {
+          A: 'Alpha',
+          B: 'Bravo',
+          C: 'Charlie'
+        },
+        choice_presentation: {
+          shuffle_allowed: true,
+          display_order: ['B', 'A', 'C']
+        },
+        warnings: ['Same-slide near-duplicate has a conflicting correct answer.'],
+        related_qids: ['102'],
+        dedupe_fingerprint: 'deck-1:12:abc123'
+      }
+    },
     progress: {
       blockhist: {
         '0': {
           blockqlist: ['101', '102'],
           answers: ['B', ''],
           highlights: ['[]', '[]'],
+          notes: ['', ''],
           questionStates: [
             { submitted: true, revealed: true, correct: true, eliminatedChoices: [] },
             { submitted: false, revealed: false, correct: false, eliminatedChoices: [] }

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { beginFolderImport, cancelFolderImport, completeFolderImport, deleteStudyPack, getSession, importStudyPack, listStudyPacks, login, logout, register, uploadFolderImportBatch } from '../lib/api'
+import { beginFolderImport, cancelFolderImport, completeFolderImport, deleteStudyPack, getAuthConfig, getSession, importStudyPack, listStudyPacks, login, logout, register, uploadFolderImportBatch } from '../lib/api'
 import { Brand } from '../components/Brand'
 import { navigate } from '../lib/navigation'
-import type { StudyPackSummary, User } from '../types/domain'
+import type { AppSettings, StudyPackSummary, User } from '../types/domain'
 
 const MAX_FOLDER_BATCH_BYTES = 4 * 1024 * 1024
 const MAX_FOLDER_BATCH_FILES = 40
@@ -63,16 +63,26 @@ export function HomePage() {
   const [packs, setPacks] = useState<StudyPackSummary[]>([])
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [email, setEmail] = useState(new URLSearchParams(window.location.search).get('email') ?? '')
   const [packName, setPackName] = useState('')
   const [authError, setAuthError] = useState('')
   const [packError, setPackError] = useState('')
   const [packLoading, setPackLoading] = useState('')
   const [folderFiles, setFolderFiles] = useState<FileList | null>(null)
   const [zipFile, setZipFile] = useState<File | undefined>()
+  const [authConfig, setAuthConfig] = useState<AppSettings>({ registrationMode: 'invite-only' })
+
+  const inviteToken = useMemo(() => new URLSearchParams(window.location.search).get('invite') ?? '', [])
+  const inviteModeEnabled = authConfig.registrationMode === 'invite-only'
+  const registrationAvailable = inviteModeEnabled && Boolean(inviteToken)
 
   async function refreshSessionView(): Promise<void> {
-    const currentUser = await getSession(true)
+    const [currentUser, currentConfig] = await Promise.all([
+      getSession(true),
+      getAuthConfig(true)
+    ])
     setUser(currentUser)
+    setAuthConfig(currentConfig)
     if (currentUser) {
       setPacks(await listStudyPacks())
     } else {
@@ -94,10 +104,14 @@ export function HomePage() {
       setAuthError('Enter both username and password.')
       return
     }
+    if (mode === 'register' && (!email.trim() || !inviteToken)) {
+      setAuthError('A valid invite link and matching email are required for registration.')
+      return
+    }
     try {
       setAuthError('')
       if (mode === 'register') {
-        await register(username.trim(), password)
+        await register(username.trim(), password, email.trim(), inviteToken)
       } else {
         await login(username.trim(), password)
       }
@@ -182,16 +196,23 @@ export function HomePage() {
         <div className="col-lg-6 d-flex justify-content-lg-end justify-content-start mt-3 mt-lg-0 align-items-center">
           <span className="q-helper-copy mr-3">{user ? `Signed in as ${user.username}` : ''}</span>
           {user ? (
-            <button
-              className="btn btn-outline-light btn-sm"
-              type="button"
-              onClick={async () => {
-                await logout()
-                await refreshSessionView()
-              }}
-            >
-              Sign Out
-            </button>
+            <>
+              {user.role === 'admin' ? (
+                <button className="btn btn-outline-light btn-sm mr-2" type="button" onClick={() => navigate('admin')}>
+                  Admin
+                </button>
+              ) : null}
+              <button
+                className="btn btn-outline-light btn-sm"
+                type="button"
+                onClick={async () => {
+                  await logout()
+                  await refreshSessionView()
+                }}
+              >
+                Sign Out
+              </button>
+            </>
           ) : null}
         </div>
       </div>
@@ -227,11 +248,35 @@ export function HomePage() {
                     }}
                   />
                 </div>
+                {registrationAvailable ? (
+                  <div className="q-metric-box">
+                    <div className="q-metric-label">Invite Email</div>
+                    <input
+                      aria-label="Invite Email"
+                      className="q-input"
+                      type="email"
+                      autoComplete="email"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                    />
+                  </div>
+                ) : null}
               </div>
               <div className="mt-4 d-flex flex-wrap q-home-auth-actions">
                 <button className="btn btn-primary mr-2 mb-2" type="button" onClick={() => void submitAuth('login')}>Sign In</button>
-                <button className="btn btn-outline-primary mb-2" type="button" onClick={() => void submitAuth('register')}>Create Account</button>
+                {registrationAvailable ? (
+                  <button className="btn btn-outline-primary mb-2" type="button" onClick={() => void submitAuth('register')}>Accept Invite</button>
+                ) : null}
               </div>
+              {!registrationAvailable ? (
+                <p className="q-helper-copy mt-3 mb-0">
+                  {inviteModeEnabled
+                    ? 'Account creation is invite-only. Open the invite URL from the admin panel to register.'
+                    : 'Account creation is currently closed. Sign in with an existing account.'}
+                </p>
+              ) : (
+                <p className="q-helper-copy mt-3 mb-0">This invite is tied to the email above. Registration will stay locked for everyone else.</p>
+              )}
               <p className="q-error-copy mt-3 mb-0">{authError}</p>
             </div>
           </section>
