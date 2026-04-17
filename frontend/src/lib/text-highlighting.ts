@@ -1,3 +1,5 @@
+import TextHighlighter from './text-highlighter-core'
+
 interface MountQuestionHighlighterOptions {
   container: HTMLDivElement
   color: string
@@ -11,7 +13,7 @@ export interface MountedQuestionHighlighter {
 }
 
 function bindHighlightRemoval(highlighter: TextHighlighter, onSerializedChange: (serialized: string) => void): void {
-  highlighter.getHighlights().forEach((highlight) => {
+  highlighter.getHighlights().forEach((highlight: HTMLElement) => {
     highlight.onclick = () => {
       highlighter.removeHighlights(highlight)
       onSerializedChange(highlighter.serializeHighlights())
@@ -28,9 +30,9 @@ export function mountQuestionHighlighter(options: MountQuestionHighlighterOption
 
   const highlighter = new TextHighlighter(container, {
     color,
-    onAfterHighlight: (_range, highlights) => {
+    onAfterHighlight: (_range: unknown, highlights: HTMLElement[]) => {
       onSerializedChange(highlighter.serializeHighlights())
-      highlights.forEach((highlight) => {
+      highlights.forEach((highlight: HTMLElement) => {
         highlight.onclick = () => {
           highlighter.removeHighlights(highlight)
           onSerializedChange(highlighter.serializeHighlights())
@@ -47,7 +49,7 @@ export function mountQuestionHighlighter(options: MountQuestionHighlighterOption
       highlighter.setColor(nextColor)
     },
     destroy() {
-      highlighter.getHighlights().forEach((highlight) => {
+      highlighter.getHighlights().forEach((highlight: HTMLElement) => {
         highlight.onclick = null
       })
     }

@@ -2,19 +2,25 @@
   "name": "quail-ultra-live",
   "version": "0.1.0",
   "description": "Account-backed web fork of Quail Ultra with study-pack import, export, offline cache, and sync.",
-  "main": "server/index.js",
+  "main": "build/server/index.js",
   "scripts": {
-    "build": "vite build --config frontend/vite.config.ts",
-    "start": "npm run build && node server/index.js",
-    "start:server": "node server/index.js",
-    "dev": "concurrently \"vite build --watch --mode development --config frontend/vite.config.ts\" \"node --watch server/index.js\"",
-    "typecheck": "tsc --project tsconfig.json --noEmit",
-    "validate:qbank": "node scripts/validate-qbank.js",
+    "build": "npm run build:frontend && npm run build:worker && npm run build:server",
+    "build:frontend": "vite build --config frontend/vite.config.ts",
+    "build:worker": "tsc --project tsconfig.worker.json",
+    "build:server": "tsc --project tsconfig.server.json",
+    "start": "npm run build && node build/server/index.js",
+    "start:server": "tsx server/index.ts",
+    "dev": "concurrently \"vite build --watch --mode development --config frontend/vite.config.ts\" \"tsc --project tsconfig.worker.json --watch --preserveWatchOutput\" \"tsx watch --clear-screen=false server/index.ts\"",
+    "typecheck": "npm run typecheck:frontend && npm run typecheck:server && npm run typecheck:worker",
+    "typecheck:frontend": "tsc --project tsconfig.json --noEmit",
+    "typecheck:server": "tsc --project tsconfig.server.json --noEmit",
+    "typecheck:worker": "tsc --project tsconfig.worker.json --noEmit",
+    "validate:qbank": "tsx scripts/validate-qbank.ts",
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
     "test:smoke": "playwright test",
     "test:smoke:local": "npm run build && playwright test",
-    "check": "npm run typecheck && node --check server/index.js && node --check shared/progress.js && node --check shared/qbank.js && node --check web/js/lib/live-api.js && node --check web/js/lib/live-compat.js && node --check web/js/pages/index.js && node --check web/js/pages/overview.js && node --check web/js/pages/newblock.js && node --check web/js/pages/previousblocks.js && node --check web/js/pages/examview.js && node --check web/js/pages/loadbank.js && npm run test"
+    "check": "npm run typecheck && npm run test"
   },
   "engines": {
     "node": "24.x"
@@ -22,7 +28,6 @@
   "keywords": [
     "quail",
     "usmle",
-    "electron-migration",
     "study-pack"
   ],
   "author": "Ahmad Hajji",
@@ -30,14 +35,13 @@
   "dependencies": {
     "archiver": "^7.0.1",
     "bcryptjs": "^2.4.3",
-    "bootstrap": "^4.6.0",
+    "bootstrap": "^5.3.3",
     "express": "^4.21.2",
     "express-session": "^1.18.1",
-    "jquery": "^3.6.0",
     "multer": "^1.4.5-lts.1",
-    "popper.js": "^1.16.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-router-dom": "^7.8.2",
     "sanitize-html": "^2.17.0",
     "unzipper": "^0.12.3",
     "zod": "^4.1.5"
@@ -53,6 +57,7 @@
     "@vitejs/plugin-react": "^5.0.2",
     "concurrently": "^9.2.1",
     "jsdom": "^26.1.0",
+    "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "vite": "^7.1.5",
     "vitest": "^3.2.4"

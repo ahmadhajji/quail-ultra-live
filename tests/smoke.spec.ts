@@ -16,3 +16,10 @@ test('home page renders auth and pack UI', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible()
   await expect(page.getByText(/invite-only|registration/i)).toBeVisible()
 })
+
+test('legacy html routes redirect to clean SPA routes', async ({ page }) => {
+  const response = await page.goto('/overview.html?pack=pack-1')
+  expect(response?.status()).toBeGreaterThanOrEqual(200)
+  await page.waitForURL('**/overview?pack=pack-1')
+  expect(page.url()).toContain('/overview?pack=pack-1')
+})

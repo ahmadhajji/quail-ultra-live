@@ -44,10 +44,7 @@ export function ExamViewPage() {
   const [noteText, setNoteText] = useState('')
   const [timerLabel, setTimerLabel] = useState('Time Used')
   const [timerText, setTimerText] = useState('0:00:00')
-  const examUiMode = useMemo<'legacy' | 'v2'>(() => {
-    return new URLSearchParams(window.location.search).get('ui') === 'v2' ? 'v2' : 'legacy'
-  }, [])
-  const showV2Drawer = examUiMode === 'v2'
+  const examUiMode = useMemo<'v2'>(() => 'v2', [])
 
   useEffect(() => {
     qbankinfoRef.current = qbankinfo
@@ -515,7 +512,7 @@ export function ExamViewPage() {
                 <button key={color} className={`highlight-swatch ${highlightColor === color ? 'active' : ''}`} data-color={color} style={{ background: color }} type="button" onClick={() => setHighlightColor(color)} />
               ))}
             </div>
-            {!showV2Drawer && paneEntries.length > 0 ? (
+            {paneEntries.length > 0 ? (
               <div className="btn-group header-panes" role="group">
                 {paneEntries.map(([title, pane]) => (
                   <button key={title} className="btn btn-header-tool" type="button" onClick={() => window.open(`${qbankinfo.path}/${pane.file}`, title, pane.prefs)}>
@@ -742,7 +739,7 @@ export function ExamViewPage() {
           </div>
         </section>
       )}
-      drawer={showV2Drawer ? (
+      drawer={(
         <>
           <section className="exam-v2-drawer-card">
             <p className="exam-v2-drawer-title">Question Notes</p>
@@ -787,7 +784,7 @@ export function ExamViewPage() {
             </section>
           ) : null}
         </>
-      ) : null}
+      )}
       footer={(
         <footer className="exam-footer">
           <div className="footer-left">

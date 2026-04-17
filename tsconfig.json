@@ -21,5 +21,6 @@
     "useUnknownInCatchVariables": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["frontend/src", "frontend/vite.config.ts"]
+  "include": ["frontend/src", "frontend/vite.config.ts"],
+  "exclude": ["frontend/src/sw.ts"]
 }
