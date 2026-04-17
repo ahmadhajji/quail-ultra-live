@@ -7,9 +7,9 @@ Quail Ultra Live is the account-backed web fork of Quail Ultra. It keeps the ori
 - `server/`
   Express server for auth, Study Pack import/export, qbank asset serving, and progress persistence.
 - `shared/`
-  Qbank compatibility and progress helpers extracted from the desktop app logic.
-- `web/`
-  Browser version of the Quail Ultra UI, still based on HTML, CSS, jQuery, and the existing page flow.
+  Shared TypeScript domain, qbank compatibility, and progress helpers used by both the server and browser app.
+- `frontend/`
+  Single-page React + TypeScript browser app built with Vite, including public branding assets and the service worker source.
 
 ## Core Product Model
 

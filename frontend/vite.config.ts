@@ -8,20 +8,10 @@ const repoRoot = path.resolve(frontendRoot, '..')
 export default defineConfig({
   root: frontendRoot,
   plugins: [react()],
-  publicDir: false,
+  publicDir: path.resolve(frontendRoot, 'public'),
   build: {
     outDir: path.resolve(repoRoot, 'dist'),
-    emptyOutDir: true,
-    rollupOptions: {
-      input: {
-        index: path.resolve(frontendRoot, 'index.html'),
-        admin: path.resolve(frontendRoot, 'admin.html'),
-        overview: path.resolve(frontendRoot, 'overview.html'),
-        newblock: path.resolve(frontendRoot, 'newblock.html'),
-        previousblocks: path.resolve(frontendRoot, 'previousblocks.html'),
-        examview: path.resolve(frontendRoot, 'examview.html')
-      }
-    }
+    emptyOutDir: true
   },
   test: {
     environment: 'jsdom',

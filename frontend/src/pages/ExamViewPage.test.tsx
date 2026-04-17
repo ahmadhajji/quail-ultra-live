@@ -38,7 +38,7 @@ describe('ExamViewPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    window.history.replaceState({}, '', '/examview.html?pack=pack-1&block=0')
+    window.history.replaceState({}, '', '/examview?pack=pack-1&block=0')
     const fixture = createQbankInfoFixture()
     packHook.usePackPage.mockReturnValue({
       loading: false,
@@ -74,7 +74,7 @@ describe('ExamViewPage', () => {
   })
 
   it('persists question notes through the synced local-first flow', async () => {
-    window.history.replaceState({}, '', '/examview.html?pack=pack-1&block=0&ui=v2')
+    window.history.replaceState({}, '', '/examview?pack=pack-1&block=0')
     render(<ExamViewPage />)
 
     await waitFor(() => {
@@ -86,15 +86,15 @@ describe('ExamViewPage', () => {
     expect(api.syncProgress).toHaveBeenCalled()
   })
 
-  it('keeps the legacy exam layout free of the v2 drawer by default', async () => {
+  it('shows the canonical exam drawer by default', async () => {
     render(<ExamViewPage />)
 
     await waitFor(() => {
       expect(htmlHelpers.fetchQuestionAssets).toHaveBeenCalled()
     })
 
-    expect(screen.queryByPlaceholderText('Add your note for this question...')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Reference' })).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Add your note for this question...')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Reference' })).toHaveLength(2)
   })
 
   it('prefers question metadata for choice labels and exposes source slide access', async () => {
