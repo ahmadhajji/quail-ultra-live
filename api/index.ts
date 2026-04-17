@@ -1,10 +1,13 @@
 // @ts-nocheck
 import { createApp } from '../server/app'
 
-const appPromise = createApp()
+let appPromise: Promise<any> | undefined
 
 export default async function handler(req: any, res: any) {
   try {
+    if (!appPromise) {
+      appPromise = createApp()
+    }
     const runtime = await appPromise
     return runtime.app(req, res)
   } catch (error: any) {
