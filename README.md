@@ -53,24 +53,31 @@ Step-by-step workflow and CI/CD notes:
 
 ## Deployment
 
-Primary target is a Debian host using Docker and a persistent volume for `data/`.
+Primary target is Vercel for hosting, with Neon Postgres for relational data and a private Vercel Blob store for Study Pack files.
 
-Build and run locally with Compose:
-
-```bash
-docker compose up --build
-```
-
-Recommended environment variables:
+Recommended production environment variables:
 
 - `SESSION_SECRET`
+- `DATABASE_URL`
+- `BLOB_READ_WRITE_TOKEN`
 - `ALLOW_REGISTRATION`
-- `PORT`
 
-Expose the container through your preferred reverse proxy or Cloudflare Tunnel.
+Vercel config lives in [vercel.json](/Users/ahmadhajji/.gemini/antigravity/scratch/quail-ultra-live/vercel.json).
+
+Local development still defaults to the local filesystem + SQLite backend. To bootstrap an admin locally without the old runtime auto-seed, set:
+
+```bash
+export LOCAL_BOOTSTRAP_ADMIN_USERNAME=ahmad
+export LOCAL_BOOTSTRAP_ADMIN_PASSWORD=secret
+```
+
+Migration and cutover notes live in [docs/vercel-cutover.md](/Users/ahmadhajji/.gemini/antigravity/scratch/quail-ultra-live/docs/vercel-cutover.md).
 
 ## Notes
 
-- Session storage uses the default in-memory Express session store in this initial cut. Restarting the container signs users out, but saved Study Pack data remains because it is stored on disk and in SQLite under `data/`.
+- Auth now uses a signed HttpOnly cookie instead of the in-memory Express session store.
+- Local mode stores packs on disk and relational data in SQLite under `data/`.
+- Cloud mode stores packs in private Vercel Blob and relational data in Neon Postgres.
+- Cloud imports use direct browser-to-Blob uploads to avoid Vercel Function body limits, and zip exports are built in the browser from the authenticated manifest + file endpoints.
 - Offline behavior is local-first for cached packs and queued progress updates. Study Pack file warming happens in the background once a pack is opened online.
 - The desktop Electron repo remains the reference line; this repo is the separate web conversion project.

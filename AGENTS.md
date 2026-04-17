@@ -464,8 +464,8 @@ Expected agent behavior:
 4. run production health check
 5. report live result
 
-Production deploy should prefer GitHub Actions workflow `Deploy Production`.
-Fallback is direct server SSH deploy only if GitHub Actions deploy path is unavailable.
+Production deploy should now prefer Vercel production deployment from merged `main`.
+Fallback is a manual Vercel dashboard/CLI deployment, not a server SSH deploy.
 
 ## Required Local Checks
 
@@ -527,17 +527,15 @@ Expected GitHub Actions:
 - `CI`
   - `Validate`
   - `Browser Smoke`
-  - `Docker Build`
 - `Deploy Production`
-  - manual trigger only
-  - deploy from `main`
+  - Vercel production deploy from `main`
 
 Future agents should prefer this deploy order:
 
 1. PR CI green
 2. merge to `main`
 3. `main` CI green
-4. manual production deploy
+4. deploy on Vercel
 
 `main` should stay branch-protected:
 
@@ -545,175 +543,33 @@ Future agents should prefer this deploy order:
 - PR required
 - CI checks required before merge
 
-Production deploy workflow should be manual only, and should recover from dirty tracked files on server by backing up server diff metadata, then resetting tracked files to `origin/main` before rebuild. Untracked runtime files like `.env` must remain untouched.
-Backup artifacts should be written outside repo worktree, for example under `$HOME/.quail-ultra-live-deploy-backups`, so server checkout stays clean.
+Production deploys should not depend on a mutable server checkout anymore.
 
-## Deployment Server Integration Status
+## Deployment Target
 
-Target production server:
+Primary production target:
 
-- host: `10.5.5.10`
-- user: `ahmad`
-- app path: `/home/ahmad/apps/quail-ultra-live`
+- host app on Vercel
+- store relational data in Neon Postgres
+- store Study Pack files in private Vercel Blob
+- keep `quail.clinicalvault.me` on Cloudflare DNS and point it to Vercel
 
-Target deploy model:
+Required production environment variables:
 
-- GitHub Actions deploy job SSHes into server
-- server pulls latest `origin/main`
-- server runs `docker compose up -d --build`
-- server checks `http://127.0.0.1:3000/api/health`
+- `SESSION_SECRET`
+- `DATABASE_URL`
+- `BLOB_READ_WRITE_TOKEN`
+- `ALLOW_REGISTRATION`
 
-Required GitHub repository secrets:
+Migration workflow:
 
-- `DEPLOY_HOST`
-- `DEPLOY_PORT`
-- `DEPLOY_USER`
-- `DEPLOY_PATH`
-- `DEPLOY_SSH_KEY`
+1. stop writes on the old homelab deployment
+2. back up the old `data/` directory outside the repo
+3. pull the snapshot locally
+4. run `npm run migrate:cloud`
+5. deploy to Vercel
+6. verify `api/health`, login, pack open, progress save, and export
+7. repoint `quail.clinicalvault.me` in Cloudflare to Vercel
+8. retire the old tunnel/server path after validation
 
-Important:
-
-- do not store deploy private keys in repo
-- do not store SSH password in tracked files
-- prefer SSH key auth for GitHub Actions deploys
-- add deploy public key to server `~/.ssh/authorized_keys`
-
-If server is still password-only and no SSH key works:
-
-- agent should say server-side integration is blocked on password or manual key installation
-- agent may still prepare GitHub-side secrets and workflow files first
-
-Current deploy-key path on local machine:
-
-- private key: `~/.ssh/quail-ultra-live-actions_ed25519`
-- public key: `~/.ssh/quail-ultra-live-actions_ed25519.pub`
-
-Current public key to install on server:
-
-```text
-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJUspJVMvGwvcjuPdL+FwlXBmcqSPMScw2C6VfRumsZD github-actions-quail-ultra-live
-```
-
-Once password or trusted SSH access is available, install it on server with:
-
-```bash
-mkdir -p ~/.ssh
-chmod 700 ~/.ssh
-printf '%s\n' 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJUspJVMvGwvcjuPdL+FwlXBmcqSPMScw2C6VfRumsZD github-actions-quail-ultra-live' >> ~/.ssh/authorized_keys
-chmod 600 ~/.ssh/authorized_keys
-```
-
-Then verify:
-
-```bash
-ssh -i ~/.ssh/quail-ultra-live-actions_ed25519 ahmad@10.5.5.10 'hostname && whoami'
-```
-
-## Deployment Runbook
-
-The current production deployment is the Debian homelab instance exposed through Cloudflare Tunnel.
-
-### SSH Access
-
-- Host: `10.5.5.10`
-- User: `ahmad`
-- SSH command: `ssh ahmad@10.5.5.10`
-- Auth is currently password-based.
-- Do not commit or write the plaintext password into tracked files. Retrieve it from the user or a secure local secret source when needed.
-
-### Server Paths
-
-- App checkout: `/home/ahmad/apps/quail-ultra-live`
-- Persistent app data: `/home/ahmad/apps/quail-ultra-live/data`
-- Server env file: `/home/ahmad/apps/quail-ultra-live/.env`
-- Cloudflare Tunnel config: `/etc/cloudflared/config.yml`
-
-### Docker Deployment
-
-The server deploy is Compose-based.
-
-From `/home/ahmad/apps/quail-ultra-live`:
-
-```bash
-git pull
-docker compose up -d --build
-docker compose logs -f --tail=200
-```
-
-Important runtime details:
-
-- `compose.yaml` binds the app to `127.0.0.1:${PORT:-3000}:3000`
-- persistent files live in `./data`
-- required env values:
-  - `SESSION_SECRET`
-  - `ALLOW_REGISTRATION`
-  - `PORT`
-
-Recommended production flow:
-
-1. Keep `ALLOW_REGISTRATION=true` only long enough to create the first account.
-2. Flip it to `false` in `.env`.
-3. Re-run `docker compose up -d`.
-
-### Health Checks
-
-Useful checks on the server:
-
-```bash
-curl http://127.0.0.1:3000/api/health
-docker compose ps
-docker compose logs --tail=200
-```
-
-Useful checks from elsewhere:
-
-```bash
-curl https://quail.clinicalvault.me/api/health
-```
-
-### Cloudflare Tunnel
-
-The public hostname is:
-
-- `https://quail.clinicalvault.me`
-
-The tunnel ingress must forward to the local app and keep chunked encoding disabled for uploads.
-
-Relevant ingress shape in `/etc/cloudflared/config.yml`:
-
-```yaml
-ingress:
-  - hostname: quail.clinicalvault.me
-    service: http://localhost:3000
-    originRequest:
-      disableChunkedEncoding: true
-  - service: http_status:404
-```
-
-After changing the tunnel config:
-
-```bash
-sudo cloudflared tunnel ingress validate /etc/cloudflared/config.yml
-sudo systemctl restart cloudflared
-sudo systemctl --no-pager --full status cloudflared
-```
-
-### Upload Caveat
-
-For this deployment, `disableChunkedEncoding: true` is not optional.
-
-Without it, multipart folder uploads through Cloudflare Tunnel can stall on the first batch even when the origin app is healthy. This was the root cause of the public upload failure for the real test bank at:
-
-- `/Users/ahmadhajji/Documents/IM1-quail-qbank`
-
-That bank was later verified to upload successfully through the live public endpoint after the tunnel change.
-
-## Current Working Tree Note
-
-At the time this file was updated:
-
-- repo remote was `git@github.com:ahmadhajji/quail-ultra-live.git`
-- default branch was `main`
-- public deployment was live at `quail.clinicalvault.me`
-- folder upload batching and async finalization had been added for public imports
-- Cloudflare Tunnel required `disableChunkedEncoding: true` for reliable multipart uploads
+The old homelab deployment at `10.5.5.10` is now legacy rollback infrastructure, not the primary deploy target.

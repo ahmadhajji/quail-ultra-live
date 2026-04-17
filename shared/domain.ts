@@ -4,6 +4,7 @@ export type BucketName = 'all' | 'unused' | 'incorrects' | 'flagged'
 export type UserRole = 'user' | 'admin'
 export type UserStatus = 'active' | 'disabled'
 export type RegistrationMode = 'invite-only' | 'closed'
+export type StorageBackend = 'local' | 'cloud'
 
 export interface User {
   id: string
@@ -199,6 +200,8 @@ export interface SyncProgressOptions {
 
 export interface AppSettings {
   registrationMode: RegistrationMode
+  storageBackend?: StorageBackend | undefined
+  directBlobUploads?: boolean | undefined
 }
 
 export interface AdminUser extends User {

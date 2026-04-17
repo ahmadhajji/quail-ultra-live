@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
   cancelFolderImport: vi.fn(),
   completeFolderImport: vi.fn(),
   deleteStudyPack: vi.fn(),
+  exportStudyPackZip: vi.fn(),
   getAuthConfig: vi.fn(),
   getSession: vi.fn(),
   importStudyPack: vi.fn(),
@@ -15,7 +16,9 @@ const api = vi.hoisted(() => ({
   login: vi.fn(),
   logout: vi.fn(),
   register: vi.fn(),
-  uploadFolderImportBatch: vi.fn()
+  uploadFolderImportBatch: vi.fn(),
+  uploadFolderImportDirect: vi.fn(),
+  uploadZipImportDirect: vi.fn()
 }))
 
 const navigation = vi.hoisted(() => ({

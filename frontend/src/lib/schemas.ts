@@ -147,7 +147,9 @@ export const authResponseSchema = z.object({
 
 export const authConfigSchema = z.object({
   settings: z.object({
-    registrationMode: z.enum(['invite-only', 'closed'])
+    registrationMode: z.enum(['invite-only', 'closed']),
+    storageBackend: z.enum(['local', 'cloud']).optional(),
+    directBlobUploads: z.boolean().optional()
   })
 }).transform((value): { settings: AppSettings } => value)
 

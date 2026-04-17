@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { upload as uploadBlobClient } from '@vercel/blob/client'
+import { unzipSync, zipSync } from 'fflate'
 import { adminUserSchema, adminUsersResponseSchema, appSettingsResponseSchema, authConfigSchema, authResponseSchema, importSessionSchema, inviteCreationResponseSchema, invitesResponseSchema, manifestResponseSchema, qbankInfoResponseSchema, qbankInfoSchema, revisionResponseSchema, sessionResponseSchema, startBlockResponseSchema, studyPackSchema, studyPacksResponseSchema } from './schemas'
 import { getCurrentBlockKey } from './navigation'
 import { ProgressSyncCoordinator } from './progress-sync'
@@ -17,6 +19,12 @@ let dbPromise: Promise<IDBDatabase> | undefined
 let sessionCache: User | null | undefined
 let authConfigCache: AppSettings | undefined
 const syncMutationSeqByPack = new Map<string, number>()
+
+type ImportUploadEntry = {
+  relativePath: string
+  body: Blob
+  size: number
+}
 
 function getSyncInstanceId(): string {
   let instanceId = window.localStorage.getItem(SYNC_INSTANCE_KEY)
@@ -250,6 +258,59 @@ export function buildPackFileUrl(packId: string, relativePath: string): string {
   return `/api/study-packs/${packId}/file/${relativePath.split('/').map(encodeURIComponent).join('/')}`
 }
 
+function sanitizeImportRelativePath(relativePath: string): string {
+  const normalized = relativePath.replace(/\\/g, '/').split('/').filter(Boolean).join('/')
+  if (!normalized || normalized.startsWith('.')) {
+    throw new Error('Invalid import path.')
+  }
+  return normalized
+}
+
+function buildImportBlobPath(sessionId: string, relativePath: string): string {
+  return `imports/${encodeURIComponent(sessionId)}/${sanitizeImportRelativePath(relativePath)}`
+}
+
+function downloadBlob(blob: Blob, filename: string): void {
+  const objectUrl = window.URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  window.setTimeout(() => {
+    window.URL.revokeObjectURL(objectUrl)
+  }, 0)
+}
+
+async function uploadImportEntries(sessionId: string, entries: ImportUploadEntry[], onProgress?: (message: string) => void): Promise<void> {
+  let cursor = 0
+  let completed = 0
+  const concurrency = 4
+
+  async function worker(): Promise<void> {
+    while (cursor < entries.length) {
+      const entry = entries[cursor]
+      cursor += 1
+      if (!entry) {
+        return
+      }
+      onProgress?.(`Uploading ${completed + 1} of ${entries.length}: ${entry.relativePath}`)
+      await uploadBlobClient(buildImportBlobPath(sessionId, entry.relativePath), entry.body, {
+        access: 'private',
+        handleUploadUrl: '/api/study-packs/import/uploads',
+        clientPayload: JSON.stringify({ sessionId }),
+        multipart: entry.size > 5 * 1024 * 1024
+      })
+      completed += 1
+      onProgress?.(`Uploaded ${completed} of ${entries.length} files...`)
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, Math.max(entries.length, 1)) }, () => worker())
+  await Promise.all(workers)
+}
+
 export async function getSession(force = false): Promise<User | null> {
   if (!force && sessionCache !== undefined) {
     return sessionCache
@@ -316,6 +377,28 @@ export async function beginFolderImport(packName: string): Promise<string> {
   return z.object({ sessionId: z.string() }).parse(payload).sessionId
 }
 
+export async function uploadFolderImportDirect(sessionId: string, fileList: FileList, onProgress?: (message: string) => void): Promise<void> {
+  const entries: ImportUploadEntry[] = Array.from(fileList).map((file) => ({
+    relativePath: sanitizeImportRelativePath(file.webkitRelativePath || file.name),
+    body: file,
+    size: file.size || 0
+  }))
+  await uploadImportEntries(sessionId, entries, onProgress)
+}
+
+export async function uploadZipImportDirect(sessionId: string, zipFile: File, onProgress?: (message: string) => void): Promise<void> {
+  onProgress?.('Extracting zip in the browser...')
+  const archive = unzipSync(new Uint8Array(await zipFile.arrayBuffer()))
+  const entries: ImportUploadEntry[] = Object.entries(archive)
+    .filter(([relativePath]) => !relativePath.endsWith('/'))
+    .map(([relativePath, content]) => ({
+      relativePath: sanitizeImportRelativePath(relativePath),
+      body: new Blob([Uint8Array.from(content)]),
+      size: content.byteLength
+    }))
+  await uploadImportEntries(sessionId, entries, onProgress)
+}
+
 export async function uploadFolderImportBatch(sessionId: string, formData: FormData): Promise<void> {
   await requestRaw(`/api/study-packs/import/folder-session/${encodeURIComponent(sessionId)}/files`, {
     method: 'POST',
@@ -352,6 +435,31 @@ export async function deleteStudyPack(packId: string): Promise<void> {
   await requestRaw(`/api/study-packs/${packId}`, { method: 'DELETE' })
   await idbDelete(PACK_STORE, packId)
   await idbDelete(DIRTY_STORE, packId)
+}
+
+export async function exportStudyPackZip(pack: StudyPackSummary, onProgress?: (message: string) => void): Promise<void> {
+  const manifest = await request(`/api/study-packs/${encodeURIComponent(pack.id)}/manifest`, manifestResponseSchema)
+  const files: Record<string, Uint8Array> = {}
+  for (let index = 0; index < manifest.files.length; index += 1) {
+    const relativePath = manifest.files[index]
+    if (!relativePath) {
+      continue
+    }
+    onProgress?.(`Preparing export ${index + 1} of ${manifest.files.length}: ${relativePath}`)
+    const response = await window.fetch(buildPackFileUrl(pack.id, relativePath), {
+      credentials: 'include'
+    })
+    if (!response.ok) {
+      throw new Error(`Unable to export ${relativePath}`)
+    }
+    files[relativePath] = new Uint8Array(await response.arrayBuffer())
+  }
+  onProgress?.('Building zip archive...')
+  const archive = zipSync(files, { level: 0 })
+  downloadBlob(
+    new Blob([Uint8Array.from(archive)], { type: 'application/zip' }),
+    `${pack.name.replace(/[^\w.-]+/g, '_') || 'study-pack'}.zip`
+  )
 }
 
 async function fetchQbankInfo(packId: string, blockKey: string): Promise<QbankInfo> {
