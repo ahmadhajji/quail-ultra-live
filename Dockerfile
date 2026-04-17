@@ -8,12 +8,13 @@ RUN npm ci
 COPY server ./server
 COPY shared ./shared
 COPY frontend ./frontend
-COPY tsconfig.json ./
-COPY web ./web
+COPY tsconfig.json tsconfig.server.json tsconfig.worker.json ./
+
+RUN npm run build
 
 EXPOSE 3000
 
 ENV PORT=3000
 ENV ALLOW_REGISTRATION=true
 
-CMD ["npm", "start"]
+CMD ["node", "build/server/index.js"]
