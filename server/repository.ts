@@ -1,7 +1,6 @@
 // @ts-nocheck
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
-import { DatabaseSync } from 'node:sqlite'
 import bcrypt from 'bcryptjs'
 import { neon } from '@neondatabase/serverless'
 import {
@@ -133,10 +132,11 @@ abstract class BaseRepository implements AppRepository {
 
 class LocalRepository extends BaseRepository {
   backend = 'local' as const
-  db!: DatabaseSync
+  db: any
 
   async init(): Promise<void> {
     await fs.mkdir(DATA_DIR, { recursive: true })
+    const { DatabaseSync } = require('node:sqlite')
     this.db = new DatabaseSync(LOCAL_DB_PATH)
     this.db.exec(`
       PRAGMA journal_mode = WAL;
