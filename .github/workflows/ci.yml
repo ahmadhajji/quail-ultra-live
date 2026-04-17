@@ -26,6 +26,16 @@ jobs:
       - name: Run validation suite
         run: npm run check
 
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build container image
+        run: docker build -t quail-ultra-live-ci .
+
   browser-smoke:
     name: Browser Smoke
     runs-on: ubuntu-latest
