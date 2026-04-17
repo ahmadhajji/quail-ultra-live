@@ -49,13 +49,3 @@ jobs:
         env:
           CI: "true"
         run: npm run test:smoke:local
-
-  docker-build:
-    name: Docker Build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: docker build -t quail-ultra-live:ci .

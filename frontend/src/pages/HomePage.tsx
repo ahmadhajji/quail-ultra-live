@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { beginFolderImport, cancelFolderImport, completeFolderImport, deleteStudyPack, getAuthConfig, getSession, importStudyPack, listStudyPacks, login, logout, register, uploadFolderImportBatch } from '../lib/api'
+import { beginFolderImport, cancelFolderImport, completeFolderImport, deleteStudyPack, exportStudyPackZip, getAuthConfig, getSession, importStudyPack, listStudyPacks, login, logout, register, uploadFolderImportBatch, uploadFolderImportDirect, uploadZipImportDirect } from '../lib/api'
 import { Brand } from '../components/Brand'
 import { navigate } from '../lib/navigation'
 import type { AppSettings, StudyPackSummary, User } from '../types/domain'
@@ -75,6 +75,7 @@ export function HomePage() {
   const inviteToken = useMemo(() => new URLSearchParams(window.location.search).get('invite') ?? '', [])
   const inviteModeEnabled = authConfig.registrationMode === 'invite-only'
   const registrationAvailable = inviteModeEnabled && Boolean(inviteToken)
+  const directBlobUploads = authConfig.directBlobUploads === true
 
   async function refreshSessionView(): Promise<void> {
     const [currentUser, currentConfig] = await Promise.all([
@@ -130,16 +131,20 @@ export function HomePage() {
     let sessionId = ''
     try {
       setPackError('')
-      const batches = buildFolderUploadBatches(folderFiles)
       sessionId = await beginFolderImport(packName.trim())
-      for (let index = 0; index < batches.length; index += 1) {
-        const formData = new FormData()
-        for (const file of batches[index] ?? []) {
-          const relativePath = file.webkitRelativePath || file.name
-          formData.append('files', file, relativePath)
+      if (directBlobUploads) {
+        await uploadFolderImportDirect(sessionId, folderFiles, (message) => setPackLoading(message))
+      } else {
+        const batches = buildFolderUploadBatches(folderFiles)
+        for (let index = 0; index < batches.length; index += 1) {
+          const formData = new FormData()
+          for (const file of batches[index] ?? []) {
+            const relativePath = file.webkitRelativePath || file.name
+            formData.append('files', file, relativePath)
+          }
+          setPackLoading(`Uploading folder batch ${index + 1} of ${batches.length}...`)
+          await uploadFolderImportBatch(sessionId, formData)
         }
-        setPackLoading(`Uploading folder batch ${index + 1} of ${batches.length}...`)
-        await uploadFolderImportBatch(sessionId, formData)
       }
       setPackLoading('Finalizing Study Pack on the server...')
       await completeFolderImport(sessionId, (message) => setPackLoading(message))
@@ -167,14 +172,22 @@ export function HomePage() {
       setPackError('Choose a zip file first.')
       return
     }
+    let sessionId = ''
     try {
       setPackError('')
-      const formData = new FormData()
-      formData.append('importType', 'zip')
-      formData.append('packName', packName.trim())
-      formData.append('files', zipFile, zipFile.name)
-      setPackLoading('Uploading zip and rebuilding Study Pack...')
-      await importStudyPack(formData)
+      if (directBlobUploads) {
+        sessionId = await beginFolderImport(packName.trim())
+        await uploadZipImportDirect(sessionId, zipFile, (message) => setPackLoading(message))
+        setPackLoading('Finalizing Study Pack on the server...')
+        await completeFolderImport(sessionId, (message) => setPackLoading(message))
+      } else {
+        const formData = new FormData()
+        formData.append('importType', 'zip')
+        formData.append('packName', packName.trim())
+        formData.append('files', zipFile, zipFile.name)
+        setPackLoading('Uploading zip and rebuilding Study Pack...')
+        await importStudyPack(formData)
+      }
       setZipFile(undefined)
       if (zipInputRef.current) {
         zipInputRef.current.value = ''
@@ -183,6 +196,13 @@ export function HomePage() {
       await refreshSessionView()
       setPackLoading('Study Pack imported.')
     } catch (error) {
+      if (sessionId) {
+        try {
+          await cancelFolderImport(sessionId)
+        } catch (cancelError) {
+          console.warn('Unable to cancel zip import session.', cancelError)
+        }
+      }
       setPackError(error instanceof Error ? error.message : 'Zip import failed.')
     }
   }
@@ -353,7 +373,6 @@ export function HomePage() {
                   {packs.length === 0 ? <div className="q-helper-copy">No study packs uploaded yet.</div> : null}
                   <div className="q-pack-list">
                     {packs.map((pack) => {
-                      const exportUrl = `/api/study-packs/${pack.id}/export.zip`
                       return (
                         <div className="q-pack-card" key={pack.id}>
                           <div>
@@ -363,7 +382,22 @@ export function HomePage() {
                           </div>
                           <div className="q-pack-actions">
                             <button className="btn btn-primary btn-sm" type="button" onClick={() => navigate('overview', { pack: pack.id })}>Open</button>
-                            <a className="btn btn-outline-primary btn-sm" href={exportUrl}>Export Zip</a>
+                            <button
+                              className="btn btn-outline-primary btn-sm"
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  setPackError('')
+                                  setPackLoading('Preparing Study Pack export...')
+                                  await exportStudyPackZip(pack, (message) => setPackLoading(message))
+                                  setPackLoading('')
+                                } catch (error) {
+                                  setPackError(error instanceof Error ? error.message : 'Export failed.')
+                                }
+                              }}
+                            >
+                              Export Zip
+                            </button>
                             <button
                               className="btn btn-outline-danger btn-sm"
                               type="button"
