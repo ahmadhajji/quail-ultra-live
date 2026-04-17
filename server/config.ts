@@ -23,7 +23,9 @@ export function getStorageBackend(): StorageBackend {
   if (explicit === 'local' || explicit === 'cloud') {
     return explicit
   }
-  if (process.env.VERCEL || (process.env.DATABASE_URL && process.env.BLOB_READ_WRITE_TOKEN)) {
+  // Vercel previews may exist before all production storage env vars are wired.
+  // Only opt into the cloud backend when both required services are configured.
+  if (process.env.DATABASE_URL && process.env.BLOB_READ_WRITE_TOKEN) {
     return 'cloud'
   }
   return 'local'
