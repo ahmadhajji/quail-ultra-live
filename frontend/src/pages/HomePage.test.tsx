@@ -18,7 +18,9 @@ const api = vi.hoisted(() => ({
   register: vi.fn(),
   uploadFolderImportBatch: vi.fn(),
   uploadFolderImportDirect: vi.fn(),
-  uploadZipImportDirect: vi.fn()
+  uploadFolderImportPresigned: vi.fn(),
+  uploadZipImportDirect: vi.fn(),
+  uploadZipImportPresigned: vi.fn()
 }))
 
 const navigation = vi.hoisted(() => ({

@@ -30,6 +30,19 @@ function resolvePackWorkspace(packsDir: string, row: any) {
   throw new Error(`Unable to locate workspace for pack ${row.id}`)
 }
 
+function tableExists(db: DatabaseSync, tableName: string) {
+  const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName)
+  return Boolean(row)
+}
+
+function getColumnNames(db: DatabaseSync, tableName: string) {
+  return db.prepare(`PRAGMA table_info(${tableName})`).all().map((row: any) => row.name)
+}
+
+function hasColumn(db: DatabaseSync, tableName: string, columnName: string) {
+  return getColumnNames(db, tableName).includes(columnName)
+}
+
 async function main() {
   const args = parseArgs()
   process.env.QUAIL_STORAGE_BACKEND = 'cloud'
@@ -40,7 +53,9 @@ async function main() {
   const sql = neon(String(process.env.DATABASE_URL || ''))
   const localDb = new DatabaseSync(args.dbPath)
 
-  const settings = localDb.prepare('SELECT key, value, updated_at FROM app_settings').all()
+  const settings = tableExists(localDb, 'app_settings')
+    ? localDb.prepare('SELECT key, value, updated_at FROM app_settings').all()
+    : []
   for (const row of settings) {
     await sql.query(`
       INSERT INTO app_settings (key, value, updated_at)
@@ -49,8 +64,11 @@ async function main() {
     `, [row.key, row.value, row.updated_at])
   }
 
-  const users = localDb.prepare('SELECT id, username, email, password_hash, role, status, created_at, updated_at FROM users').all()
+  const userColumns = getColumnNames(localDb, 'users')
+  const users = localDb.prepare(`SELECT ${userColumns.join(', ')} FROM users`).all()
   for (const row of users) {
+    const username = String(row.username || '').trim()
+    const inferredRole = username === 'ahmad' ? 'admin' : 'user'
     await sql.query(`
       INSERT INTO users (id, username, email, password_hash, role, status, created_at, updated_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -62,10 +80,21 @@ async function main() {
         status = EXCLUDED.status,
         created_at = EXCLUDED.created_at,
         updated_at = EXCLUDED.updated_at
-    `, [row.id, row.username, row.email || '', row.password_hash, row.role || 'user', row.status || 'active', row.created_at, row.updated_at || row.created_at])
+    `, [
+      row.id,
+      username,
+      row.email || '',
+      row.password_hash,
+      row.role || inferredRole,
+      row.status || 'active',
+      row.created_at,
+      row.updated_at || row.created_at
+    ])
   }
 
-  const invites = localDb.prepare('SELECT id, email, token_hash, role, created_by, created_at, updated_at, expires_at, used_by, used_at, revoked_at FROM invites').all()
+  const invites = tableExists(localDb, 'invites')
+    ? localDb.prepare('SELECT id, email, token_hash, role, created_by, created_at, updated_at, expires_at, used_by, used_at, revoked_at FROM invites').all()
+    : []
   for (const row of invites) {
     await sql.query(`
       INSERT INTO invites (id, email, token_hash, role, created_by, created_at, updated_at, expires_at, used_by, used_at, revoked_at)
@@ -84,11 +113,8 @@ async function main() {
     `, [row.id, row.email, row.token_hash, row.role || 'user', row.created_by, row.created_at, row.updated_at, row.expires_at, row.used_by || '', row.used_at || '', row.revoked_at || ''])
   }
 
-  const packs = localDb.prepare(`
-    SELECT id, user_id, name, workspace_path, question_count, revision, last_client_instance_id, last_client_mutation_seq, last_client_updated_at, created_at, updated_at
-    FROM study_packs
-    ORDER BY created_at ASC
-  `).all()
+  const packColumns = getColumnNames(localDb, 'study_packs')
+  const packs = localDb.prepare(`SELECT ${packColumns.join(', ')} FROM study_packs ORDER BY created_at ASC`).all()
 
   for (const row of packs) {
     const sourceWorkspace = resolvePackWorkspace(args.packsDir, row)
@@ -116,9 +142,9 @@ async function main() {
       finalPrefix,
       Number(row.question_count || 0),
       Number(row.revision || 0),
-      row.last_client_instance_id || '',
-      Number(row.last_client_mutation_seq || 0),
-      row.last_client_updated_at || '',
+      hasColumn(localDb, 'study_packs', 'last_client_instance_id') ? (row.last_client_instance_id || '') : '',
+      hasColumn(localDb, 'study_packs', 'last_client_mutation_seq') ? Number(row.last_client_mutation_seq || 0) : 0,
+      hasColumn(localDb, 'study_packs', 'last_client_updated_at') ? (row.last_client_updated_at || '') : '',
       row.created_at,
       row.updated_at
     ])

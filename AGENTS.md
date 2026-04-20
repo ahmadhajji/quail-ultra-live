@@ -20,7 +20,7 @@ Quail Ultra Live is a web-first Quail fork for USMLE-style question solving.
 
 - This repo is the web app, not the old Electron desktop app.
 - Current stack is Express on the server plus Vite/React/TypeScript in the browser.
-- Production target is Vercel with Neon Postgres and Vercel Blob.
+- Production target is Railway with SQLite on a mounted volume and S3-compatible bucket storage.
 - Legacy desktop assumptions are reference material only unless the user explicitly asks for them.
 
 ## QBank Compatibility
@@ -41,8 +41,8 @@ Preferred repo workflow:
 3. Codex runs code-level checks.
 4. Codex runs browser interaction tests and captures evidence when useful, such as screenshots of the changed UI.
 5. Codex commits and pushes the branch.
-6. Codex gets the branch ready for a Vercel preview deployment.
-7. User opens the Vercel preview link and tests manually.
+6. Codex gets the branch ready for a Railway staging or temporary review deployment when needed.
+7. User opens the deployment link and tests manually.
 8. After explicit user approval, Codex opens a PR from the feature branch into `main` and lets CI run.
 9. User reviews the PR and merges it.
 
@@ -55,8 +55,8 @@ Preferred repo workflow:
 
 ## Deployment Facts
 
-- app host: Vercel
-- relational data: Neon Postgres
-- pack storage: Vercel Blob
+- app host: Railway
+- relational data: SQLite on a Railway volume
+- pack storage: Railway Bucket (S3-compatible)
 - DNS: Cloudflare for `quail.clinicalvault.me`
-- required env: `SESSION_SECRET`, `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, `ALLOW_REGISTRATION`
+- required env: `QUAIL_STORAGE_BACKEND=railway`, `QUAIL_DATA_DIR=/data`, `SESSION_SECRET`, `ALLOW_REGISTRATION`, plus either `S3_ENDPOINT`/`S3_REGION`/`S3_BUCKET`/`S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY` or Railway Bucket's injected `AWS_ENDPOINT_URL`/`AWS_DEFAULT_REGION`/`AWS_S3_BUCKET_NAME`/`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`

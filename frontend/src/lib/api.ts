@@ -24,7 +24,10 @@ type ImportUploadEntry = {
   relativePath: string
   body: Blob
   size: number
+  contentType?: string
 }
+
+type UploadMode = 'multipart' | 'vercel-blob' | 'presigned'
 
 function getSyncInstanceId(): string {
   let instanceId = window.localStorage.getItem(SYNC_INSTANCE_KEY)
@@ -270,6 +273,27 @@ function buildImportBlobPath(sessionId: string, relativePath: string): string {
   return `imports/${encodeURIComponent(sessionId)}/${sanitizeImportRelativePath(relativePath)}`
 }
 
+async function requestImportUploadUrls(sessionId: string, entries: ImportUploadEntry[]) {
+  const payload = await requestRaw('/api/study-packs/import/upload-urls', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sessionId,
+      files: entries.map((entry) => ({
+        relativePath: entry.relativePath,
+        ...(entry.contentType ? { contentType: entry.contentType } : {})
+      }))
+    })
+  })
+  return z.object({
+    uploads: z.array(z.object({
+      relativePath: z.string(),
+      url: z.string(),
+      headers: z.record(z.string(), z.string())
+    }))
+  }).parse(payload).uploads
+}
+
 function downloadBlob(blob: Blob, filename: string): void {
   const objectUrl = window.URL.createObjectURL(blob)
   const anchor = document.createElement('a')
@@ -283,7 +307,10 @@ function downloadBlob(blob: Blob, filename: string): void {
   }, 0)
 }
 
-async function uploadImportEntries(sessionId: string, entries: ImportUploadEntry[], onProgress?: (message: string) => void): Promise<void> {
+async function uploadImportEntries(sessionId: string, entries: ImportUploadEntry[], uploadMode: UploadMode, onProgress?: (message: string) => void): Promise<void> {
+  const presignedUploads = uploadMode === 'presigned'
+    ? new Map((await requestImportUploadUrls(sessionId, entries)).map((upload) => [upload.relativePath, upload]))
+    : null
   let cursor = 0
   let completed = 0
   const concurrency = 4
@@ -296,12 +323,27 @@ async function uploadImportEntries(sessionId: string, entries: ImportUploadEntry
         return
       }
       onProgress?.(`Uploading ${completed + 1} of ${entries.length}: ${entry.relativePath}`)
-      await uploadBlobClient(buildImportBlobPath(sessionId, entry.relativePath), entry.body, {
-        access: 'private',
-        handleUploadUrl: '/api/study-packs/import/uploads',
-        clientPayload: JSON.stringify({ sessionId }),
-        multipart: entry.size > 5 * 1024 * 1024
-      })
+      if (uploadMode === 'vercel-blob') {
+        await uploadBlobClient(buildImportBlobPath(sessionId, entry.relativePath), entry.body, {
+          access: 'private',
+          handleUploadUrl: '/api/study-packs/import/uploads',
+          clientPayload: JSON.stringify({ sessionId }),
+          multipart: entry.size > 5 * 1024 * 1024
+        })
+      } else {
+        const upload = presignedUploads?.get(entry.relativePath)
+        if (!upload) {
+          throw new Error(`Missing upload target for ${entry.relativePath}`)
+        }
+        const response = await window.fetch(upload.url, {
+          method: 'PUT',
+          headers: upload.headers,
+          body: entry.body
+        })
+        if (!response.ok) {
+          throw new Error(`Unable to upload ${entry.relativePath}`)
+        }
+      }
       completed += 1
       onProgress?.(`Uploaded ${completed} of ${entries.length} files...`)
     }
@@ -381,9 +423,10 @@ export async function uploadFolderImportDirect(sessionId: string, fileList: File
   const entries: ImportUploadEntry[] = Array.from(fileList).map((file) => ({
     relativePath: sanitizeImportRelativePath(file.webkitRelativePath || file.name),
     body: file,
-    size: file.size || 0
+    size: file.size || 0,
+    ...(file.type ? { contentType: file.type } : {})
   }))
-  await uploadImportEntries(sessionId, entries, onProgress)
+  await uploadImportEntries(sessionId, entries, 'vercel-blob', onProgress)
 }
 
 export async function uploadZipImportDirect(sessionId: string, zipFile: File, onProgress?: (message: string) => void): Promise<void> {
@@ -396,7 +439,30 @@ export async function uploadZipImportDirect(sessionId: string, zipFile: File, on
       body: new Blob([Uint8Array.from(content)]),
       size: content.byteLength
     }))
-  await uploadImportEntries(sessionId, entries, onProgress)
+  await uploadImportEntries(sessionId, entries, 'vercel-blob', onProgress)
+}
+
+export async function uploadFolderImportPresigned(sessionId: string, fileList: FileList, onProgress?: (message: string) => void): Promise<void> {
+  const entries: ImportUploadEntry[] = Array.from(fileList).map((file) => ({
+    relativePath: sanitizeImportRelativePath(file.webkitRelativePath || file.name),
+    body: file,
+    size: file.size || 0,
+    ...(file.type ? { contentType: file.type } : {})
+  }))
+  await uploadImportEntries(sessionId, entries, 'presigned', onProgress)
+}
+
+export async function uploadZipImportPresigned(sessionId: string, zipFile: File, onProgress?: (message: string) => void): Promise<void> {
+  onProgress?.('Extracting zip in the browser...')
+  const archive = unzipSync(new Uint8Array(await zipFile.arrayBuffer()))
+  const entries: ImportUploadEntry[] = Object.entries(archive)
+    .filter(([relativePath]) => !relativePath.endsWith('/'))
+    .map(([relativePath, content]) => ({
+      relativePath: sanitizeImportRelativePath(relativePath),
+      body: new Blob([Uint8Array.from(content)]),
+      size: content.byteLength
+    }))
+  await uploadImportEntries(sessionId, entries, 'presigned', onProgress)
 }
 
 export async function uploadFolderImportBatch(sessionId: string, formData: FormData): Promise<void> {
