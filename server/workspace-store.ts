@@ -8,6 +8,15 @@ import { copy, del, get, list, put } from '@vercel/blob'
 import { normalizeProgress } from '../shared/progress'
 import { findWorkspaceRoot, listWorkspaceManifest, loadWorkspaceData, safeResolveWorkspaceFile, saveProgress, withPackPath } from '../shared/qbank'
 import { PACKS_DIR, getBlobToken, getStorageBackend } from './config'
+import {
+  deleteS3Prefix,
+  getS3FileStream,
+  listS3Keys,
+  materializeS3PrefixToTemp,
+  readS3Json,
+  uploadDirectoryToS3,
+  writeS3Json
+} from './s3'
 
 type LoadedPack = {
   qbankinfo: any
@@ -30,22 +39,115 @@ async function readStreamToBuffer(stream: ReadableStream<Uint8Array>) {
   return Buffer.concat(chunks)
 }
 
-async function uploadDirectoryToBlob(prefix: string, directory: string) {
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function getUploadContentType(fileName: string) {
+  const extension = path.extname(fileName).toLowerCase()
+  return extension === '.html'
+    ? 'text/html; charset=utf-8'
+    : extension === '.json'
+      ? 'application/json; charset=utf-8'
+      : extension === '.zip'
+        ? 'application/zip'
+        : undefined
+}
+
+async function uploadBlobFile(pathname: string, absolutePath: string) {
+  const body = await fsp.readFile(absolutePath)
+  const contentType = getUploadContentType(absolutePath)
+  const timeoutMs = body.byteLength >= 1024 * 1024 ? 180_000 : 90_000
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      await put(pathname, body, {
+        access: 'private',
+        addRandomSuffix: false,
+        allowOverwrite: true,
+        multipart: body.byteLength >= 1024 * 1024,
+        ...(contentType ? { contentType } : {}),
+        abortSignal: controller.signal,
+        token: getBlobToken()
+      })
+      clearTimeout(timeout)
+      return
+    } catch (error) {
+      clearTimeout(timeout)
+      lastError = error
+      if (attempt === 4) {
+        break
+      }
+      const message = error instanceof Error ? error.message : String(error)
+      console.warn(`Retrying blob upload for ${pathname} (attempt ${attempt}/4 failed: ${message})`)
+      await sleep(message.includes('Rate exceeded') ? attempt * 5000 : attempt * 1000)
+    }
+  }
+
+  throw lastError
+}
+
+async function listBlobPathnames(prefix: string) {
+  const pathnames = new Set<string>()
+  let cursor: string | undefined
+  do {
+    const page = await list({
+      prefix: `${prefix}/`,
+      cursor,
+      limit: 1000,
+      token: getBlobToken()
+    })
+    for (const blob of page.blobs) {
+      pathnames.add(blob.pathname)
+    }
+    cursor = page.hasMore ? page.cursor : undefined
+  } while (cursor)
+  return pathnames
+}
+
+async function collectFiles(directory: string, prefix: string): Promise<Array<{ absolutePath: string, relativePath: string }>> {
+  const files: Array<{ absolutePath: string, relativePath: string }> = []
   const entries = await fsp.readdir(directory, { withFileTypes: true })
+
   for (const entry of entries) {
     const absolutePath = path.join(directory, entry.name)
     const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name
     if (entry.isDirectory()) {
-      await uploadDirectoryToBlob(relativePath, absolutePath)
+      files.push(...await collectFiles(absolutePath, relativePath))
     } else if (entry.isFile()) {
-      await put(relativePath, fs.createReadStream(absolutePath), {
-        access: 'private',
-        addRandomSuffix: false,
-        allowOverwrite: true,
-        token: getBlobToken()
-      })
+      files.push({ absolutePath, relativePath })
     }
   }
+
+  return files
+}
+
+async function uploadDirectoryToBlob(prefix: string, directory: string) {
+  const existing = await listBlobPathnames(prefix)
+  const files = (await collectFiles(directory, prefix))
+    .filter((file) => !existing.has(file.relativePath))
+
+  let uploadedFiles = 0
+  let nextIndex = 0
+  const concurrency = 4
+
+  async function worker() {
+    while (nextIndex < files.length) {
+      const index = nextIndex
+      nextIndex += 1
+      const file = files[index]
+      await uploadBlobFile(file.relativePath, file.absolutePath)
+      uploadedFiles += 1
+      if (uploadedFiles % 100 === 0 || uploadedFiles === files.length) {
+        console.log(`Uploaded ${uploadedFiles}/${files.length} files under ${prefix}`)
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, files.length || 1) }, () => worker()))
 }
 
 async function removeBlobPrefix(prefix: string) {
@@ -292,11 +394,105 @@ class BlobWorkspaceStore extends BaseWorkspaceStore {
   }
 }
 
+class RailwayWorkspaceStore extends BaseWorkspaceStore {
+  backend = 'railway' as const
+
+  async loadPack(packRow: any, blockToOpen: string) {
+    const workspacePath = packRow.workspace_path
+    const index = await readS3Json(`${workspacePath}/index.json`)
+    const tagnames = await readS3Json(`${workspacePath}/tagnames.json`)
+    const choices = await readS3Json(`${workspacePath}/choices.json`)
+    const groups = await readS3Json(`${workspacePath}/groups.json`)
+    const panes = await readS3Json(`${workspacePath}/panes.json`)
+    const questionMeta = await readS3Json(`${workspacePath}/question-meta.json`)
+    const progress = await readS3Json(`${workspacePath}/progress.json`)
+    if (!index || !tagnames || !choices || !groups || !panes || !progress) {
+      throw new Error('Study Pack is missing required qbank metadata in Railway bucket storage.')
+    }
+    const qbankinfo = {
+      index,
+      tagnames,
+      choices,
+      groups,
+      panes,
+      ...(questionMeta ? { questionMeta } : {}),
+      progress,
+      path: `/api/study-packs/${packRow.id}/file`,
+      revision: packRow.revision,
+      blockToOpen: blockToOpen || ''
+    }
+    normalizeProgress(qbankinfo.progress, qbankinfo)
+    return { qbankinfo }
+  }
+
+  async savePackProgress(workspacePath: string, progress: any) {
+    await writeS3Json(`${workspacePath}/progress.json`, progress)
+  }
+
+  async listManifest(workspacePath: string) {
+    const keys = await listS3Keys(workspacePath)
+    return keys
+      .map((key) => key.slice(`${workspacePath}/`.length))
+      .sort()
+  }
+
+  async getPackFile(workspacePath: string, relativePath: string) {
+    const cleanRelative = relativePath.split('/').filter(Boolean).join('/')
+    const file = await getS3FileStream(`${workspacePath}/${cleanRelative}`)
+    return {
+      kind: 'stream',
+      stream: file.stream,
+      contentType: file.contentType
+    }
+  }
+
+  async deleteWorkspace(workspacePath: string) {
+    await deleteS3Prefix(workspacePath)
+  }
+
+  async finalizeImportedWorkspace(sessionRow: any, packId: string) {
+    const tempRoot = await materializeS3PrefixToTemp(sessionRow.staging_prefix)
+    try {
+      const workspaceRoot = await findWorkspaceRoot(tempRoot)
+      const prepared = await loadWorkspaceData(workspaceRoot)
+      const finalPrefix = `packs/${packId}/workspace`
+      await uploadDirectoryToS3(finalPrefix, workspaceRoot)
+      return {
+        workspacePath: finalPrefix,
+        questionCount: Object.keys(prepared.index).length,
+        packName: path.basename(workspaceRoot)
+      }
+    } finally {
+      await fsp.rm(tempRoot, { recursive: true, force: true })
+      await deleteS3Prefix(sessionRow.staging_prefix)
+    }
+  }
+
+  async importWorkspaceFromLocalDirectory(directory: string, targetPrefix: string) {
+    const workspaceRoot = await findWorkspaceRoot(directory)
+    const prepared = await loadWorkspaceData(workspaceRoot)
+    await uploadDirectoryToS3(targetPrefix, workspaceRoot)
+    return {
+      questionCount: Object.keys(prepared.index).length,
+      packName: path.basename(workspaceRoot)
+    }
+  }
+
+  async cancelImportWorkspace(sessionRow: any) {
+    if (sessionRow.staging_prefix) {
+      await deleteS3Prefix(sessionRow.staging_prefix)
+    }
+  }
+}
+
 export type WorkspaceStore = BaseWorkspaceStore
 
 export function createWorkspaceStore(): WorkspaceStore {
   if (getStorageBackend() === 'cloud') {
     return new BlobWorkspaceStore()
+  }
+  if (getStorageBackend() === 'railway') {
+    return new RailwayWorkspaceStore()
   }
   return new LocalWorkspaceStore()
 }

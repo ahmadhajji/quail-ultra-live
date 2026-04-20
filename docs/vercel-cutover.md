@@ -1,5 +1,7 @@
 # Vercel Cutover Runbook
 
+Deprecated. Railway is now the primary deployment target for this repo. Keep this runbook only as historical reference or rollback context for the earlier Vercel migration work.
+
 ## Production Target
 
 - Hosting: Vercel

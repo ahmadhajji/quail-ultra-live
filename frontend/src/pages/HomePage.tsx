@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { beginFolderImport, cancelFolderImport, completeFolderImport, deleteStudyPack, exportStudyPackZip, getAuthConfig, getSession, importStudyPack, listStudyPacks, login, logout, register, uploadFolderImportBatch, uploadFolderImportDirect, uploadZipImportDirect } from '../lib/api'
+import { beginFolderImport, cancelFolderImport, completeFolderImport, deleteStudyPack, exportStudyPackZip, getAuthConfig, getSession, importStudyPack, listStudyPacks, login, logout, register, uploadFolderImportBatch, uploadFolderImportDirect, uploadFolderImportPresigned, uploadZipImportDirect, uploadZipImportPresigned } from '../lib/api'
 import { Brand } from '../components/Brand'
 import { navigate } from '../lib/navigation'
 import type { AppSettings, StudyPackSummary, User } from '../types/domain'
@@ -75,7 +75,7 @@ export function HomePage() {
   const inviteToken = useMemo(() => new URLSearchParams(window.location.search).get('invite') ?? '', [])
   const inviteModeEnabled = authConfig.registrationMode === 'invite-only'
   const registrationAvailable = inviteModeEnabled && Boolean(inviteToken)
-  const directBlobUploads = authConfig.directBlobUploads === true
+  const uploadMode = authConfig.uploadMode ?? (authConfig.directBlobUploads ? 'vercel-blob' : 'multipart')
 
   async function refreshSessionView(): Promise<void> {
     const [currentUser, currentConfig] = await Promise.all([
@@ -132,8 +132,10 @@ export function HomePage() {
     try {
       setPackError('')
       sessionId = await beginFolderImport(packName.trim())
-      if (directBlobUploads) {
+      if (uploadMode === 'vercel-blob') {
         await uploadFolderImportDirect(sessionId, folderFiles, (message) => setPackLoading(message))
+      } else if (uploadMode === 'presigned') {
+        await uploadFolderImportPresigned(sessionId, folderFiles, (message) => setPackLoading(message))
       } else {
         const batches = buildFolderUploadBatches(folderFiles)
         for (let index = 0; index < batches.length; index += 1) {
@@ -175,9 +177,14 @@ export function HomePage() {
     let sessionId = ''
     try {
       setPackError('')
-      if (directBlobUploads) {
+      if (uploadMode === 'vercel-blob') {
         sessionId = await beginFolderImport(packName.trim())
         await uploadZipImportDirect(sessionId, zipFile, (message) => setPackLoading(message))
+        setPackLoading('Finalizing Study Pack on the server...')
+        await completeFolderImport(sessionId, (message) => setPackLoading(message))
+      } else if (uploadMode === 'presigned') {
+        sessionId = await beginFolderImport(packName.trim())
+        await uploadZipImportPresigned(sessionId, zipFile, (message) => setPackLoading(message))
         setPackLoading('Finalizing Study Pack on the server...')
         await completeFolderImport(sessionId, (message) => setPackLoading(message))
       } else {

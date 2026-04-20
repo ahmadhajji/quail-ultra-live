@@ -15,10 +15,12 @@ import {
   PORT,
   PACKS_DIR,
   ROOT_DIR,
+  getUploadMode,
   getStorageBackend,
-  usesCloudStorage
+  usesDirectUploads
 } from './config'
 import { buildPasswordHash, comparePassword, createInviteToken, createRepository, hashInviteToken } from './repository'
+import { createPresignedUpload } from './s3'
 import { createWorkspaceStore } from './workspace-store'
 import { legacyPageRedirectTarget, routePathFor } from './routes'
 import { deleteBlock, normalizeProgress, startBlock } from '../shared/progress'
@@ -157,7 +159,8 @@ export async function createApp() {
   const repository = createRepository()
   const workspaceStore = createWorkspaceStore()
   const storageBackend = getStorageBackend()
-  const directBlobUploads = usesCloudStorage()
+  const uploadMode = getUploadMode()
+  const directUploads = usesDirectUploads()
   await repository.init()
 
   const upload = multer({
@@ -324,7 +327,8 @@ export async function createApp() {
       settings: {
         registrationMode: await repository.getRegistrationMode(),
         storageBackend,
-        directBlobUploads
+        uploadMode,
+        directBlobUploads: directUploads
       }
     })
   }))
@@ -582,7 +586,7 @@ export async function createApp() {
   app.post('/api/study-packs/import/folder-session', requireAuth, asyncRoute(async function beginFolderImport(req: any, res: any) {
     const sessionId = crypto.randomUUID()
     const timestamp = nowIso()
-    if (storageBackend === 'cloud') {
+    if (storageBackend !== 'local') {
       await repository.createImportSession({
         id: sessionId,
         userId: req.user.id,
@@ -611,7 +615,7 @@ export async function createApp() {
   }))
 
   app.post('/api/study-packs/import/uploads', asyncRoute(async function handleClientBlobUploads(req: any, res: any) {
-    if (!directBlobUploads) {
+    if (uploadMode !== 'vercel-blob') {
       return jsonError(res, 404, 'Direct blob uploads are not enabled for this environment')
     }
     const body = req.body
@@ -647,9 +651,37 @@ export async function createApp() {
     res.json(response)
   }))
 
+  app.post('/api/study-packs/import/upload-urls', requireAuth, asyncRoute(async function createImportUploadUrls(req: any, res: any) {
+    if (uploadMode !== 'presigned') {
+      return jsonError(res, 404, 'Presigned uploads are not enabled for this environment')
+    }
+    const session = await repository.getImportSession(String(req.body?.sessionId || ''))
+    if (!session || session.user_id !== req.user.id) {
+      return jsonError(res, 404, 'Import session not found')
+    }
+    if (session.state !== 'uploading') {
+      return jsonError(res, 409, 'Import session is no longer accepting files')
+    }
+    const files = Array.isArray(req.body?.files) ? req.body.files : []
+    if (files.length === 0) {
+      return jsonError(res, 400, 'Select files to upload')
+    }
+    const uploads = await Promise.all(files.map(async (entry: any) => {
+      const relativePath = safeRelativeUploadPath(String(entry?.relativePath || ''))
+      const pathname = `${session.staging_prefix}/${relativePath}`
+      const upload = await createPresignedUpload(pathname, String(entry?.contentType || '').trim() || undefined)
+      return {
+        relativePath,
+        url: upload.url,
+        headers: upload.headers
+      }
+    }))
+    res.json({ uploads })
+  }))
+
   app.post('/api/study-packs/import/folder-session/:sessionId/files', requireAuth, upload.any(), asyncRoute(async function addFolderImportFiles(req: any, res: any) {
-    if (directBlobUploads) {
-      return jsonError(res, 410, 'This deployment uses direct blob uploads instead of server-side multipart upload batches.')
+    if (uploadMode !== 'multipart') {
+      return jsonError(res, 410, 'This deployment uses direct object-storage uploads instead of server-side multipart upload batches.')
     }
     const session = await repository.getImportSession(String(req.params.sessionId || ''))
     if (!session || session.user_id !== req.user.id) {
@@ -705,8 +737,8 @@ export async function createApp() {
   }))
 
   app.post('/api/study-packs/import', requireAuth, upload.any(), asyncRoute(async function importPack(req: any, res: any) {
-    if (directBlobUploads) {
-      return jsonError(res, 410, 'Zip imports now upload through direct blob staging on cloud deployments.')
+    if (uploadMode !== 'multipart') {
+      return jsonError(res, 410, 'Zip imports now upload through direct object-storage staging on this deployment.')
     }
     const importType = req.body.importType === 'zip' ? 'zip' : 'folder'
     const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'quail-ultra-live-'))
@@ -895,7 +927,8 @@ export async function createApp() {
     repository,
     workspaceStore,
     storageBackend,
-    directBlobUploads,
+    directBlobUploads: directUploads,
+    uploadMode,
     port: PORT,
     routes: {
       studyPacks: routePathFor('study-packs'),
