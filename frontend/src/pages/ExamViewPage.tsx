@@ -617,13 +617,14 @@ export function ExamViewPage() {
                   className={entry.classes}
                   onClick={() => openQuestion(entry.index)}
                 >
-                  <span>{entry.index + 1}</span>
-                  {entry.flagged ? <span className="q-flag-dot">F</span> : null}
                   {block.complete || (block.mode === 'tutor' && entry.state?.revealed) ? (
-                    <span className={`q-status-dot ${entry.state?.correct ? 'correct' : 'incorrect'}`}>
+                    <span className={`q-status-dot ${entry.state?.correct ? 'correct' : 'incorrect'}`} aria-hidden="true">
                       {entry.state?.correct ? '\u2713' : '\u2715'}
                     </span>
                   ) : null}
+                  <span className="q-item-number">{entry.index + 1}</span>
+                  {entry.flagged ? <span className="q-flag-dot" aria-hidden="true">🚩</span> : null}
+                  {!entry.flagged && !entry.state?.visited && entry.index !== selectedQnum ? <span className="q-unopened-dot" aria-hidden="true" /> : null}
                 </li>
               ))}
             </ul>
