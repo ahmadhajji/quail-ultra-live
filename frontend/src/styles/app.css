@@ -615,6 +615,22 @@ body.q-shell {
   border-color: rgba(255, 255, 255, 0.22);
 }
 
+.btn-flag-toggle .flag-icon path {
+  fill: transparent;
+}
+
+.btn-flag-toggle.active,
+.btn-flag-toggle[aria-pressed="true"] {
+  background: rgba(239, 68, 68, 0.16);
+  border-color: rgba(254, 202, 202, 0.5);
+  color: #ffffff;
+}
+
+.btn-flag-toggle.active .flag-icon path,
+.btn-flag-toggle[aria-pressed="true"] .flag-icon path {
+  fill: #ef4444;
+}
+
 .btn-prevnext {
   background: transparent;
   border: none;
