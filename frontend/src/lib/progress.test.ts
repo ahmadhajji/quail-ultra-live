@@ -25,6 +25,7 @@ describe('progress helpers', () => {
       submitted: true,
       revealed: true,
       correct: true,
+      visited: true,
       eliminatedChoices: []
     })
     expect(block.questionStates[1]).toEqual(createEmptyQuestionState())

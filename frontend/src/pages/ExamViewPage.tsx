@@ -28,11 +28,14 @@ export function ExamViewPage() {
   const { loading, packId, qbankinfo, setQbankinfo } = usePackPage()
   const qbankinfoRef = useRef<QbankInfo | null>(qbankinfo)
   const timerIntervalRef = useRef<number | null>(null)
+  const notePersistTimeoutRef = useRef<number | null>(null)
   const timerStartedAtRef = useRef(0)
   const timerBaseElapsedRef = useRef(0)
   const timeWarningRef = useRef(true)
   const scrollToExplanationRef = useRef(false)
   const highlighterRef = useRef<ReturnType<typeof mountQuestionHighlighter> | null>(null)
+  const noteQuestionIndexRef = useRef(0)
+  const noteTextRef = useRef('')
   const questionBodyRef = useRef<HTMLDivElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [selectedQnum, setSelectedQnum] = useState(0)
@@ -42,6 +45,7 @@ export function ExamViewPage() {
   const [sourceSlideOpen, setSourceSlideOpen] = useState(false)
   const [highlightColor, setHighlightColor] = useState('#fff59d')
   const [noteText, setNoteText] = useState('')
+  const [notesOpen, setNotesOpen] = useState(false)
   const [timerLabel, setTimerLabel] = useState('Time Used')
   const [timerText, setTimerText] = useState('0:00:00')
   const examUiMode = useMemo<'v2'>(() => 'v2', [])
@@ -61,10 +65,12 @@ export function ExamViewPage() {
   const block = blockKey && qbankinfo ? qbankinfo.progress.blockhist[blockKey] : undefined
   const blockqlist = block?.blockqlist ?? []
   const numQuestions = blockqlist.length
+  const syncedSelectedQnum = block ? Math.min(block.currentquesnum, Math.max(block.blockqlist.length - 1, 0)) : selectedQnum
   const currentQid = blockqlist[selectedQnum] ?? ''
   const currentMeta = qbankinfo?.questionMeta?.[currentQid]
   const currentState = block?.questionStates[selectedQnum]
   const currentAnswer = block?.answers[selectedQnum] ?? ''
+  const qbankPath = qbankinfo?.path ?? ''
   const explanationVisible = Boolean(block && currentState && (block.complete || (block.mode === 'tutor' && currentState.revealed)))
   const tutorReviewReady = Boolean(block && !block.complete && block.mode === 'tutor' && block.blockqlist.every((_, index) => block.questionStates[index]?.submitted))
   const metadataChoiceLabels = currentMeta?.choice_text_by_letter ?? {}
@@ -91,11 +97,15 @@ export function ExamViewPage() {
 
   useEffect(() => {
     if (!block) {
+      noteTextRef.current = ''
       setNoteText('')
       return
     }
-    setNoteText(getQuestionNote(block, selectedQnum))
-  }, [block, selectedQnum])
+    const nextNote = getQuestionNote(block, selectedQnum)
+    noteQuestionIndexRef.current = selectedQnum
+    noteTextRef.current = nextNote
+    setNoteText(nextNote)
+  }, [blockKey, selectedQnum])
 
   const questionRail = useMemo(() => {
     if (!block || !qbankinfo) {
@@ -103,16 +113,12 @@ export function ExamViewPage() {
     }
     return block.blockqlist.map((qid, index) => {
       const state = block.questionStates[index]
-      const answer = block.answers[index]
-      const classes = ['list-group-item']
-      if (answer !== '') {
-        classes.push('q-item-answered')
-      }
+      const classes = ['list-group-item', state?.visited ? 'q-item-visited' : 'q-item-unopened']
       if (block.complete || (block.mode === 'tutor' && state?.revealed)) {
         classes.push(state?.correct ? 'q-item-correct' : 'q-item-incorrect')
       }
       if (index === selectedQnum) {
-        classes.push('active')
+        classes.push('active', 'q-item-current')
       }
       return {
         qid,
@@ -145,6 +151,41 @@ export function ExamViewPage() {
       return
     }
     await syncProgress(packId, next.progress, options)
+  }
+
+  function clearPendingNotePersist(): void {
+    if (notePersistTimeoutRef.current !== null) {
+      window.clearTimeout(notePersistTimeoutRef.current)
+      notePersistTimeoutRef.current = null
+    }
+  }
+
+  function persistQuestionNote(index: number, value: string, options: SyncProgressOptions = { silent: true }): Promise<void> {
+    const currentBlock = getCurrentBlock(qbankinfoRef.current)
+    if (!currentBlock || getQuestionNote(currentBlock, index) === value) {
+      return Promise.resolve()
+    }
+    const next = mutateCurrentInfo((draft) => {
+      const nextBlock = draft.progress.blockhist[blockKey]!
+      nextBlock.questionStates[index]!.visited = true
+      setQuestionNote(nextBlock, index, value)
+    })
+    return persistInfo(next, options)
+  }
+
+  function flushPendingNote(options: SyncProgressOptions = { silent: true }): Promise<void> {
+    clearPendingNotePersist()
+    return persistQuestionNote(noteQuestionIndexRef.current, noteTextRef.current, options)
+  }
+
+  function scheduleNotePersist(index: number, value: string): void {
+    noteQuestionIndexRef.current = index
+    noteTextRef.current = value
+    clearPendingNotePersist()
+    notePersistTimeoutRef.current = window.setTimeout(() => {
+      notePersistTimeoutRef.current = null
+      void persistQuestionNote(index, value, { silent: true })
+    }, 400)
   }
 
   function questionLocked(currentBlock = block, index = selectedQnum): boolean {
@@ -198,8 +239,8 @@ export function ExamViewPage() {
   }
 
   async function finishBlock(force = false): Promise<void> {
-    const current = qbankinfoRef.current
-    const currentBlock = getCurrentBlock(current)
+    let current = qbankinfoRef.current
+    let currentBlock = getCurrentBlock(current)
     if (!current || !currentBlock) {
       return
     }
@@ -213,6 +254,12 @@ export function ExamViewPage() {
       return
     }
 
+    await flushPendingNote({ immediate: true, silent: true })
+    current = qbankinfoRef.current
+    currentBlock = getCurrentBlock(current)
+    if (!current || !currentBlock) {
+      return
+    }
     commitRunningElapsed(current)
     const next = mutateCurrentInfo((draft) => {
       const nextBlock = draft.progress.blockhist[blockKey]!
@@ -223,6 +270,7 @@ export function ExamViewPage() {
         const answer = nextBlock.answers[index] ?? ''
         const correctChoice = draft.choices[qid]?.correct ?? ''
         const state = nextBlock.questionStates[index]!
+        state.visited = true
         state.submitted = answer !== ''
         state.revealed = true
         state.correct = answer !== '' && answer === correctChoice
@@ -309,6 +357,7 @@ export function ExamViewPage() {
     if (!state) {
       return
     }
+    state.visited = true
     if (currentBlock.complete) {
       state.submitted = answer !== ''
       state.revealed = true
@@ -323,19 +372,37 @@ export function ExamViewPage() {
     }
   }
 
+  function openQuestion(index: number): void {
+    if (index < 0 || index >= numQuestions || index === selectedQnum) {
+      return
+    }
+    void flushPendingNote({ silent: true })
+    commitRunningElapsed()
+    const next = mutateCurrentInfo((draft) => {
+      const nextBlock = draft.progress.blockhist[blockKey]!
+      nextBlock.currentquesnum = index
+      nextBlock.questionStates[index]!.visited = true
+    })
+    setSelectedQnum(index)
+    void persistInfo(next, { silent: true })
+  }
+
   useEffect(() => {
-    if (!block || !currentQid || !qbankinfo) {
+    if (!currentQid || !qbankPath) {
+      return
+    }
+    if (selectedQnum !== syncedSelectedQnum) {
       return
     }
     let cancelled = false
-    void fetchQuestionAssets(qbankinfo.path, currentQid)
+    void fetchQuestionAssets(qbankPath, currentQid)
       .then(({ questionHtml, explanationHtml }) => {
         if (cancelled) {
           return
         }
         const nextChoiceLabels = extractChoiceLabels(questionHtml)
-        const questionMarkup = rewriteAssetPaths(stripChoicesFromQuestionDisplay(questionHtml), qbankinfo.path, `${Math.floor(window.innerHeight * 0.4)}px`)
-        const explanationMarkup = rewriteAssetPaths(explanationHtml, qbankinfo.path, `${Math.floor(window.innerHeight * 0.5)}px`)
+        const questionMarkup = rewriteAssetPaths(stripChoicesFromQuestionDisplay(questionHtml), qbankPath, `${Math.floor(window.innerHeight * 0.4)}px`)
+        const explanationMarkup = rewriteAssetPaths(explanationHtml, qbankPath, `${Math.floor(window.innerHeight * 0.5)}px`)
         setChoiceLabels({ ...nextChoiceLabels, ...metadataChoiceLabels })
         setQuestionHtml(questionMarkup)
         setExplanationHtml(explanationMarkup)
@@ -347,7 +414,7 @@ export function ExamViewPage() {
     return () => {
       cancelled = true
     }
-  }, [block, currentQid, qbankinfo, metadataChoiceLabels])
+  }, [currentQid, qbankPath, selectedQnum, syncedSelectedQnum])
 
   useEffect(() => {
     if (!questionHtml) {
@@ -366,6 +433,12 @@ export function ExamViewPage() {
     if (!block || !questionBodyRef.current) {
       return
     }
+    if (!questionHtml) {
+      return
+    }
+    if (selectedQnum !== syncedSelectedQnum) {
+      return
+    }
 
     const mountedHighlighter = mountQuestionHighlighter({
       container: questionBodyRef.current,
@@ -374,9 +447,10 @@ export function ExamViewPage() {
       onSerializedChange(serialized) {
         const next = mutateCurrentInfo((draft) => {
           const nextBlock = draft.progress.blockhist[blockKey]!
+          nextBlock.questionStates[selectedQnum]!.visited = true
           setQuestionHighlight(nextBlock, selectedQnum, serialized)
         })
-        void persistInfo(next)
+        void persistInfo(next, { silent: true })
       }
     })
     highlighterRef.current = mountedHighlighter
@@ -385,16 +459,26 @@ export function ExamViewPage() {
       mountedHighlighter.destroy()
       highlighterRef.current = null
     }
-  }, [block, blockKey, highlightColor, questionHtml, selectedQnum])
+  }, [blockKey, questionHtml, selectedQnum, syncedSelectedQnum])
 
   useEffect(() => {
     highlighterRef.current?.setColor(highlightColor)
   }, [highlightColor])
 
   useEffect(() => {
+    if (!block || !currentState || currentState.visited) {
+      return
+    }
+    const next = mutateCurrentInfo((draft) => {
+      draft.progress.blockhist[blockKey]!.questionStates[selectedQnum]!.visited = true
+    })
+    void persistInfo(next, { silent: true })
+  }, [blockKey, currentState?.visited, selectedQnum])
+
+  useEffect(() => {
     if (scrollToExplanationRef.current && explanationVisible) {
       scrollToExplanationRef.current = false
-      document.getElementById('explanationSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      document.getElementById('explanationSection')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
     }
   }, [explanationVisible, explanationHtml])
 
@@ -423,6 +507,12 @@ export function ExamViewPage() {
     }
   }, [block, selectedQnum, currentState?.submitted])
 
+  useEffect(() => {
+    return () => {
+      void flushPendingNote({ immediate: true, silent: true, keepalive: true })
+    }
+  }, [])
+
   if (loading || !qbankinfo || !block || !currentState) {
     return <div className="d-flex flex-column flex-grow-1 justify-content-center align-items-center"><div className="spinner-border" style={{ width: 72, height: 72 }} role="status" /></div>
   }
@@ -447,8 +537,10 @@ export function ExamViewPage() {
               id="btn-flagged"
               className={`btn btn-header-tool ${isInBucket(qbankinfo.progress, qbankinfo, currentQid, 'flagged') ? 'active' : ''}`}
               type="button"
+              aria-pressed={isInBucket(qbankinfo.progress, qbankinfo, currentQid, 'flagged')}
               onClick={() => {
                 const next = mutateCurrentInfo((draft) => {
+                  draft.progress.blockhist[blockKey]!.questionStates[selectedQnum]!.visited = true
                   if (isInBucket(draft.progress, draft, currentQid, 'flagged')) {
                     removeFromBucket(draft.progress, draft, currentQid, 'flagged')
                   } else {
@@ -459,7 +551,7 @@ export function ExamViewPage() {
               }}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="flag-icon" stroke="currentColor" strokeWidth="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></svg>
-              Mark
+              Flag
             </button>
           </div>
 
@@ -468,18 +560,7 @@ export function ExamViewPage() {
               className="btn btn-prevnext"
               type="button"
               disabled={selectedQnum === 0}
-              onClick={async () => {
-                if (selectedQnum === 0) {
-                  return
-                }
-                commitRunningElapsed()
-                const nextIndex = selectedQnum - 1
-                const next = mutateCurrentInfo((draft) => {
-                  draft.progress.blockhist[blockKey]!.currentquesnum = nextIndex
-                })
-                setSelectedQnum(nextIndex)
-                await persistInfo(next)
-              }}
+              onClick={() => openQuestion(selectedQnum - 1)}
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6" /></svg>
               Previous
@@ -489,13 +570,7 @@ export function ExamViewPage() {
               type="button"
               onClick={async () => {
                 if (selectedQnum < numQuestions - 1) {
-                  commitRunningElapsed()
-                  const nextIndex = selectedQnum + 1
-                  const next = mutateCurrentInfo((draft) => {
-                    draft.progress.blockhist[blockKey]!.currentquesnum = nextIndex
-                  })
-                  setSelectedQnum(nextIndex)
-                  await persistInfo(next)
+                  openQuestion(selectedQnum + 1)
                 } else {
                   await finishBlock(tutorReviewReady)
                 }
@@ -507,6 +582,14 @@ export function ExamViewPage() {
           </div>
 
           <div className="header-right">
+            <button
+              className={`btn btn-header-tool ${notesOpen ? 'active' : ''}`}
+              type="button"
+              aria-expanded={notesOpen}
+              onClick={() => setNotesOpen((current) => !current)}
+            >
+              Notes
+            </button>
             <div className="highlight-toolbar">
               {['#fff59d', '#ffd6a5', '#b8f2e6', '#cde7ff'].map((color) => (
                 <button key={color} className={`highlight-swatch ${highlightColor === color ? 'active' : ''}`} data-color={color} style={{ background: color }} type="button" onClick={() => setHighlightColor(color)} />
@@ -532,17 +615,7 @@ export function ExamViewPage() {
                 <li
                   key={entry.qid + entry.index}
                   className={entry.classes}
-                  onClick={async () => {
-                    if (entry.index === selectedQnum) {
-                      return
-                    }
-                    commitRunningElapsed()
-                    const next = mutateCurrentInfo((draft) => {
-                      draft.progress.blockhist[blockKey]!.currentquesnum = entry.index
-                    })
-                    setSelectedQnum(entry.index)
-                    await persistInfo(next)
-                  }}
+                  onClick={() => openQuestion(entry.index)}
                 >
                   <span>{entry.index + 1}</span>
                   {entry.flagged ? <span className="q-flag-dot">F</span> : null}
@@ -660,6 +733,7 @@ export function ExamViewPage() {
                         window.alert('Select an answer before submitting.')
                         return
                       }
+                      await flushPendingNote({ immediate: true, silent: true })
                       commitRunningElapsed()
                       scrollToExplanationRef.current = true
                       const next = mutateCurrentInfo((draft) => {
@@ -669,7 +743,7 @@ export function ExamViewPage() {
                         nextBlock.currentquesnum = selectedQnum
                         syncQuestionState(draft, selectedQnum)
                       })
-                      await persistInfo(next)
+                      void persistInfo(next)
                     }}
                   >
                     {currentState.submitted ? 'Answer Submitted' : 'Submit Answer'}
@@ -682,13 +756,7 @@ export function ExamViewPage() {
                   disabled={block.mode === 'tutor' && !block.complete ? !currentState.submitted : false}
                   onClick={async () => {
                     if (selectedQnum < numQuestions - 1) {
-                      commitRunningElapsed()
-                      const nextIndex = selectedQnum + 1
-                      const next = mutateCurrentInfo((draft) => {
-                        draft.progress.blockhist[blockKey]!.currentquesnum = nextIndex
-                      })
-                      setSelectedQnum(nextIndex)
-                      await persistInfo(next)
+                      openQuestion(selectedQnum + 1)
                     } else if (block.complete) {
                       navigate('previousblocks', { pack: packId })
                     } else {
@@ -739,52 +807,6 @@ export function ExamViewPage() {
           </div>
         </section>
       )}
-      drawer={(
-        <>
-          <section className="exam-v2-drawer-card">
-            <p className="exam-v2-drawer-title">Question Notes</p>
-            <p className="exam-v2-drawer-copy">Notes and highlights persist per question and follow the current block across refresh, suspend, and resume.</p>
-            <textarea
-              aria-label="Question Notes"
-              className="exam-v2-note-input"
-              placeholder="Add your note for this question..."
-              value={noteText}
-              onChange={(event) => {
-                const value = event.target.value
-                setNoteText(value)
-                const next = mutateCurrentInfo((draft) => {
-                  const nextBlock = draft.progress.blockhist[blockKey]!
-                  setQuestionNote(nextBlock, selectedQnum, value)
-                })
-                void persistInfo(next)
-              }}
-            />
-          </section>
-
-          <section className="exam-v2-drawer-card">
-            <p className="exam-v2-drawer-title">Annotations</p>
-            <p className="exam-v2-drawer-copy">Current question highlight payload: {getQuestionHighlight(block, selectedQnum) === '[]' ? 'none saved' : 'saved locally and queued to sync'}</p>
-            <div className="highlight-toolbar">
-              {['#fff59d', '#ffd6a5', '#b8f2e6', '#cde7ff'].map((color) => (
-                <button key={`drawer-${color}`} className={`highlight-swatch ${highlightColor === color ? 'active' : ''}`} data-color={color} style={{ background: color }} type="button" onClick={() => setHighlightColor(color)} />
-              ))}
-            </div>
-          </section>
-
-          {paneEntries.length > 0 ? (
-            <section className="exam-v2-drawer-card">
-              <p className="exam-v2-drawer-title">Reference Panes</p>
-              <div className="exam-v2-panes">
-                {paneEntries.map(([title, pane]) => (
-                  <button key={title} className="btn btn-outline-primary btn-sm" type="button" onClick={() => window.open(`${qbankinfo.path}/${pane.file}`, title, pane.prefs)}>
-                    {title}
-                  </button>
-                ))}
-              </div>
-            </section>
-          ) : null}
-        </>
-      )}
       footer={(
         <footer className="exam-footer">
           <div className="footer-left">
@@ -803,9 +825,11 @@ export function ExamViewPage() {
                 className="btn btn-footer-tool"
                 type="button"
                 onClick={async () => {
+                  await flushPendingNote({ immediate: true, silent: true })
                   commitRunningElapsed()
                   const next = mutateCurrentInfo((draft) => {
                     draft.progress.blockhist[blockKey]!.currentquesnum = selectedQnum
+                    draft.progress.blockhist[blockKey]!.questionStates[selectedQnum]!.visited = true
                   })
                   await persistInfo(next, { immediate: true })
                   navigate('previousblocks', { pack: packId })
@@ -823,6 +847,32 @@ export function ExamViewPage() {
         </footer>
       )}
       />
+      {notesOpen ? <button className="exam-v2-notes-scrim" type="button" aria-label="Close notes panel" onClick={() => setNotesOpen(false)} /> : null}
+      {notesOpen ? (
+        <aside className="exam-v2-notes-sheet" aria-label="Question Notes Panel">
+          <div className="exam-v2-notes-head">
+            <p className="exam-v2-notes-title">Question Notes</p>
+            <button className="exam-v2-notes-close" type="button" onClick={() => setNotesOpen(false)}>
+              Close
+            </button>
+          </div>
+          <p className="exam-v2-notes-copy">Notes persist per question and stay with the current block across refresh, suspend, and resume.</p>
+          <textarea
+            aria-label="Question Notes"
+            className="exam-v2-note-input"
+            placeholder="Add your note for this question..."
+            value={noteText}
+            onChange={(event) => {
+              const value = event.target.value
+              setNoteText(value)
+              scheduleNotePersist(selectedQnum, value)
+            }}
+            onBlur={() => {
+              void flushPendingNote({ immediate: true, silent: true })
+            }}
+          />
+        </aside>
+      ) : null}
       {sourceSlideOpen && sourceSlideAsset ? (
         <div className="modal d-block" tabIndex={-1} role="dialog" aria-modal="true">
           <div className="modal-dialog modal-xl modal-dialog-centered" role="document">

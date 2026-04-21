@@ -69,8 +69,8 @@ export function createQbankInfoFixture(): QbankInfo {
           highlights: ['[]', '[]'],
           notes: ['', ''],
           questionStates: [
-            { submitted: true, revealed: true, correct: true, eliminatedChoices: [] },
-            { submitted: false, revealed: false, correct: false, eliminatedChoices: [] }
+            { submitted: true, revealed: true, correct: true, visited: true, eliminatedChoices: [] },
+            { submitted: false, revealed: false, correct: false, visited: false, eliminatedChoices: [] }
           ],
           complete: false,
           timelimit: -1,

@@ -81,6 +81,7 @@ export interface QuestionState {
   submitted: boolean
   revealed: boolean
   correct: boolean
+  visited: boolean
   eliminatedChoices: string[]
 }
 

@@ -136,6 +136,15 @@ function handleGrouped(qbankinfo: QbankInfo, blockqlist: string[]): string[] {
   return nextList
 }
 
+function countForSubtag(
+  qbankinfo: QbankInfo,
+  tag: string,
+  subtag: string,
+  poolSetting: PoolSetting
+): number {
+  return qbankinfo.progress.tagbuckets[tag]?.[subtag]?.[qpoolSettingToBucket[poolSetting] as 'unused' | 'incorrects' | 'flagged' | 'all']?.length ?? 0
+}
+
 export function NewBlockPage() {
   const { loading, packId, qbankinfo } = usePackPage()
   const [mode] = useState<'tutor'>(getStoredMode())
@@ -367,7 +376,7 @@ export function NewBlockPage() {
                       onClick={() => setQpoolSetting(key)}
                     >
                       {label}
-                      {typeof count === 'number' ? <span className="badge badge-pill badge-secondary ml-2">{count}</span> : null}
+                      {typeof count === 'number' ? <span className="q-count-pill">{count}</span> : null}
                     </button>
                   ))}
                 </div>
@@ -424,7 +433,12 @@ export function NewBlockPage() {
                       <div className="card" key={tag}>
                         <div className="card-header" role="tab">
                           <h5 className="mb-0">
-                            <button className="btn btn-link p-0" type="button" onClick={() => setExpandedTags((current) => ({ ...current, [tag]: !current[tag] }))}>
+                            <button
+                              className="q-accordion-toggle"
+                              type="button"
+                              aria-expanded={expandedTags[tag] ? 'true' : 'false'}
+                              onClick={() => setExpandedTags((current) => ({ ...current, [tag]: !current[tag] }))}
+                            >
                               {tag}
                             </button>
                           </h5>
@@ -432,10 +446,10 @@ export function NewBlockPage() {
                         {expandedTags[tag] ? (
                           <div className="collapse show" role="tabpanel">
                             <div className="card-body">
-                              <div className="custom-control custom-switch">
+                              <label className="q-filter-row" htmlFor={`allsubtags-${tag}`}>
                                 <input
                                   type="checkbox"
-                                  className="custom-control-input"
+                                  className="q-filter-checkbox"
                                   id={`allsubtags-${tag}`}
                                   checked={allSubtagsMap[tag] ?? true}
                                   onChange={(event) => {
@@ -449,14 +463,16 @@ export function NewBlockPage() {
                                     }
                                   }}
                                 />
-                                <label className="custom-control-label" htmlFor={`allsubtags-${tag}`}>All Subtags</label>
-                              </div>
+                                <span className="q-filter-label">
+                                  <span className="q-filter-title">All Subtags</span>
+                                </span>
+                              </label>
                               <hr />
                               {(subtags[tag] ?? []).map((subtag) => (
-                                <div className="custom-control custom-switch mb-2" key={subtag}>
+                                <label className="q-filter-row mb-2" htmlFor={`subtag-${tag}-${subtag}`} key={subtag}>
                                   <input
                                     type="checkbox"
-                                    className="custom-control-input"
+                                    className="q-filter-checkbox"
                                     id={`subtag-${tag}-${subtag}`}
                                     checked={selectedSubtagsMap[tag]?.[subtag] ?? false}
                                     onChange={(event) => {
@@ -480,11 +496,11 @@ export function NewBlockPage() {
                                       })
                                     }}
                                   />
-                                  <label className="custom-control-label d-md-flex align-items-md-center" htmlFor={`subtag-${tag}-${subtag}`}>
-                                    {subtag}
-                                    <span className="badge badge-pill badge-secondary ml-2">{qbankinfo.progress.tagbuckets[tag]?.[subtag]?.[qpoolSettingToBucket[qpoolSetting] as 'unused' | 'incorrects' | 'flagged' | 'all']?.length ?? 0}</span>
-                                  </label>
-                                </div>
+                                  <span className="q-filter-label">
+                                    <span className="q-filter-title">{subtag}</span>
+                                  </span>
+                                  <span className="q-count-pill">{countForSubtag(qbankinfo, tag, subtag, qpoolSetting)}</span>
+                                </label>
                               ))}
                             </div>
                           </div>
@@ -524,16 +540,16 @@ export function NewBlockPage() {
                   </div>
                 </div>
                 <div className="mt-4">
-                  <div className="custom-control custom-switch mb-3">
+                  <label className="q-inline-checkbox mb-3" htmlFor="toggle-block-sequential">
                     <input
                       type="checkbox"
-                      className="custom-control-input"
+                      className="q-filter-checkbox"
                       id="toggle-block-sequential"
                       checked={sequential}
                       onChange={(event) => setSequential(event.target.checked)}
                     />
-                    <label className="custom-control-label" htmlFor="toggle-block-sequential">Present question IDs sequentially instead of randomizing them.</label>
-                  </div>
+                    <span>Present question IDs sequentially instead of randomizing them.</span>
+                  </label>
                 </div>
                 <div className="mt-4 d-flex justify-content-start">
                   <button

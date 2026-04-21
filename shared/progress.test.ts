@@ -25,9 +25,26 @@ describe('shared progress helpers', () => {
       submitted: true,
       revealed: true,
       correct: true,
+      visited: true,
       eliminatedChoices: []
     })
     expect(block.questionStates[1]).toEqual(createEmptyQuestionState())
+  })
+
+  it('derives visited state from saved question activity', () => {
+    const block = normalizeBlockRecord({
+      blockqlist: ['1', '2', '3'],
+      answers: ['A', '', ''],
+      notes: ['', 'Saved note', ''],
+      highlights: ['[]', '[]', '[["wrapper","text","0",0,4]]'],
+      currentquesnum: 2
+    }, {
+      '1': { options: ['A', 'B'], correct: 'A' },
+      '2': { options: ['A', 'B'], correct: 'B' },
+      '3': { options: ['A', 'B'], correct: 'B' }
+    })
+
+    expect(block.questionStates.map((state) => state.visited)).toEqual([true, true, true])
   })
 
   it('creates and deletes blocks without reusing ids', () => {

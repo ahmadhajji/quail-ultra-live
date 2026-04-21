@@ -5,12 +5,11 @@ interface ExamShellV2Props {
   topbar: ReactNode
   rail: ReactNode
   workspace: ReactNode
-  drawer?: ReactNode
   footer: ReactNode
 }
 
 export function ExamShellV2(props: ExamShellV2Props) {
-  const { mode, topbar, rail, workspace, drawer, footer } = props
+  const { mode, topbar, rail, workspace, footer } = props
 
   return (
     <div className={`exam-app exam-v2-shell exam-v2-shell-${mode}`}>
@@ -20,11 +19,6 @@ export function ExamShellV2(props: ExamShellV2Props) {
         <main className="exam-workspace exam-workspace-continuous exam-v2-workspace">
           {workspace}
         </main>
-        {mode === 'v2' && drawer ? (
-          <aside className="exam-v2-drawer">
-            {drawer}
-          </aside>
-        ) : null}
       </div>
       {footer}
     </div>

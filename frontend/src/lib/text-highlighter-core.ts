@@ -396,13 +396,13 @@
     };
 
     function bindEvents(el, scope) {
-        el.addEventListener('mouseup', scope.highlightHandler.bind(scope));
-        el.addEventListener('touchend', scope.highlightHandler.bind(scope));
+        el.addEventListener('mouseup', scope.boundHighlightHandler);
+        el.addEventListener('touchend', scope.boundHighlightHandler);
     }
 
     function unbindEvents(el, scope) {
-        el.removeEventListener('mouseup', scope.highlightHandler.bind(scope));
-        el.removeEventListener('touchend', scope.highlightHandler.bind(scope));
+        el.removeEventListener('mouseup', scope.boundHighlightHandler);
+        el.removeEventListener('touchend', scope.boundHighlightHandler);
     }
 
     /**
@@ -427,6 +427,7 @@
         }
 
         this.el = element;
+        this.boundHighlightHandler = this.highlightHandler.bind(this);
         this.options = defaults(options, {
             color: '#ffff7b',
             highlightedClass: 'highlighted',
@@ -859,7 +860,7 @@
                 highlight,
                 idx;
 
-            while (!!(idx = hl.path.shift())) {
+            while ((idx = hl.path.shift()) !== undefined) {
                 node = node.childNodes[idx];
             }
 
