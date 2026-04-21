@@ -74,7 +74,7 @@ export function OverviewPage() {
       <div className="q-stat-grid">
         <div className="q-panel">
           <div className="q-panel-header"><div><p className="q-panel-title">Performance</p><p className="q-panel-subtitle">Completed blocks only.</p></div></div>
-          <div className="q-panel-body"><div className="table-responsive table-borderless"><table className="table table-bordered mb-0"><tbody>
+          <div className="q-panel-body q-table-wrap"><div className="table-responsive"><table className="table mb-0"><tbody>
             <tr><td>Correct Answers</td><td>{numCorrect} ({formatPercent(numCorrect, totalAnswered)})</td></tr>
             <tr><td>Incorrect Answers</td><td>{numIncorrect} ({formatPercent(numIncorrect, totalAnswered)})</td></tr>
             <tr><td>Total Answers</td><td>{totalAnswered}</td></tr>
@@ -82,7 +82,7 @@ export function OverviewPage() {
         </div>
         <div className="q-panel">
           <div className="q-panel-header"><div><p className="q-panel-title">Coverage</p><p className="q-panel-subtitle">Complete and paused blocks.</p></div></div>
-          <div className="q-panel-body"><div className="table-responsive table-borderless"><table className="table table-bordered mb-0"><tbody>
+          <div className="q-panel-body q-table-wrap"><div className="table-responsive"><table className="table mb-0"><tbody>
             <tr><td>Questions Seen</td><td>{numSeen}/{numAll} ({formatPercent(numSeen, numAll)})</td></tr>
             <tr><td>Questions Flagged</td><td>{numFlagged}/{numSeen || 0} ({formatPercent(numFlagged, numSeen)})</td></tr>
             <tr><td>Total Questions in QBank</td><td>{numAll}</td></tr>
@@ -90,7 +90,7 @@ export function OverviewPage() {
         </div>
         <div className="q-panel">
           <div className="q-panel-header"><div><p className="q-panel-title">Blocks</p><p className="q-panel-subtitle">Mode counts and session states.</p></div></div>
-          <div className="q-panel-body"><div className="table-responsive table-borderless"><table className="table table-bordered mb-0"><tbody>
+          <div className="q-panel-body q-table-wrap"><div className="table-responsive"><table className="table mb-0"><tbody>
             <tr><td>Completed</td><td>{completeBlocks}</td></tr>
             <tr><td>Paused</td><td>{pausedBlocks}</td></tr>
             <tr><td>Tutor Blocks</td><td>{tutorBlocks}</td></tr>
@@ -98,7 +98,7 @@ export function OverviewPage() {
         </div>
         <div className="q-panel">
           <div className="q-panel-header"><div><p className="q-panel-title">Time</p><p className="q-panel-subtitle">Completed blocks only.</p></div></div>
-          <div className="q-panel-body"><div className="table-responsive table-borderless"><table className="table table-bordered mb-0"><tbody>
+          <div className="q-panel-body q-table-wrap"><div className="table-responsive"><table className="table mb-0"><tbody>
             <tr><td>Average Time Per Question</td><td>{avgTime.toFixed(1)} sec</td></tr>
             <tr><td>Total Time</td><td>{formatDuration(totalTime)}</td></tr>
           </tbody></table></div></div>

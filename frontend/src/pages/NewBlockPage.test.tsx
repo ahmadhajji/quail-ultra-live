@@ -39,10 +39,15 @@ describe('NewBlockPage', () => {
   })
 
   it('starts a tutor block with grouped questions preserved', async () => {
-    render(<NewBlockPage />)
+    const { container } = render(<NewBlockPage />)
     expect(screen.getByRole('button', { name: /Tutor/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Timed/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Untimed/i })).not.toBeInTheDocument()
+    expect(container.querySelector('.custom-control')).toBeNull()
+    expect(container.querySelector('.badge-pill')).toBeNull()
+    expect(container.querySelector('.badge-secondary')).toBeNull()
+    expect(container.querySelectorAll('.q-count-pill').length).toBeGreaterThan(0)
+    expect(container.querySelector('.q-inline-checkbox')).not.toBeNull()
     await userEvent.clear(screen.getByDisplayValue(''))
     const inputs = screen.getAllByRole('textbox')
     await userEvent.type(inputs[0]!, '1')

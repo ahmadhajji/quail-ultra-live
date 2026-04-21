@@ -24,6 +24,7 @@ export function createEmptyQuestionState(): QuestionState {
     submitted: false,
     revealed: false,
     correct: false,
+    visited: false,
     eliminatedChoices: []
   }
 }
@@ -71,10 +72,14 @@ export function normalizeBlockRecord(block: LegacyBlockRecord, choices: QbankInf
     const revealedDefault = Boolean(block.complete) || (mode === 'tutor' && submitted)
     const revealed = state?.revealed ?? revealedDefault
     const correct = state?.correct ?? (answer !== '' && answer === choiceMeta.correct)
+    const hasHighlight = (highlights[index] ?? '[]') !== '[]'
+    const hasNote = (notes[index] ?? '').trim() !== ''
+    const visited = state?.visited ?? (submitted || revealed || hasHighlight || hasNote || index < asFiniteNumber(block.currentquesnum, 0))
     questionStates.push({
       submitted,
       revealed,
       correct,
+      visited,
       eliminatedChoices: asStringArray(state?.eliminatedChoices)
     })
   }
