@@ -163,6 +163,23 @@ describe('ExamViewPage', () => {
     expect(container.querySelectorAll('.q-flag-dot')).toHaveLength(0)
   })
 
+  it('hides the next question button until tutor-mode submission', async () => {
+    const { container } = render(<ExamViewPage />)
+
+    await waitFor(() => {
+      expect(htmlHelpers.fetchQuestionAssets).toHaveBeenCalled()
+    })
+
+    expect(container.querySelector('.btn-nextques')).toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select answer B' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit Answer' }))
+
+    await waitFor(() => {
+      expect(container.querySelector('.btn-nextques')).not.toBeNull()
+    })
+  })
+
   it('does not refetch question assets for same-question interactions', async () => {
     render(<ExamViewPage />)
 

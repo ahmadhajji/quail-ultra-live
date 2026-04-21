@@ -70,9 +70,11 @@ export function ExamViewPage() {
   const currentMeta = qbankinfo?.questionMeta?.[currentQid]
   const currentState = block?.questionStates[selectedQnum]
   const currentAnswer = block?.answers[selectedQnum] ?? ''
+  const currentQuestionFlagged = Boolean(qbankinfo && isInBucket(qbankinfo.progress, qbankinfo, currentQid, 'flagged'))
   const qbankPath = qbankinfo?.path ?? ''
   const explanationVisible = Boolean(block && currentState && (block.complete || (block.mode === 'tutor' && currentState.revealed)))
   const tutorReviewReady = Boolean(block && !block.complete && block.mode === 'tutor' && block.blockqlist.every((_, index) => block.questionStates[index]?.submitted))
+  const showBottomNextButton = Boolean(block && (block.mode !== 'tutor' || block.complete || currentState?.submitted))
   const metadataChoiceLabels = currentMeta?.choice_text_by_letter ?? {}
   const displayChoices = currentMeta?.choice_presentation?.display_order?.length
     ? currentMeta.choice_presentation.display_order
@@ -535,9 +537,9 @@ export function ExamViewPage() {
             </div>
             <button
               id="btn-flagged"
-              className={`btn btn-header-tool ${isInBucket(qbankinfo.progress, qbankinfo, currentQid, 'flagged') ? 'active' : ''}`}
+              className={`btn btn-header-tool btn-flag-toggle ${currentQuestionFlagged ? 'active' : ''}`}
               type="button"
-              aria-pressed={isInBucket(qbankinfo.progress, qbankinfo, currentQid, 'flagged')}
+              aria-pressed={currentQuestionFlagged}
               onClick={() => {
                 const next = mutateCurrentInfo((draft) => {
                   draft.progress.blockhist[blockKey]!.questionStates[selectedQnum]!.visited = true
@@ -751,22 +753,23 @@ export function ExamViewPage() {
                   </button>
                 ) : null}
 
-                <button
-                  className="btn btn-secondary btn-nextques"
-                  type="button"
-                  disabled={block.mode === 'tutor' && !block.complete ? !currentState.submitted : false}
-                  onClick={async () => {
-                    if (selectedQnum < numQuestions - 1) {
-                      openQuestion(selectedQnum + 1)
-                    } else if (block.complete) {
-                      navigate('previousblocks', { pack: packId })
-                    } else {
-                      await finishBlock(tutorReviewReady)
-                    }
-                  }}
-                >
-                  {selectedQnum === numQuestions - 1 ? (block.complete ? 'Back to Blocks' : (block.mode === 'tutor' ? 'Finish Review' : 'End Block')) : 'Next Question'}
-                </button>
+                {showBottomNextButton ? (
+                  <button
+                    className="btn btn-secondary btn-nextques"
+                    type="button"
+                    onClick={async () => {
+                      if (selectedQnum < numQuestions - 1) {
+                        openQuestion(selectedQnum + 1)
+                      } else if (block.complete) {
+                        navigate('previousblocks', { pack: packId })
+                      } else {
+                        await finishBlock(tutorReviewReady)
+                      }
+                    }}
+                  >
+                    {selectedQnum === numQuestions - 1 ? (block.complete ? 'Back to Blocks' : (block.mode === 'tutor' ? 'Finish Review' : 'End Block')) : 'Next Question'}
+                  </button>
+                ) : null}
               </div>
             </section>
 
