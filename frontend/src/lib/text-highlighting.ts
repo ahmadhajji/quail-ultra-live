@@ -9,6 +9,8 @@ interface MountQuestionHighlighterOptions {
 
 export interface MountedQuestionHighlighter {
   setColor: (color: string) => void
+  setEnabled: (enabled: boolean) => void
+  clearAll: () => void
   destroy: () => void
 }
 
@@ -23,6 +25,7 @@ function bindHighlightRemoval(highlighter: TextHighlighter, onSerializedChange: 
 
 export function mountQuestionHighlighter(options: MountQuestionHighlighterOptions): MountedQuestionHighlighter {
   const { container, color, serializedHighlights, onSerializedChange } = options
+  let enabled = true
 
   container.querySelectorAll<HTMLImageElement>('img[data-openable-image="true"]').forEach((image) => {
     image.onclick = () => window.open(image.src)
@@ -30,6 +33,7 @@ export function mountQuestionHighlighter(options: MountQuestionHighlighterOption
 
   const highlighter = new TextHighlighter(container, {
     color,
+    onBeforeHighlight: () => enabled,
     onAfterHighlight: (_range: unknown, highlights: HTMLElement[]) => {
       onSerializedChange(highlighter.serializeHighlights())
       highlights.forEach((highlight: HTMLElement) => {
@@ -47,6 +51,13 @@ export function mountQuestionHighlighter(options: MountQuestionHighlighterOption
   return {
     setColor(nextColor) {
       highlighter.setColor(nextColor)
+    },
+    setEnabled(nextEnabled) {
+      enabled = nextEnabled
+    },
+    clearAll() {
+      highlighter.removeHighlights()
+      onSerializedChange(highlighter.serializeHighlights())
     },
     destroy() {
       highlighter.getHighlights().forEach((highlight: HTMLElement) => {

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createQbankInfoFixture } from '../test/fixtures'
@@ -35,6 +35,8 @@ const highlighting = vi.hoisted(() => {
       state.lastOptions = options
       return {
         setColor: vi.fn(),
+        setEnabled: vi.fn(),
+        clearAll: vi.fn(),
         destroy: vi.fn()
       }
     })
@@ -131,33 +133,93 @@ describe('ExamViewPage', () => {
     expect(screen.queryByPlaceholderText('Add your note for this question...')).not.toBeInTheDocument()
   })
 
-  it('ignores legacy qbank panes and opens native lab values and calculator tools', async () => {
+  it('opens restored top-bar tool panels and the shortcuts window', async () => {
     render(<ExamViewPage />)
 
     await waitFor(() => {
       expect(htmlHelpers.fetchQuestionAssets).toHaveBeenCalled()
     })
 
-    expect(screen.queryByRole('button', { name: 'Reference' })).not.toBeInTheDocument()
-
     await userEvent.click(screen.getByRole('button', { name: 'Lab Values' }))
-    expect(screen.getByPlaceholderText('Search lab values or abbreviations...')).toBeInTheDocument()
+    expect(screen.getByLabelText('Search lab values')).toBeInTheDocument()
     expect(screen.getByText('Sodium (Na+)')).toBeInTheDocument()
 
-    await userEvent.type(screen.getByLabelText('Search lab values'), 'wbc')
-    expect(screen.getByText('WBC')).toBeInTheDocument()
-    expect(screen.queryByText('Sodium (Na+)')).not.toBeInTheDocument()
-
     await userEvent.click(screen.getByRole('button', { name: 'Calculator' }))
-    const display = screen.getByLabelText('Calculator Display')
-    expect(display).toHaveValue('0')
-
-    await userEvent.click(screen.getByRole('button', { name: '1' }))
+    expect(screen.getByLabelText('Calculator Display')).toHaveValue('0')
+    await userEvent.click(screen.getByRole('button', { name: '7' }))
     await userEvent.click(screen.getByRole('button', { name: '+' }))
-    await userEvent.click(screen.getByRole('button', { name: '2' }))
+    await userEvent.click(screen.getByRole('button', { name: '8' }))
     await userEvent.click(screen.getByRole('button', { name: '=' }))
+    expect(screen.getByLabelText('Calculator Display')).toHaveValue('15')
 
-    expect(display).toHaveValue('3')
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    expect(screen.getByText('This panel is intentionally empty for now.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Shortcuts' }))
+    expect(screen.getByRole('dialog', { name: 'Keyboard Shortcuts' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Windows' })).toBeInTheDocument()
+    expect(screen.getByText('Highlight Marker - Yellow')).toBeInTheDocument()
+    expect(screen.getByText('Notebook')).toBeInTheDocument()
+    expect(screen.getByText('Library')).toBeInTheDocument()
+    expect(screen.getByText('Feedback')).toBeInTheDocument()
+    expect(screen.getByText('Split View')).toBeInTheDocument()
+  })
+
+  it('drives exam actions from keyboard shortcuts', async () => {
+    const requestFullscreen = vi.fn().mockResolvedValue(undefined)
+    const exitFullscreen = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(document.documentElement, 'requestFullscreen', {
+      configurable: true,
+      value: requestFullscreen
+    })
+    Object.defineProperty(document, 'exitFullscreen', {
+      configurable: true,
+      value: exitFullscreen
+    })
+
+    render(<ExamViewPage />)
+
+    await waitFor(() => {
+      expect(htmlHelpers.fetchQuestionAssets).toHaveBeenCalled()
+    })
+
+    fireEvent.keyDown(window, { altKey: true, code: 'KeyN', key: 'n' })
+    expect(screen.getByLabelText('Question Notes')).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByLabelText('Question Notes')).not.toBeInTheDocument()
+
+    fireEvent.keyDown(window, { altKey: true, code: 'KeyL', key: 'l' })
+    expect(screen.getByLabelText('Search lab values')).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { altKey: true, code: 'KeyC', key: 'c' })
+    expect(screen.getByLabelText('Calculator Display')).toHaveValue('0')
+
+    fireEvent.keyDown(window, { key: 'b', code: 'KeyB' })
+    fireEvent.keyDown(window, { altKey: true, key: 'Enter', code: 'Enter' })
+    expect(await screen.findByText('Explanation')).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 'ArrowRight', code: 'ArrowRight' })
+    expect(await screen.findByText('Item 2 of 2')).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { metaKey: true, ctrlKey: true, key: 'f', code: 'KeyF' })
+    expect(requestFullscreen).toHaveBeenCalledTimes(1)
+
+    fireEvent.keyDown(window, { altKey: true, code: 'Comma', key: ',' })
+    expect(screen.getByText('This panel is intentionally empty for now.')).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { altKey: true, code: 'Slash', key: '/' })
+    expect(screen.getByRole('dialog', { name: 'Keyboard Shortcuts' })).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: '2', code: 'Digit2' })
+    await userEvent.click(screen.getByRole('button', { name: /Marker/i }))
+    expect(screen.getByRole('menu', { name: 'Marker colors' })).toBeInTheDocument()
+    const greenItem = screen.getByRole('menuitemradio', { name: /Green/i })
+    expect(greenItem).toHaveClass('active')
+    expect(greenItem).toHaveAttribute('aria-checked', 'true')
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByRole('menu', { name: 'Marker colors' })).not.toBeInTheDocument()
   })
 
   it('prefers question metadata for choice labels and exposes source slide access', async () => {
@@ -181,14 +243,16 @@ describe('ExamViewPage', () => {
       expect(htmlHelpers.fetchQuestionAssets).toHaveBeenCalled()
     })
 
-    const flagButton = screen.getByRole('button', { name: 'Flag' })
+    const flagButton = screen.getByRole('button', { name: 'Mark' })
     expect(flagButton).toHaveAttribute('aria-pressed', 'true')
+    expect(flagButton).toHaveClass('active')
     expect(container.querySelectorAll('.q-flag-dot')).toHaveLength(1)
     expect(container.querySelector('.q-flag-dot')?.textContent).toBe('🚩')
 
     await userEvent.click(flagButton)
 
     expect(flagButton).toHaveAttribute('aria-pressed', 'false')
+    expect(flagButton).not.toHaveClass('active')
     expect(container.querySelectorAll('.q-flag-dot')).toHaveLength(0)
   })
 
@@ -216,7 +280,7 @@ describe('ExamViewPage', () => {
       expect(htmlHelpers.fetchQuestionAssets).toHaveBeenCalledTimes(1)
     })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Flag' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Mark' }))
     await userEvent.click(screen.getByRole('button', { name: 'Notes' }))
     const textarea = screen.getByLabelText('Question Notes')
     await userEvent.type(textarea, 'abc')

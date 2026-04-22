@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { fetchQuestionAssets, extractChoiceLabels, rewriteAssetPaths, stripChoicesFromQuestionDisplay } from '../lib/qbank-html'
 import { getQuestionHighlight, getQuestionNote, setQuestionHighlight, setQuestionNote } from '../lib/annotations'
 import { addToBucket, isInBucket, removeFromBucket } from '../lib/progress'
 import { syncProgress } from '../lib/api'
-import { LAB_VALUE_SECTIONS, type ExamToolKey } from '../lib/exam-tools'
+import { LAB_VALUE_SECTIONS, type ExamToolKey as ContentExamToolKey } from '../lib/exam-tools'
 import { navigate } from '../lib/navigation'
 import { mountQuestionHighlighter } from '../lib/text-highlighting'
 import { usePackPage } from '../lib/usePackPage'
@@ -26,6 +26,82 @@ function formatClock(totalSeconds: number): string {
 }
 
 type CalculatorOperator = 'add' | 'subtract' | 'multiply' | 'divide'
+type ExamToolKey = ContentExamToolKey | 'settings'
+type MarkerKey = 'none' | 'yellow' | 'green' | 'cyan' | 'red'
+type ShortcutPlatform = 'mac' | 'windows'
+
+interface MarkerPreset {
+  key: MarkerKey
+  label: string
+  color: string | null
+  accent: string
+  shortcut: string
+}
+
+interface ShortcutDefinition {
+  action: string
+  macKeys: string[]
+  windowsKeys: string[]
+}
+
+const MARKER_PRESETS: MarkerPreset[] = [
+  { key: 'none', label: 'None', color: null, accent: '#ffffff', shortcut: '`' },
+  { key: 'yellow', label: 'Yellow', color: '#fff59d', accent: '#fff200', shortcut: '1' },
+  { key: 'green', label: 'Green', color: '#b8f2e6', accent: '#39ff14', shortcut: '2' },
+  { key: 'cyan', label: 'Cyan', color: '#cde7ff', accent: '#22d3ee', shortcut: '3' },
+  { key: 'red', label: 'Red', color: '#ffd6d6', accent: '#ff3b30', shortcut: '4' }
+]
+
+const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
+  { action: 'Mark Question', macKeys: ['⌥', 'M'], windowsKeys: ['Alt', 'M'] },
+  { action: 'Notes', macKeys: ['⌥', 'N'], windowsKeys: ['Alt', 'N'] },
+  { action: 'Lab Values', macKeys: ['⌥', 'L'], windowsKeys: ['Alt', 'L'] },
+  { action: 'Calculator', macKeys: ['⌥', 'C'], windowsKeys: ['Alt', 'C'] },
+  { action: 'Settings', macKeys: ['⌥', ','], windowsKeys: ['Alt', ','] },
+  { action: 'Sidebar', macKeys: ['⌥', 'A'], windowsKeys: ['Alt', 'A'] },
+  { action: 'Submit Choice', macKeys: ['⌥', 'Enter'], windowsKeys: ['Alt', 'Enter'] },
+  { action: 'Highlight Marker - None', macKeys: ['`'], windowsKeys: ['`'] },
+  { action: 'Highlight Marker - Yellow', macKeys: ['1'], windowsKeys: ['1'] },
+  { action: 'Highlight Marker - Green', macKeys: ['2'], windowsKeys: ['2'] },
+  { action: 'Highlight Marker - Cyan', macKeys: ['3'], windowsKeys: ['3'] },
+  { action: 'Highlight Marker - Red', macKeys: ['4'], windowsKeys: ['4'] },
+  { action: 'Previous Question', macKeys: ['←'], windowsKeys: ['←'] },
+  { action: 'Next Question', macKeys: ['→'], windowsKeys: ['→'] },
+  { action: 'Full Screen', macKeys: ['⌘', '⌃', 'F'], windowsKeys: ['F11'] },
+  { action: 'Shortcuts', macKeys: ['⌥', '/'], windowsKeys: ['Alt', '/'] },
+  { action: 'Notebook', macKeys: ['⌥', 'O'], windowsKeys: ['Alt', 'O'] },
+  { action: 'Library', macKeys: ['⌥', 'R'], windowsKeys: ['Alt', 'R'] },
+  { action: 'Feedback', macKeys: ['⌥', 'F'], windowsKeys: ['Alt', 'F'] },
+  { action: 'Split View', macKeys: ['⌥', 'S'], windowsKeys: ['Alt', 'S'] },
+  { action: 'Choices', macKeys: ['A', 'B', 'C', 'D'], windowsKeys: ['A', 'B', 'C', 'D'] }
+]
+
+function detectShortcutPlatform(): ShortcutPlatform {
+  if (typeof navigator !== 'undefined' && /(Mac|iPhone|iPad|iPod)/i.test(`${navigator.platform} ${navigator.userAgent}`)) {
+    return 'mac'
+  }
+  return 'windows'
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+  if (target.isContentEditable) {
+    return true
+  }
+  return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+}
+
+function clampWindowPosition(nextX: number, nextY: number, width: number, height: number): { x: number, y: number } {
+  const padding = 16
+  const maxX = Math.max(padding, window.innerWidth - width - padding)
+  const maxY = Math.max(padding, window.innerHeight - height - padding)
+  return {
+    x: Math.min(Math.max(padding, nextX), maxX),
+    y: Math.min(Math.max(padding, nextY), maxY)
+  }
+}
 
 function formatCalculatorValue(value: number): string {
   if (!Number.isFinite(value)) {
@@ -83,12 +159,18 @@ export function ExamViewPage() {
   const noteTextRef = useRef('')
   const questionBodyRef = useRef<HTMLDivElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  const shortcutWindowRef = useRef<HTMLDivElement | null>(null)
+  const shortcutDragRef = useRef<{ pointerId: number, startX: number, startY: number, originX: number, originY: number } | null>(null)
+  const markerButtonRef = useRef<HTMLButtonElement | null>(null)
+  const markerMenuRef = useRef<HTMLDivElement | null>(null)
+  const [markerMenuOpen, setMarkerMenuOpen] = useState(false)
+  const [markerMenuPosition, setMarkerMenuPosition] = useState({ top: 58, right: 16 })
   const [selectedQnum, setSelectedQnum] = useState(0)
   const [questionHtml, setQuestionHtml] = useState('')
   const [explanationHtml, setExplanationHtml] = useState('')
   const [choiceLabels, setChoiceLabels] = useState<Record<string, string>>({})
   const [sourceSlideOpen, setSourceSlideOpen] = useState(false)
-  const [highlightColor, setHighlightColor] = useState('#fff59d')
+  const [selectedMarker, setSelectedMarker] = useState<MarkerKey>('yellow')
   const [noteText, setNoteText] = useState('')
   const [activeTool, setActiveTool] = useState<ExamToolKey | null>(null)
   const [labSearchTerm, setLabSearchTerm] = useState('')
@@ -97,10 +179,14 @@ export function ExamViewPage() {
   const [calculatorOperator, setCalculatorOperator] = useState<CalculatorOperator | null>(null)
   const [calculatorWaitingForOperand, setCalculatorWaitingForOperand] = useState(false)
   const [calculatorHistory, setCalculatorHistory] = useState('Ready')
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [shortcutWindowOpen, setShortcutWindowOpen] = useState(false)
+  const [shortcutPlatform, setShortcutPlatform] = useState<ShortcutPlatform>(() => detectShortcutPlatform())
+  const [shortcutWindowPosition, setShortcutWindowPosition] = useState({ x: 44, y: 112 })
+  const [fullscreenActive, setFullscreenActive] = useState(Boolean(document.fullscreenElement))
   const [timerLabel, setTimerLabel] = useState('Time Used')
   const [timerText, setTimerText] = useState('0:00:00')
   const examUiMode = useMemo<'v2'>(() => 'v2', [])
-  const notesOpen = activeTool === 'notes'
   const filteredLabSections = useMemo(() => {
     const query = labSearchTerm.trim().toLowerCase()
     if (!query) {
@@ -146,6 +232,7 @@ export function ExamViewPage() {
   const displayChoices = currentMeta?.choice_presentation?.display_order?.length
     ? currentMeta.choice_presentation.display_order
     : (qbankinfo?.choices[currentQid]?.options ?? [])
+  const highlightColor = MARKER_PRESETS.find((preset) => preset.key === selectedMarker)?.color ?? '#fff59d'
   const factCheck = currentMeta?.fact_check
   const warningList = currentMeta?.warnings ?? []
   const showCaution = Boolean(
@@ -261,8 +348,157 @@ export function ExamViewPage() {
     setActiveTool((current) => current === tool ? null : tool)
   }
 
+  function openTool(tool: ExamToolKey): void {
+    setActiveTool(tool)
+  }
+
   function closeToolPanel(): void {
     setActiveTool(null)
+  }
+
+  function toggleSidebar(): void {
+    setSidebarOpen((current) => !current)
+  }
+
+  function toggleShortcutsWindow(): void {
+    setShortcutWindowOpen((current) => !current)
+  }
+
+  function toggleFlaggedQuestion(): void {
+    const next = mutateCurrentInfo((draft) => {
+      draft.progress.blockhist[blockKey]!.questionStates[selectedQnum]!.visited = true
+      if (isInBucket(draft.progress, draft, currentQid, 'flagged')) {
+        removeFromBucket(draft.progress, draft, currentQid, 'flagged')
+      } else {
+        addToBucket(draft.progress, draft, currentQid, 'flagged')
+      }
+    })
+    void persistInfo(next)
+  }
+
+  function selectAnswer(choice: string): void {
+    if (questionLocked(block)) {
+      return
+    }
+    const currentBlock = block
+    if (!currentBlock) {
+      return
+    }
+    const currentQuestionState = currentBlock.questionStates[selectedQnum]
+    if (!currentQuestionState || currentQuestionState.eliminatedChoices.includes(choice)) {
+      return
+    }
+    const next = mutateCurrentInfo((draft) => {
+      const nextBlock = draft.progress.blockhist[blockKey]!
+      const state = nextBlock.questionStates[selectedQnum]!
+      state.eliminatedChoices = state.eliminatedChoices.filter((value) => value !== choice)
+      nextBlock.answers[selectedQnum] = choice
+      syncQuestionState(draft, selectedQnum)
+    })
+    void persistInfo(next)
+  }
+
+  async function submitCurrentAnswer(): Promise<void> {
+    if (!block || !currentState || block.complete || block.mode !== 'tutor' || currentAnswer === '' || currentState.submitted) {
+      return
+    }
+    await flushPendingNote({ immediate: true, silent: true })
+    commitRunningElapsed()
+    scrollToExplanationRef.current = true
+    const next = mutateCurrentInfo((draft) => {
+      const nextBlock = draft.progress.blockhist[blockKey]!
+      nextBlock.questionStates[selectedQnum]!.submitted = true
+      nextBlock.questionStates[selectedQnum]!.revealed = true
+      nextBlock.currentquesnum = selectedQnum
+      syncQuestionState(draft, selectedQnum)
+    })
+    void persistInfo(next)
+  }
+
+  async function goToNextQuestionOrFinish(): Promise<void> {
+    if (selectedQnum < numQuestions - 1) {
+      openQuestion(selectedQnum + 1)
+      return
+    }
+    await finishBlock(tutorReviewReady)
+  }
+
+  async function goToBottomNextAction(): Promise<void> {
+    if (selectedQnum < numQuestions - 1) {
+      openQuestion(selectedQnum + 1)
+      return
+    }
+    if (block?.complete) {
+      navigate('previousblocks', { pack: packId })
+      return
+    }
+    await finishBlock(tutorReviewReady)
+  }
+
+  async function toggleFullscreen(): Promise<void> {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen?.()
+      } else {
+        await document.documentElement.requestFullscreen?.()
+      }
+    } catch {
+      // Browser/fullscreen availability varies across environments.
+    }
+  }
+
+  function applyMarker(marker: MarkerKey): void {
+    setSelectedMarker(marker)
+  }
+
+  function clearAllHighlights(): void {
+    highlighterRef.current?.clearAll()
+  }
+
+  function positionMarkerMenu(): void {
+    const rect = markerButtonRef.current?.getBoundingClientRect()
+    if (!rect) {
+      return
+    }
+    setMarkerMenuPosition({
+      top: Math.round(rect.bottom + 6),
+      right: Math.max(8, Math.round(window.innerWidth - rect.right))
+    })
+  }
+
+  function openMarkerMenu(): void {
+    positionMarkerMenu()
+    setActiveTool(null)
+    setShortcutWindowOpen(false)
+    setMarkerMenuOpen(true)
+  }
+
+  function closeMarkerMenu(): void {
+    setMarkerMenuOpen(false)
+  }
+
+  function toggleMarkerMenu(): void {
+    if (markerMenuOpen) {
+      closeMarkerMenu()
+      return
+    }
+    openMarkerMenu()
+  }
+
+  function beginShortcutWindowDrag(event: ReactPointerEvent<HTMLDivElement>): void {
+    const modal = shortcutWindowRef.current
+    const target = event.target instanceof HTMLElement ? event.target : null
+    if (!modal || event.button !== 0 || target?.closest('[data-no-drag="true"]')) {
+      return
+    }
+    event.preventDefault()
+    shortcutDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: shortcutWindowPosition.x,
+      originY: shortcutWindowPosition.y
+    }
   }
 
   function resetCalculator(): void {
@@ -363,8 +599,7 @@ export function ExamViewPage() {
       return
     }
     const current = parseCalculatorDisplay(calculatorDisplay)
-    const next = formatCalculatorValue(current * -1)
-    setCalculatorDisplay(next)
+    setCalculatorDisplay(formatCalculatorValue(current * -1))
   }
 
   function applyCalculatorPercent(): void {
@@ -373,8 +608,7 @@ export function ExamViewPage() {
       return
     }
     const current = parseCalculatorDisplay(calculatorDisplay)
-    const next = formatCalculatorValue(current / 100)
-    setCalculatorDisplay(next)
+    setCalculatorDisplay(formatCalculatorValue(current / 100))
     setCalculatorHistory(`${formatCalculatorValue(current)} %`)
     setCalculatorWaitingForOperand(false)
   }
@@ -645,16 +879,267 @@ export function ExamViewPage() {
       }
     })
     highlighterRef.current = mountedHighlighter
+    mountedHighlighter.setEnabled(selectedMarker !== 'none')
 
     return () => {
       mountedHighlighter.destroy()
       highlighterRef.current = null
     }
-  }, [blockKey, questionHtml, selectedQnum, syncedSelectedQnum])
+  }, [blockKey, highlightColor, questionHtml, selectedMarker, selectedQnum, syncedSelectedQnum])
 
   useEffect(() => {
     highlighterRef.current?.setColor(highlightColor)
-  }, [highlightColor])
+    highlighterRef.current?.setEnabled(selectedMarker !== 'none')
+  }, [highlightColor, selectedMarker])
+
+  useEffect(() => {
+    function handleFullscreenChange(): void {
+      setFullscreenActive(Boolean(document.fullscreenElement))
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!shortcutWindowOpen) {
+      shortcutDragRef.current = null
+      return
+    }
+
+    function handlePointerMove(event: PointerEvent): void {
+      const dragState = shortcutDragRef.current
+      const modal = shortcutWindowRef.current
+      if (!dragState || !modal || dragState.pointerId !== event.pointerId) {
+        return
+      }
+      const nextPosition = clampWindowPosition(
+        dragState.originX + (event.clientX - dragState.startX),
+        dragState.originY + (event.clientY - dragState.startY),
+        modal.offsetWidth,
+        modal.offsetHeight
+      )
+      setShortcutWindowPosition(nextPosition)
+    }
+
+    function handlePointerUp(event: PointerEvent): void {
+      if (shortcutDragRef.current?.pointerId === event.pointerId) {
+        shortcutDragRef.current = null
+      }
+    }
+
+    function handleResize(): void {
+      const modal = shortcutWindowRef.current
+      if (!modal) {
+        return
+      }
+      setShortcutWindowPosition((current) => clampWindowPosition(current.x, current.y, modal.offsetWidth, modal.offsetHeight))
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+    window.addEventListener('resize', handleResize)
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('resize', handleResize)
+    }
+  }, [shortcutWindowOpen])
+
+  useEffect(() => {
+    if (!markerMenuOpen) {
+      return
+    }
+
+    function handlePointerDown(event: PointerEvent): void {
+      const target = event.target as Node | null
+      if (markerMenuRef.current?.contains(target) || markerButtonRef.current?.contains(target)) {
+        return
+      }
+      setMarkerMenuOpen(false)
+    }
+
+    function handleResize(): void {
+      const rect = markerButtonRef.current?.getBoundingClientRect()
+      if (!rect) {
+        return
+      }
+      setMarkerMenuPosition({
+        top: Math.round(rect.bottom + 6),
+        right: Math.max(8, Math.round(window.innerWidth - rect.right))
+      })
+    }
+
+    window.addEventListener('pointerdown', handlePointerDown, true)
+    window.addEventListener('resize', handleResize)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown, true)
+      window.removeEventListener('resize', handleResize)
+    }
+  }, [markerMenuOpen])
+
+  useEffect(() => {
+    if (!shortcutWindowOpen) {
+      return
+    }
+    const modal = shortcutWindowRef.current
+    if (!modal) {
+      return
+    }
+    setShortcutWindowPosition(
+      clampWindowPosition(
+        Math.max(24, Math.round((window.innerWidth - modal.offsetWidth) / 2)),
+        Math.max(96, Math.round((window.innerHeight - modal.offsetHeight) / 2)),
+        modal.offsetWidth,
+        modal.offsetHeight
+      )
+    )
+  }, [shortcutWindowOpen, shortcutPlatform])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase()
+
+      if (event.key === 'Escape') {
+        if (markerMenuOpen) {
+          event.preventDefault()
+          setMarkerMenuOpen(false)
+          return
+        }
+        if (shortcutWindowOpen) {
+          event.preventDefault()
+          setShortcutWindowOpen(false)
+          return
+        }
+        if (activeTool) {
+          event.preventDefault()
+          closeToolPanel()
+          return
+        }
+      }
+
+      if (isEditableTarget(event.target)) {
+        return
+      }
+
+      if (event.altKey && event.code === 'Slash') {
+        event.preventDefault()
+        toggleShortcutsWindow()
+        return
+      }
+
+      if ((event.metaKey && event.ctrlKey && key === 'f') || (!event.metaKey && !event.ctrlKey && !event.altKey && event.key === 'F11')) {
+        event.preventDefault()
+        void toggleFullscreen()
+        return
+      }
+
+      if (event.altKey && event.code === 'KeyM') {
+        event.preventDefault()
+        toggleFlaggedQuestion()
+        return
+      }
+
+      if (event.altKey && event.code === 'KeyN') {
+        event.preventDefault()
+        openTool('notes')
+        return
+      }
+
+      if (event.altKey && event.code === 'KeyL') {
+        event.preventDefault()
+        openTool('lab-values')
+        return
+      }
+
+      if (event.altKey && event.code === 'KeyC') {
+        event.preventDefault()
+        openTool('calculator')
+        return
+      }
+
+      if (event.altKey && event.code === 'Comma') {
+        event.preventDefault()
+        openTool('settings')
+        return
+      }
+
+      if (event.altKey && event.code === 'KeyA') {
+        event.preventDefault()
+        toggleSidebar()
+        return
+      }
+
+      if (event.altKey && event.key === 'Enter') {
+        event.preventDefault()
+        void submitCurrentAnswer()
+        return
+      }
+
+      if (event.altKey && event.code === 'KeyO') {
+        event.preventDefault()
+        // TODO(topbar-tools): wire Notebook when the footer handler lands.
+        return
+      }
+
+      if (event.altKey && event.code === 'KeyR') {
+        event.preventDefault()
+        // TODO(topbar-tools): wire Library when the footer handler lands.
+        return
+      }
+
+      if (event.altKey && event.code === 'KeyF') {
+        event.preventDefault()
+        // TODO(topbar-tools): wire Feedback when the footer handler lands.
+        return
+      }
+
+      if (event.altKey && event.code === 'KeyS') {
+        event.preventDefault()
+        // TODO(topbar-tools): wire Split View when the feature lands.
+        return
+      }
+
+      if (!event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+        if (event.code === 'Backquote') {
+          event.preventDefault()
+          applyMarker('none')
+          return
+        }
+
+        if (['1', '2', '3', '4'].includes(event.key)) {
+          event.preventDefault()
+          applyMarker(MARKER_PRESETS[Number(event.key)]!.key)
+          return
+        }
+
+        if (event.key === 'ArrowLeft') {
+          event.preventDefault()
+          openQuestion(selectedQnum - 1)
+          return
+        }
+
+        if (event.key === 'ArrowRight') {
+          event.preventDefault()
+          void goToNextQuestionOrFinish()
+          return
+        }
+
+        const answerChoice = displayChoices.find((choice) => choice.toLowerCase() === key)
+        if (answerChoice) {
+          event.preventDefault()
+          selectAnswer(answerChoice)
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [activeTool, block?.complete, currentAnswer, currentState?.submitted, displayChoices, markerMenuOpen, selectedQnum, shortcutWindowOpen, tutorReviewReady])
 
   useEffect(() => {
     if (!block || !currentState || currentState.visited) {
@@ -708,15 +1193,35 @@ export function ExamViewPage() {
     return <div className="d-flex flex-column flex-grow-1 justify-content-center align-items-center"><div className="spinner-border" style={{ width: 72, height: 72 }} role="status" /></div>
   }
 
+  const activeToolTitle = activeTool === 'notes'
+    ? 'Question Notes'
+    : activeTool === 'lab-values'
+      ? 'Lab Values'
+      : activeTool === 'calculator'
+        ? 'Calculator'
+        : 'Settings'
+  const activeToolDescription = activeTool === 'notes'
+    ? 'Notes save per question in this block.'
+    : activeTool === 'lab-values'
+      ? 'Standard exam-style reference ranges based on the NBME laboratory values sheet.'
+      : activeTool === 'calculator'
+        ? 'A native in-block calculator so you can keep the exam workspace on one screen.'
+        : 'This panel opens like the other tools and is intentionally empty for now.'
+
   return (
     <>
       <ExamShellV2
       mode={examUiMode}
+      sidebarCollapsed={!sidebarOpen}
       topbar={(
         <header className="exam-topbar">
-          <div className="header-left">
-            <button className="nav-icon-btn" type="button" onClick={() => navigate('previousblocks', { pack: packId })}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>
+          <div className="exam-topbar-left">
+            <button className={`exam-topbar-menu ${sidebarOpen ? 'active' : ''}`} type="button" aria-pressed={sidebarOpen} aria-label="Toggle sidebar" onClick={toggleSidebar}>
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round">
+                <line x1="5" y1="7" x2="19" y2="7" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+                <line x1="5" y1="17" x2="19" y2="17" />
+              </svg>
             </button>
             <div className="exam-question-context">
               <span className="context-item">Item {selectedQnum + 1} of {numQuestions}</span>
@@ -724,87 +1229,132 @@ export function ExamViewPage() {
             </div>
             <button
               id="btn-flagged"
-              className={`btn btn-header-tool btn-flag-toggle ${currentQuestionFlagged ? 'active' : ''}`}
+              className={`exam-topbar-action exam-topbar-action-mark ${currentQuestionFlagged ? 'active' : ''}`}
               type="button"
               aria-pressed={currentQuestionFlagged}
-              onClick={() => {
-                const next = mutateCurrentInfo((draft) => {
-                  draft.progress.blockhist[blockKey]!.questionStates[selectedQnum]!.visited = true
-                  if (isInBucket(draft.progress, draft, currentQid, 'flagged')) {
-                    removeFromBucket(draft.progress, draft, currentQid, 'flagged')
-                  } else {
-                    addToBucket(draft.progress, draft, currentQid, 'flagged')
-                  }
-                })
-                void persistInfo(next)
-              }}
+              onClick={toggleFlaggedQuestion}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="flag-icon" stroke="currentColor" strokeWidth="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></svg>
-              Flag
+              <svg className="flag-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path className="flag-pole" d="M5 3v18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                <path className="flag-fill" d="M6.8 4.2c1.1-.4 2.2-.7 3.2-.7 1.6 0 3 .4 4.4.8 1.3.4 2.5.7 3.6.7.5 0 .9 0 1.4-.2v9.7c-.5.1-1 .2-1.5.2-1.3 0-2.6-.3-3.8-.7-1.4-.4-2.7-.7-4-.7-.9 0-1.9.2-3.3.6z" />
+              </svg>
+              <span>Mark</span>
             </button>
           </div>
 
-          <div className="header-center">
+          <div className="exam-topbar-center">
             <button
-              className="btn btn-prevnext"
+              className="exam-topbar-nav"
               type="button"
               disabled={selectedQnum === 0}
               onClick={() => openQuestion(selectedQnum - 1)}
             >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6" /></svg>
-              Previous
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.5 5 6 12l10.5 7z" /></svg>
+              <span>Previous</span>
             </button>
             <button
-              className="btn btn-prevnext"
+              className="exam-topbar-nav"
               type="button"
-              onClick={async () => {
-                if (selectedQnum < numQuestions - 1) {
-                  openQuestion(selectedQnum + 1)
-                } else {
-                  await finishBlock(tutorReviewReady)
-                }
-              }}
+              onClick={() => void goToNextQuestionOrFinish()}
             >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
-              {selectedQnum === numQuestions - 1 ? (block.complete ? 'Back' : 'Finish') : 'Next'}
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m7.5 5 10.5 7-10.5 7z" /></svg>
+              <span>{selectedQnum === numQuestions - 1 ? (block.complete ? 'Back' : 'Finish') : 'Next'}</span>
             </button>
           </div>
 
-          <div className="header-right">
+          <div className="exam-topbar-right">
             <button
-              className={`btn btn-header-tool ${notesOpen ? 'active' : ''}`}
+              className={`exam-topbar-tool ${shortcutWindowOpen ? 'active' : ''}`}
               type="button"
-              aria-expanded={notesOpen}
-              onClick={() => toggleTool('notes')}
+              aria-pressed={shortcutWindowOpen}
+              onClick={toggleShortcutsWindow}
             >
-              Notes
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="2" y="6" width="20" height="12" rx="2" />
+                <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" />
+              </svg>
+              <span>Shortcuts</span>
             </button>
-            <div className="highlight-toolbar">
-              {['#fff59d', '#ffd6a5', '#b8f2e6', '#cde7ff'].map((color) => (
-                <button key={color} className={`highlight-swatch ${highlightColor === color ? 'active' : ''}`} data-color={color} style={{ background: color }} type="button" onClick={() => setHighlightColor(color)} />
-              ))}
-            </div>
             <button
-              className={`btn btn-header-tool ${activeTool === 'lab-values' ? 'active' : ''}`}
+              className={`exam-topbar-tool ${fullscreenActive ? 'active' : ''}`}
+              type="button"
+              aria-pressed={fullscreenActive}
+              onClick={() => void toggleFullscreen()}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 9V5a2 2 0 0 1 2-2h4M15 3h4a2 2 0 0 1 2 2v4M21 15v4a2 2 0 0 1-2 2h-4M9 21H5a2 2 0 0 1-2-2v-4" />
+              </svg>
+              <span>Full Screen</span>
+            </button>
+            <button
+              ref={markerButtonRef}
+              className={`exam-topbar-tool ${markerMenuOpen ? 'active' : ''}`}
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={markerMenuOpen}
+              onClick={toggleMarkerMenu}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m9 11-6 6v3h3l6-6" />
+                <path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" />
+              </svg>
+              <span>Marker</span>
+            </button>
+            <button
+              className={`exam-topbar-tool ${activeTool === 'lab-values' ? 'active' : ''}`}
               type="button"
               aria-expanded={activeTool === 'lab-values'}
               onClick={() => toggleTool('lab-values')}
             >
-              Lab Values
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M9 3h6" />
+                <path d="M10 3v6l-5 8a3 3 0 0 0 2.6 4.5h8.8A3 3 0 0 0 19 17l-5-8V3" />
+                <path d="M7.5 14h9" />
+              </svg>
+              <span>Lab Values</span>
             </button>
             <button
-              className={`btn btn-header-tool ${activeTool === 'calculator' ? 'active' : ''}`}
+              className={`exam-topbar-tool ${activeTool === 'notes' ? 'active' : ''}`}
+              type="button"
+              aria-expanded={activeTool === 'notes'}
+              onClick={() => toggleTool('notes')}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="8" y="2" width="8" height="4" rx="1" />
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+              </svg>
+              <span>Notes</span>
+            </button>
+            <button
+              className={`exam-topbar-tool ${activeTool === 'calculator' ? 'active' : ''}`}
               type="button"
               aria-expanded={activeTool === 'calculator'}
               onClick={() => toggleTool('calculator')}
             >
-              Calculator
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="4" y="2" width="16" height="20" rx="2" />
+                <path d="M8 6h8" />
+                <path d="M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01" />
+              </svg>
+              <span>Calculator</span>
+            </button>
+            <button
+              className={`exam-topbar-tool ${activeTool === 'settings' ? 'active' : ''}`}
+              type="button"
+              aria-expanded={activeTool === 'settings'}
+              onClick={() => toggleTool('settings')}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              <span>Settings</span>
             </button>
           </div>
         </header>
       )}
       rail={(
-        <aside className="exam-sidebar">
+        <aside className={`exam-sidebar ${sidebarOpen ? '' : 'exam-sidebar-hidden'}`}>
           <div className="exam-question-list">
             <ul className="list-group">
               {questionRail.map((entry) => (
@@ -876,19 +1426,7 @@ export function ExamViewPage() {
                           className={`exam-choice-selector ${stateClasses}`}
                           aria-label={`Select answer ${choice}`}
                           disabled={showOutcome || questionLocked(block) || isEliminated}
-                          onClick={() => {
-                            if (questionLocked(block)) {
-                              return
-                            }
-                            const next = mutateCurrentInfo((draft) => {
-                              const nextBlock = draft.progress.blockhist[blockKey]!
-                              const state = nextBlock.questionStates[selectedQnum]!
-                              state.eliminatedChoices = state.eliminatedChoices.filter((value) => value !== choice)
-                              nextBlock.answers[selectedQnum] = choice
-                              syncQuestionState(draft, selectedQnum)
-                            })
-                            void persistInfo(next)
-                          }}
+                          onClick={() => selectAnswer(choice)}
                         />
                         <button
                           type="button"
@@ -925,23 +1463,7 @@ export function ExamViewPage() {
                     className="btn btn-primary btn-submit-uw"
                     type="button"
                     disabled={currentAnswer === '' || currentState.submitted}
-                    onClick={async () => {
-                      if (currentAnswer === '') {
-                        window.alert('Select an answer before submitting.')
-                        return
-                      }
-                      await flushPendingNote({ immediate: true, silent: true })
-                      commitRunningElapsed()
-                      scrollToExplanationRef.current = true
-                      const next = mutateCurrentInfo((draft) => {
-                        const nextBlock = draft.progress.blockhist[blockKey]!
-                        nextBlock.questionStates[selectedQnum]!.submitted = true
-                        nextBlock.questionStates[selectedQnum]!.revealed = true
-                        nextBlock.currentquesnum = selectedQnum
-                        syncQuestionState(draft, selectedQnum)
-                      })
-                      void persistInfo(next)
-                    }}
+                    onClick={() => void submitCurrentAnswer()}
                   >
                     {currentState.submitted ? 'Answer Submitted' : 'Submit Answer'}
                   </button>
@@ -951,15 +1473,7 @@ export function ExamViewPage() {
                   <button
                     className="btn btn-secondary btn-nextques"
                     type="button"
-                    onClick={async () => {
-                      if (selectedQnum < numQuestions - 1) {
-                        openQuestion(selectedQnum + 1)
-                      } else if (block.complete) {
-                        navigate('previousblocks', { pack: packId })
-                      } else {
-                        await finishBlock(tutorReviewReady)
-                      }
-                    }}
+                    onClick={() => void goToBottomNextAction()}
                   >
                     {selectedQnum === numQuestions - 1 ? (block.complete ? 'Back to Blocks' : (block.mode === 'tutor' ? 'Finish Review' : 'End Block')) : 'Next Question'}
                   </button>
@@ -1047,24 +1561,17 @@ export function ExamViewPage() {
       />
       {activeTool ? <button className="exam-v2-tool-scrim" type="button" aria-label="Close tool panel" onClick={closeToolPanel} /> : null}
       {activeTool ? (
-        <aside className={`exam-v2-tool-sheet ${activeTool === 'lab-values' ? 'exam-v2-tool-sheet-wide' : ''}`} aria-label={activeTool === 'notes' ? 'Question Notes Panel' : (activeTool === 'lab-values' ? 'Lab Values Panel' : 'Calculator Panel')}>
+        <aside className={`exam-v2-tool-sheet ${activeTool === 'lab-values' ? 'exam-v2-tool-sheet-wide' : ''}`} aria-label={`${activeToolTitle} Panel`}>
           <div className="exam-v2-tool-head">
             <div>
-              <p className="exam-v2-tool-title">
-                {activeTool === 'notes' ? 'Question Notes' : activeTool === 'lab-values' ? 'Lab Values' : 'Calculator'}
-              </p>
-              <p className="exam-v2-tool-copy">
-                {activeTool === 'notes'
-                  ? 'Notes persist per question and stay with the current block across refresh, suspend, and resume.'
-                  : activeTool === 'lab-values'
-                    ? 'Standard exam-style reference ranges based on the NBME laboratory values sheet.'
-                    : 'A native in-block calculator so you can keep the exam workspace on one screen.'}
-              </p>
+              <p className="exam-v2-tool-title">{activeToolTitle}</p>
+              <p className="exam-v2-tool-copy">{activeToolDescription}</p>
             </div>
             <button className="exam-v2-tool-close" type="button" onClick={closeToolPanel}>
               Close
             </button>
           </div>
+
           {activeTool === 'notes' ? (
             <textarea
               aria-label="Question Notes"
@@ -1081,6 +1588,7 @@ export function ExamViewPage() {
               }}
             />
           ) : null}
+
           {activeTool === 'calculator' ? (
             <div className="exam-v2-calculator">
               <div className="q-metric-box exam-v2-calc-readout">
@@ -1111,6 +1619,7 @@ export function ExamViewPage() {
               </div>
             </div>
           ) : null}
+
           {activeTool === 'lab-values' ? (
             <div className="exam-v2-labs">
               <input
@@ -1163,7 +1672,109 @@ export function ExamViewPage() {
               )}
             </div>
           ) : null}
+
+          {activeTool === 'settings' ? (
+            <div className="exam-v2-tool-empty">
+              <p className="exam-v2-tool-empty-title">{activeToolTitle}</p>
+              <p className="exam-v2-tool-empty-copy">This panel is intentionally empty for now.</p>
+            </div>
+          ) : null}
         </aside>
+      ) : null}
+      {shortcutWindowOpen ? (
+        <>
+          <button className="exam-shortcuts-scrim" type="button" aria-label="Close shortcuts" onClick={() => setShortcutWindowOpen(false)} />
+          <div
+            ref={shortcutWindowRef}
+            className="exam-shortcuts-window"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="exam-shortcuts-title"
+            style={{ left: shortcutWindowPosition.x, top: shortcutWindowPosition.y }}
+          >
+            <div className="exam-shortcuts-header" onPointerDown={beginShortcutWindowDrag}>
+              <span className="exam-shortcuts-drag" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2v5M12 17v5M2 12h5M17 12h5" />
+                  <path d="m8 6 4-4 4 4M8 18l4 4 4-4M6 8l-4 4 4 4M18 8l4 4-4 4" />
+                </svg>
+              </span>
+              <h2 id="exam-shortcuts-title" className="exam-shortcuts-title">Keyboard Shortcuts</h2>
+              <button className="exam-shortcuts-close" type="button" data-no-drag="true" aria-label="Close shortcuts" onClick={() => setShortcutWindowOpen(false)}>
+                ×
+              </button>
+            </div>
+            <div className="exam-shortcuts-body">
+              <div className="exam-shortcuts-platforms" role="tablist" aria-label="Shortcut platform">
+                <button className={`exam-shortcuts-platform ${shortcutPlatform === 'windows' ? 'active' : ''}`} type="button" role="tab" aria-selected={shortcutPlatform === 'windows'} onClick={() => setShortcutPlatform('windows')}>Windows</button>
+                <button className={`exam-shortcuts-platform ${shortcutPlatform === 'mac' ? 'active' : ''}`} type="button" role="tab" aria-selected={shortcutPlatform === 'mac'} onClick={() => setShortcutPlatform('mac')}>macOS</button>
+              </div>
+              <div className="exam-shortcuts-grid">
+                {SHORTCUT_DEFINITIONS.map((definition) => {
+                  const keys = shortcutPlatform === 'mac' ? definition.macKeys : definition.windowsKeys
+                  return (
+                    <div key={definition.action} className="exam-shortcuts-card">
+                      <div className="exam-shortcuts-keys">
+                        {keys.map((shortcutKey, index) => (
+                          <span key={`${definition.action}-${shortcutKey}-${index}`} className="exam-shortcuts-keygroup">
+                            {index > 0 ? <span className="exam-shortcuts-plus">{keys.length === 4 ? ',' : '+'}</span> : null}
+                            <span className="exam-shortcuts-key">{shortcutKey}</span>
+                          </span>
+                        ))}
+                      </div>
+                      <span className="exam-shortcuts-arrow">→</span>
+                      <span className="exam-shortcuts-action">{definition.action}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        </>
+      ) : null}
+      {markerMenuOpen ? (
+        <div
+          ref={markerMenuRef}
+          className="exam-marker-menu"
+          role="menu"
+          aria-label="Marker colors"
+          style={{ top: markerMenuPosition.top, right: markerMenuPosition.right }}
+        >
+          <ul className="exam-marker-menu-list" role="presentation">
+            {MARKER_PRESETS.map((preset) => (
+              <li key={preset.key} role="presentation">
+                <button
+                  role="menuitemradio"
+                  aria-checked={selectedMarker === preset.key}
+                  className={`exam-marker-menu-item ${selectedMarker === preset.key ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => {
+                    applyMarker(preset.key)
+                    setMarkerMenuOpen(false)
+                  }}
+                >
+                  <span className="exam-marker-menu-icon" style={{ color: preset.accent }} aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M14.6 3.2 20.8 9.4l-8.9 8.9-3.7.9.9-3.7zM5.3 16.7 3 21l4.3-2.3z" />
+                    </svg>
+                  </span>
+                  <span className="exam-marker-menu-label">{preset.label}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <button type="button" className="exam-marker-menu-action" onClick={() => setMarkerMenuOpen(false)}>Create</button>
+          <button
+            type="button"
+            className="exam-marker-menu-action"
+            onClick={() => {
+              clearAllHighlights()
+              setMarkerMenuOpen(false)
+            }}
+          >
+            Clear All
+          </button>
+        </div>
       ) : null}
       {sourceSlideOpen && sourceSlideAsset ? (
         <div className="modal d-block" tabIndex={-1} role="dialog" aria-modal="true">
