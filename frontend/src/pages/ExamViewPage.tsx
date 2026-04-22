@@ -3,6 +3,7 @@ import { fetchQuestionAssets, extractChoiceLabels, rewriteAssetPaths, stripChoic
 import { getQuestionHighlight, getQuestionNote, setQuestionHighlight, setQuestionNote } from '../lib/annotations'
 import { addToBucket, isInBucket, removeFromBucket } from '../lib/progress'
 import { syncProgress } from '../lib/api'
+import { LAB_VALUE_SECTIONS, type ExamToolKey } from '../lib/exam-tools'
 import { navigate } from '../lib/navigation'
 import { mountQuestionHighlighter } from '../lib/text-highlighting'
 import { usePackPage } from '../lib/usePackPage'
@@ -22,6 +23,50 @@ function modeLabel(mode: Mode): string {
 function formatClock(totalSeconds: number): string {
   const absSeconds = Math.max(0, Math.floor(totalSeconds))
   return `${Math.floor(absSeconds / 3600)}:${Math.floor((absSeconds % 3600) / 60).toString().padStart(2, '0')}:${Math.floor(absSeconds % 60).toString().padStart(2, '0')}`
+}
+
+type CalculatorOperator = 'add' | 'subtract' | 'multiply' | 'divide'
+
+function formatCalculatorValue(value: number): string {
+  if (!Number.isFinite(value)) {
+    return 'Error'
+  }
+  const compact = Number(value.toPrecision(10))
+  return compact.toString()
+}
+
+function calculatorOperatorSymbol(operator: CalculatorOperator): string {
+  if (operator === 'add') {
+    return '+'
+  }
+  if (operator === 'subtract') {
+    return '-'
+  }
+  if (operator === 'multiply') {
+    return 'x'
+  }
+  return '/'
+}
+
+function applyCalculatorOperation(left: number, right: number, operator: CalculatorOperator): number | null {
+  if (operator === 'add') {
+    return left + right
+  }
+  if (operator === 'subtract') {
+    return left - right
+  }
+  if (operator === 'multiply') {
+    return left * right
+  }
+  if (right === 0) {
+    return null
+  }
+  return left / right
+}
+
+function parseCalculatorDisplay(value: string): number {
+  const parsed = Number.parseFloat(value)
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
 export function ExamViewPage() {
@@ -45,10 +90,32 @@ export function ExamViewPage() {
   const [sourceSlideOpen, setSourceSlideOpen] = useState(false)
   const [highlightColor, setHighlightColor] = useState('#fff59d')
   const [noteText, setNoteText] = useState('')
-  const [notesOpen, setNotesOpen] = useState(false)
+  const [activeTool, setActiveTool] = useState<ExamToolKey | null>(null)
+  const [labSearchTerm, setLabSearchTerm] = useState('')
+  const [calculatorDisplay, setCalculatorDisplay] = useState('0')
+  const [calculatorStoredValue, setCalculatorStoredValue] = useState<number | null>(null)
+  const [calculatorOperator, setCalculatorOperator] = useState<CalculatorOperator | null>(null)
+  const [calculatorWaitingForOperand, setCalculatorWaitingForOperand] = useState(false)
+  const [calculatorHistory, setCalculatorHistory] = useState('Ready')
   const [timerLabel, setTimerLabel] = useState('Time Used')
   const [timerText, setTimerText] = useState('0:00:00')
   const examUiMode = useMemo<'v2'>(() => 'v2', [])
+  const notesOpen = activeTool === 'notes'
+  const filteredLabSections = useMemo(() => {
+    const query = labSearchTerm.trim().toLowerCase()
+    if (!query) {
+      return LAB_VALUE_SECTIONS
+    }
+    return LAB_VALUE_SECTIONS
+      .map((section) => ({
+        ...section,
+        rows: section.rows.filter((row) => {
+          const searchableText = [row.label, row.conventional, row.si, ...(row.keywords ?? [])].join(' ').toLowerCase()
+          return searchableText.includes(query)
+        })
+      }))
+      .filter((section) => section.rows.length > 0)
+  }, [labSearchTerm])
 
   useEffect(() => {
     qbankinfoRef.current = qbankinfo
@@ -188,6 +255,128 @@ export function ExamViewPage() {
       notePersistTimeoutRef.current = null
       void persistQuestionNote(index, value, { silent: true })
     }, 400)
+  }
+
+  function toggleTool(tool: ExamToolKey): void {
+    setActiveTool((current) => current === tool ? null : tool)
+  }
+
+  function closeToolPanel(): void {
+    setActiveTool(null)
+  }
+
+  function resetCalculator(): void {
+    setCalculatorDisplay('0')
+    setCalculatorStoredValue(null)
+    setCalculatorOperator(null)
+    setCalculatorWaitingForOperand(false)
+    setCalculatorHistory('Ready')
+  }
+
+  function setCalculatorError(message: string): void {
+    setCalculatorDisplay('Error')
+    setCalculatorStoredValue(null)
+    setCalculatorOperator(null)
+    setCalculatorWaitingForOperand(false)
+    setCalculatorHistory(message)
+  }
+
+  function inputCalculatorDigit(digit: string): void {
+    if (calculatorDisplay === 'Error') {
+      setCalculatorDisplay(digit)
+      setCalculatorWaitingForOperand(false)
+      setCalculatorHistory('Editing')
+      return
+    }
+    if (calculatorWaitingForOperand) {
+      setCalculatorDisplay(digit)
+      setCalculatorWaitingForOperand(false)
+      return
+    }
+    setCalculatorDisplay((current) => current === '0' ? digit : `${current}${digit}`)
+  }
+
+  function inputCalculatorDecimal(): void {
+    if (calculatorDisplay === 'Error' || calculatorWaitingForOperand) {
+      setCalculatorDisplay('0.')
+      setCalculatorWaitingForOperand(false)
+      return
+    }
+    if (!calculatorDisplay.includes('.')) {
+      setCalculatorDisplay(`${calculatorDisplay}.`)
+    }
+  }
+
+  function commitCalculatorOperation(nextOperator: CalculatorOperator | null): void {
+    if (calculatorDisplay === 'Error') {
+      if (nextOperator === null) {
+        resetCalculator()
+      }
+      return
+    }
+
+    const inputValue = parseCalculatorDisplay(calculatorDisplay)
+
+    if (calculatorStoredValue === null) {
+      setCalculatorStoredValue(inputValue)
+      setCalculatorOperator(nextOperator)
+      setCalculatorWaitingForOperand(Boolean(nextOperator))
+      setCalculatorHistory(nextOperator ? `${formatCalculatorValue(inputValue)} ${calculatorOperatorSymbol(nextOperator)}` : formatCalculatorValue(inputValue))
+      return
+    }
+
+    if (calculatorOperator === null) {
+      setCalculatorStoredValue(inputValue)
+      setCalculatorOperator(nextOperator)
+      setCalculatorWaitingForOperand(Boolean(nextOperator))
+      setCalculatorHistory(nextOperator ? `${formatCalculatorValue(inputValue)} ${calculatorOperatorSymbol(nextOperator)}` : formatCalculatorValue(inputValue))
+      return
+    }
+
+    if (calculatorWaitingForOperand && nextOperator) {
+      setCalculatorOperator(nextOperator)
+      setCalculatorHistory(`${formatCalculatorValue(calculatorStoredValue)} ${calculatorOperatorSymbol(nextOperator)}`)
+      return
+    }
+
+    const result = applyCalculatorOperation(calculatorStoredValue, inputValue, calculatorOperator)
+    if (result === null) {
+      setCalculatorError('Cannot divide by zero')
+      return
+    }
+
+    const formattedResult = formatCalculatorValue(result)
+    setCalculatorDisplay(formattedResult)
+    setCalculatorStoredValue(nextOperator ? result : null)
+    setCalculatorOperator(nextOperator)
+    setCalculatorWaitingForOperand(Boolean(nextOperator))
+    setCalculatorHistory(
+      nextOperator
+        ? `${formattedResult} ${calculatorOperatorSymbol(nextOperator)}`
+        : `${formatCalculatorValue(calculatorStoredValue)} ${calculatorOperatorSymbol(calculatorOperator)} ${formatCalculatorValue(inputValue)} =`
+    )
+  }
+
+  function toggleCalculatorSign(): void {
+    if (calculatorDisplay === 'Error') {
+      resetCalculator()
+      return
+    }
+    const current = parseCalculatorDisplay(calculatorDisplay)
+    const next = formatCalculatorValue(current * -1)
+    setCalculatorDisplay(next)
+  }
+
+  function applyCalculatorPercent(): void {
+    if (calculatorDisplay === 'Error') {
+      resetCalculator()
+      return
+    }
+    const current = parseCalculatorDisplay(calculatorDisplay)
+    const next = formatCalculatorValue(current / 100)
+    setCalculatorDisplay(next)
+    setCalculatorHistory(`${formatCalculatorValue(current)} %`)
+    setCalculatorWaitingForOperand(false)
   }
 
   function questionLocked(currentBlock = block, index = selectedQnum): boolean {
@@ -519,8 +708,6 @@ export function ExamViewPage() {
     return <div className="d-flex flex-column flex-grow-1 justify-content-center align-items-center"><div className="spinner-border" style={{ width: 72, height: 72 }} role="status" /></div>
   }
 
-  const paneEntries = Object.entries(qbankinfo.panes)
-
   return (
     <>
       <ExamShellV2
@@ -588,7 +775,7 @@ export function ExamViewPage() {
               className={`btn btn-header-tool ${notesOpen ? 'active' : ''}`}
               type="button"
               aria-expanded={notesOpen}
-              onClick={() => setNotesOpen((current) => !current)}
+              onClick={() => toggleTool('notes')}
             >
               Notes
             </button>
@@ -597,15 +784,22 @@ export function ExamViewPage() {
                 <button key={color} className={`highlight-swatch ${highlightColor === color ? 'active' : ''}`} data-color={color} style={{ background: color }} type="button" onClick={() => setHighlightColor(color)} />
               ))}
             </div>
-            {paneEntries.length > 0 ? (
-              <div className="btn-group header-panes" role="group">
-                {paneEntries.map(([title, pane]) => (
-                  <button key={title} className="btn btn-header-tool" type="button" onClick={() => window.open(`${qbankinfo.path}/${pane.file}`, title, pane.prefs)}>
-                    {title}
-                  </button>
-                ))}
-              </div>
-            ) : null}
+            <button
+              className={`btn btn-header-tool ${activeTool === 'lab-values' ? 'active' : ''}`}
+              type="button"
+              aria-expanded={activeTool === 'lab-values'}
+              onClick={() => toggleTool('lab-values')}
+            >
+              Lab Values
+            </button>
+            <button
+              className={`btn btn-header-tool ${activeTool === 'calculator' ? 'active' : ''}`}
+              type="button"
+              aria-expanded={activeTool === 'calculator'}
+              onClick={() => toggleTool('calculator')}
+            >
+              Calculator
+            </button>
           </div>
         </header>
       )}
@@ -851,30 +1045,124 @@ export function ExamViewPage() {
         </footer>
       )}
       />
-      {notesOpen ? <button className="exam-v2-notes-scrim" type="button" aria-label="Close notes panel" onClick={() => setNotesOpen(false)} /> : null}
-      {notesOpen ? (
-        <aside className="exam-v2-notes-sheet" aria-label="Question Notes Panel">
-          <div className="exam-v2-notes-head">
-            <p className="exam-v2-notes-title">Question Notes</p>
-            <button className="exam-v2-notes-close" type="button" onClick={() => setNotesOpen(false)}>
+      {activeTool ? <button className="exam-v2-tool-scrim" type="button" aria-label="Close tool panel" onClick={closeToolPanel} /> : null}
+      {activeTool ? (
+        <aside className={`exam-v2-tool-sheet ${activeTool === 'lab-values' ? 'exam-v2-tool-sheet-wide' : ''}`} aria-label={activeTool === 'notes' ? 'Question Notes Panel' : (activeTool === 'lab-values' ? 'Lab Values Panel' : 'Calculator Panel')}>
+          <div className="exam-v2-tool-head">
+            <div>
+              <p className="exam-v2-tool-title">
+                {activeTool === 'notes' ? 'Question Notes' : activeTool === 'lab-values' ? 'Lab Values' : 'Calculator'}
+              </p>
+              <p className="exam-v2-tool-copy">
+                {activeTool === 'notes'
+                  ? 'Notes persist per question and stay with the current block across refresh, suspend, and resume.'
+                  : activeTool === 'lab-values'
+                    ? 'Standard exam-style reference ranges based on the NBME laboratory values sheet.'
+                    : 'A native in-block calculator so you can keep the exam workspace on one screen.'}
+              </p>
+            </div>
+            <button className="exam-v2-tool-close" type="button" onClick={closeToolPanel}>
               Close
             </button>
           </div>
-          <p className="exam-v2-notes-copy">Notes persist per question and stay with the current block across refresh, suspend, and resume.</p>
-          <textarea
-            aria-label="Question Notes"
-            className="exam-v2-note-input"
-            placeholder="Add your note for this question..."
-            value={noteText}
-            onChange={(event) => {
-              const value = event.target.value
-              setNoteText(value)
-              scheduleNotePersist(selectedQnum, value)
-            }}
-            onBlur={() => {
-              void flushPendingNote({ immediate: true, silent: true })
-            }}
-          />
+          {activeTool === 'notes' ? (
+            <textarea
+              aria-label="Question Notes"
+              className="exam-v2-note-input"
+              placeholder="Add your note for this question..."
+              value={noteText}
+              onChange={(event) => {
+                const value = event.target.value
+                setNoteText(value)
+                scheduleNotePersist(selectedQnum, value)
+              }}
+              onBlur={() => {
+                void flushPendingNote({ immediate: true, silent: true })
+              }}
+            />
+          ) : null}
+          {activeTool === 'calculator' ? (
+            <div className="exam-v2-calculator">
+              <div className="q-metric-box exam-v2-calc-readout">
+                <p className="q-metric-label mb-2">Current Result</p>
+                <input aria-label="Calculator Display" className="q-input exam-v2-calc-display" readOnly value={calculatorDisplay} />
+                <p className="exam-v2-calc-history mb-0" aria-live="polite">{calculatorHistory}</p>
+              </div>
+              <div className="exam-v2-calc-grid" role="group" aria-label="Calculator keypad">
+                <button className="exam-v2-calc-btn exam-v2-calc-btn-utility" type="button" onClick={resetCalculator}>AC</button>
+                <button className="exam-v2-calc-btn exam-v2-calc-btn-utility" type="button" onClick={toggleCalculatorSign}>+/-</button>
+                <button className="exam-v2-calc-btn exam-v2-calc-btn-utility" type="button" onClick={applyCalculatorPercent}>%</button>
+                <button className="exam-v2-calc-btn exam-v2-calc-btn-operator" type="button" onClick={() => commitCalculatorOperation('divide')}>/</button>
+                <button className="exam-v2-calc-btn" type="button" onClick={() => inputCalculatorDigit('7')}>7</button>
+                <button className="exam-v2-calc-btn" type="button" onClick={() => inputCalculatorDigit('8')}>8</button>
+                <button className="exam-v2-calc-btn" type="button" onClick={() => inputCalculatorDigit('9')}>9</button>
+                <button className="exam-v2-calc-btn exam-v2-calc-btn-operator" type="button" onClick={() => commitCalculatorOperation('multiply')}>x</button>
+                <button className="exam-v2-calc-btn" type="button" onClick={() => inputCalculatorDigit('4')}>4</button>
+                <button className="exam-v2-calc-btn" type="button" onClick={() => inputCalculatorDigit('5')}>5</button>
+                <button className="exam-v2-calc-btn" type="button" onClick={() => inputCalculatorDigit('6')}>6</button>
+                <button className="exam-v2-calc-btn exam-v2-calc-btn-operator" type="button" onClick={() => commitCalculatorOperation('subtract')}>-</button>
+                <button className="exam-v2-calc-btn" type="button" onClick={() => inputCalculatorDigit('1')}>1</button>
+                <button className="exam-v2-calc-btn" type="button" onClick={() => inputCalculatorDigit('2')}>2</button>
+                <button className="exam-v2-calc-btn" type="button" onClick={() => inputCalculatorDigit('3')}>3</button>
+                <button className="exam-v2-calc-btn exam-v2-calc-btn-operator" type="button" onClick={() => commitCalculatorOperation('add')}>+</button>
+                <button className="exam-v2-calc-btn exam-v2-calc-btn-zero" type="button" onClick={() => inputCalculatorDigit('0')}>0</button>
+                <button className="exam-v2-calc-btn" type="button" onClick={inputCalculatorDecimal}>.</button>
+                <button className="exam-v2-calc-btn exam-v2-calc-btn-equals" type="button" onClick={() => commitCalculatorOperation(null)}>=</button>
+              </div>
+            </div>
+          ) : null}
+          {activeTool === 'lab-values' ? (
+            <div className="exam-v2-labs">
+              <input
+                aria-label="Search lab values"
+                className="q-input exam-v2-tool-search"
+                placeholder="Search lab values or abbreviations..."
+                value={labSearchTerm}
+                onChange={(event) => setLabSearchTerm(event.target.value)}
+              />
+              {filteredLabSections.length > 0 ? (
+                <div className="exam-v2-labs-list">
+                  {filteredLabSections.map((section) => (
+                    <section key={section.id} className="q-panel exam-v2-labs-section">
+                      <div className="q-panel-header">
+                        <div>
+                          <p className="q-panel-title">{section.title}</p>
+                          <p className="q-panel-subtitle">{section.subtitle}</p>
+                        </div>
+                      </div>
+                      <div className="q-panel-body q-table-wrap exam-v2-labs-table">
+                        <div className="table-responsive">
+                          <table className="table table-sm">
+                            <thead>
+                              <tr>
+                                <th scope="col">Test</th>
+                                <th scope="col">Reference</th>
+                                <th scope="col">SI</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {section.rows.map((row) => (
+                                <tr key={row.label}>
+                                  <th scope="row">{row.label}</th>
+                                  <td>{row.conventional}</td>
+                                  <td>{row.si}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              ) : (
+                <div className="q-metric-box exam-v2-empty-state">
+                  <p className="q-metric-label mb-2">No Match</p>
+                  <p className="mb-0">Try a broader search like `sodium`, `cbc`, `bun`, or `coag`.</p>
+                </div>
+              )}
+            </div>
+          ) : null}
         </aside>
       ) : null}
       {sourceSlideOpen && sourceSlideAsset ? (

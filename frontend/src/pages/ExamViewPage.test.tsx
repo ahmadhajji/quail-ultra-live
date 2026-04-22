@@ -131,6 +131,35 @@ describe('ExamViewPage', () => {
     expect(screen.queryByPlaceholderText('Add your note for this question...')).not.toBeInTheDocument()
   })
 
+  it('ignores legacy qbank panes and opens native lab values and calculator tools', async () => {
+    render(<ExamViewPage />)
+
+    await waitFor(() => {
+      expect(htmlHelpers.fetchQuestionAssets).toHaveBeenCalled()
+    })
+
+    expect(screen.queryByRole('button', { name: 'Reference' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Lab Values' }))
+    expect(screen.getByPlaceholderText('Search lab values or abbreviations...')).toBeInTheDocument()
+    expect(screen.getByText('Sodium (Na+)')).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText('Search lab values'), 'wbc')
+    expect(screen.getByText('WBC')).toBeInTheDocument()
+    expect(screen.queryByText('Sodium (Na+)')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Calculator' }))
+    const display = screen.getByLabelText('Calculator Display')
+    expect(display).toHaveValue('0')
+
+    await userEvent.click(screen.getByRole('button', { name: '1' }))
+    await userEvent.click(screen.getByRole('button', { name: '+' }))
+    await userEvent.click(screen.getByRole('button', { name: '2' }))
+    await userEvent.click(screen.getByRole('button', { name: '=' }))
+
+    expect(display).toHaveValue('3')
+  })
+
   it('prefers question metadata for choice labels and exposes source slide access', async () => {
     fixture = createQbankInfoFixture()
     fixture.progress.blockhist['0']!.currentquesnum = 0
