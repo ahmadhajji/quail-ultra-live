@@ -99,7 +99,11 @@ describe('ExamViewPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Select answer A' }))
     await userEvent.click(screen.getByRole('button', { name: 'Submit Answer' }))
 
-    expect(await screen.findByText('Explanation')).toBeInTheDocument()
+    // The explanation section now shows a result pill instead of a text
+    // label — assert on the pill so the test verifies the user-visible state.
+    await waitFor(() => {
+      expect(container.querySelector('.exam-result-pill')).not.toBeNull()
+    })
     expect(container.querySelector('#explanationSection')?.className.includes('exam-hidden')).toBe(false)
   })
 
@@ -204,7 +208,9 @@ describe('ExamViewPage', () => {
 
     fireEvent.keyDown(window, { key: 'b', code: 'KeyB' })
     fireEvent.keyDown(window, { altKey: true, key: 'Enter', code: 'Enter' })
-    expect(await screen.findByText('Explanation')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(document.querySelector('.exam-result-pill')).not.toBeNull()
+    })
 
     fireEvent.keyDown(window, { key: 'ArrowRight', code: 'ArrowRight' })
     expect(await screen.findByText('Item 2 of 2')).toBeInTheDocument()

@@ -153,8 +153,14 @@ export function ImageInspector(props: ImageInspectorProps) {
       return
     }
     event.preventDefault()
+    // Tame trackpad sensitivity: trackpads emit many small wheel events at
+    // ~60Hz, so a per-event multiplicative step felt like the image was
+    // whip-zooming. Map deltaY continuously through an exp() curve and clamp
+    // the per-event effect to a gentle ±3% change regardless of delta size.
     const delta = event.deltaY
-    setScale((current) => clampScale(current * (delta > 0 ? 0.92 : 1.08)))
+    const rawFactor = Math.exp(-delta * 0.0015)
+    const boundedFactor = Math.min(1.03, Math.max(0.97, rawFactor))
+    setScale((current) => clampScale(current * boundedFactor))
   }, [open])
 
   const beginPan = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {

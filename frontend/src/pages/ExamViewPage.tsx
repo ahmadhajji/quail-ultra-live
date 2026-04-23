@@ -935,44 +935,78 @@ export function ExamViewPage() {
     })
   }, [])
 
-  // Enhance images inside the question stem and explanation so clicking any of
-  // them opens the floating image inspector. We do this once per rendered HTML
-  // rather than rewriting the HTML string so the highlighter keeps ownership
-  // of the DOM inside the question body.
+  // Enhance images inside the question stem and explanation so clicking any
+  // of them opens the floating image inspector. We use event delegation
+  // (capture phase) at the container level so the wiring survives the
+  // highlighter remounting the DOM or stamping its own onclick on the image.
   useEffect(() => {
     const containers: Array<HTMLElement | null> = [questionBodyRef.current, explanationBodyRef.current]
     const cleanups: Array<() => void> = []
+
+    function decorateImage(image: HTMLImageElement): void {
+      image.classList.add('exam-openable-image')
+      image.setAttribute('tabindex', '0')
+      image.setAttribute('role', 'button')
+      if (!image.getAttribute('aria-label')) {
+        image.setAttribute('aria-label', image.getAttribute('alt')?.trim() || 'Open image')
+      }
+      // Null out any legacy onclick so window.open can't race our inspector.
+      image.onclick = null
+    }
+
     for (const container of containers) {
       if (!container) {
         continue
       }
       const images = Array.from(container.querySelectorAll<HTMLImageElement>('img[data-openable-image="true"]'))
       for (const image of images) {
-        image.classList.add('exam-openable-image')
-        image.setAttribute('tabindex', '0')
-        image.setAttribute('role', 'button')
-        if (!image.getAttribute('aria-label')) {
-          image.setAttribute('aria-label', image.getAttribute('alt')?.trim() || 'Open image')
-        }
-        const onClick = (event: Event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          openImageInspector(image)
-        }
-        const onKeyDown = (event: KeyboardEvent) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault()
-            openImageInspector(image)
-          }
-        }
-        image.addEventListener('click', onClick)
-        image.addEventListener('keydown', onKeyDown)
-        cleanups.push(() => {
-          image.removeEventListener('click', onClick)
-          image.removeEventListener('keydown', onKeyDown)
-        })
+        decorateImage(image)
       }
+
+      const onClickCapture = (event: Event) => {
+        const target = event.target
+        if (!(target instanceof HTMLImageElement)) {
+          return
+        }
+        if (target.getAttribute('data-openable-image') !== 'true') {
+          return
+        }
+        // Re-apply decoration defensively in case the highlighter added a new
+        // handler between our last render and this click.
+        decorateImage(target)
+        event.preventDefault()
+        event.stopPropagation()
+        // Stop immediate propagation too: this guarantees any onclick the
+        // highlighter may have attached to the image itself does not run.
+        if (typeof (event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation === 'function') {
+          (event as Event & { stopImmediatePropagation: () => void }).stopImmediatePropagation()
+        }
+        openImageInspector(target)
+      }
+
+      const onKeyDownCapture = (event: Event) => {
+        const keyboardEvent = event as KeyboardEvent
+        const target = event.target
+        if (!(target instanceof HTMLImageElement)) {
+          return
+        }
+        if (target.getAttribute('data-openable-image') !== 'true') {
+          return
+        }
+        if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
+          event.preventDefault()
+          openImageInspector(target)
+        }
+      }
+
+      container.addEventListener('click', onClickCapture, true)
+      container.addEventListener('keydown', onKeyDownCapture, true)
+      cleanups.push(() => {
+        container.removeEventListener('click', onClickCapture, true)
+        container.removeEventListener('keydown', onKeyDownCapture, true)
+      })
     }
+
     return () => {
       for (const cleanup of cleanups) {
         cleanup()
@@ -1522,23 +1556,32 @@ export function ExamViewPage() {
             </section>
 
             <section id="explanationSection" className={`exam-section exam-explanation-section ${explanationVisible ? '' : 'exam-hidden'}`}>
-              <div className="exam-section-header">
-                <div>
-                  <p className="exam-panel-title mb-1">Explanation</p>
-                  <p className="exam-panel-note mb-0">
-                    {explanationVisible
-                      ? (block.complete ? 'Full review is available for this completed block.' : 'Explanation visible immediately after answer submission.')
-                      : (block.mode === 'tutor' ? 'Submit the current question to reveal the explanation.' : 'Explanation hidden until you end the block and enter review mode.')}
+              <div className="exam-explanation-header">
+                {explanationVisible ? (() => {
+                  const correctChoice = qbankinfo.choices[currentQid]?.correct ?? ''
+                  const isCorrect = currentAnswer !== '' && currentAnswer === correctChoice
+                  return (
+                    <div className={`exam-result-pill ${isCorrect ? 'exam-result-pill-correct' : 'exam-result-pill-incorrect'}`} role="status" aria-live="polite">
+                      <span className="exam-result-pill-status">{isCorrect ? 'Correct' : 'Incorrect'}</span>
+                      {correctChoice ? (
+                        <>
+                          <span className="exam-result-pill-divider" aria-hidden="true" />
+                          <span className="exam-result-pill-answer-label">{isCorrect ? 'Answer' : 'Correct answer'}</span>
+                          <span className="exam-result-pill-answer">{correctChoice}</span>
+                        </>
+                      ) : null}
+                    </div>
+                  )
+                })() : (
+                  <p className="exam-panel-note exam-explanation-empty-note mb-0">
+                    {block.mode === 'tutor' ? 'Submit the current question to reveal the explanation.' : 'Explanation hidden until you end the block and enter review mode.'}
                   </p>
-                </div>
-                <div className="d-flex align-items-center" style={{ gap: '0.75rem' }}>
-                  {sourceSlideAsset ? (
-                    <button className="btn btn-outline-secondary btn-sm" type="button" onClick={() => setSourceSlideOpen(true)}>
-                      Source Slide
-                    </button>
-                  ) : null}
-                  <span className={`exam-state-pill ${explanationVisible ? 'review' : 'awaiting'}`}>{explanationVisible ? (block.complete ? 'Review' : 'Revealed') : 'Hidden'}</span>
-                </div>
+                )}
+                {sourceSlideAsset ? (
+                  <button className="btn btn-outline-secondary btn-sm exam-explanation-source-btn" type="button" onClick={() => setSourceSlideOpen(true)}>
+                    Source Slide
+                  </button>
+                ) : null}
               </div>
               {factCheck?.status && ['disputed', 'unresolved'].includes(factCheck.status) ? (
                 <div className="alert alert-warning mt-3" role="alert">

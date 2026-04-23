@@ -127,6 +127,98 @@ body[data-exam-ui="v2"] .exam-explanation-section .exam-section-header {
   margin-bottom: 14px;
 }
 
+/* New result-pill header for the explanation section. Replaces the previous
+ * "Explanation / Explanation visible immediately after answer submission /
+ * Revealed" label stack with a clear red-or-blue pill that communicates the
+ * result and the correct answer letter at a glance. */
+body[data-exam-ui="v2"] .exam-explanation-header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+body[data-exam-ui="v2"] .exam-explanation-empty-note {
+  color: #64768a;
+  font-size: 13px;
+}
+
+body[data-exam-ui="v2"] .exam-explanation-source-btn {
+  margin-left: auto;
+}
+
+.exam-result-pill {
+  align-items: center;
+  background: #eaf1fd;
+  border: 1px solid #b8cff1;
+  border-radius: 999px;
+  color: #244a85;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 10px;
+  letter-spacing: 0.01em;
+  padding: 7px 14px 7px 12px;
+}
+
+.exam-result-pill-correct {
+  background: #eaf1fd;
+  border-color: #b8cff1;
+  color: #244a85;
+}
+
+.exam-result-pill-incorrect {
+  background: #fde9e7;
+  border-color: #f1b7b2;
+  color: #a53a36;
+}
+
+.exam-result-pill-status {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.exam-result-pill-divider {
+  background: currentColor;
+  display: inline-block;
+  height: 14px;
+  margin: 0 2px;
+  opacity: 0.3;
+  width: 1px;
+}
+
+.exam-result-pill-answer-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  opacity: 0.82;
+  text-transform: uppercase;
+}
+
+.exam-result-pill-answer {
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 999px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  line-height: 1;
+  min-width: 22px;
+  padding: 4px 9px;
+  text-align: center;
+}
+
+.exam-result-pill-correct .exam-result-pill-answer {
+  background: rgba(255, 255, 255, 0.82);
+  color: #1d3f75;
+}
+
+.exam-result-pill-incorrect .exam-result-pill-answer {
+  background: rgba(255, 255, 255, 0.82);
+  color: #922d29;
+}
+
 body[data-exam-ui="v2"] .exam-question-body table,
 body[data-exam-ui="v2"] .exam-explanation-body table {
   border-collapse: separate;
@@ -927,12 +1019,7 @@ body[data-exam-ui="v2"] .exam-shortcuts-action {
 
 .exam-image-inspector-viewport {
   align-items: center;
-  background:
-    linear-gradient(45deg, #eef1f7 25%, transparent 25%) -8px 0 / 16px 16px,
-    linear-gradient(-45deg, #eef1f7 25%, transparent 25%) -8px 0 / 16px 16px,
-    linear-gradient(45deg, transparent 75%, #eef1f7 75%) 0 8px / 16px 16px,
-    linear-gradient(-45deg, transparent 75%, #eef1f7 75%) 0 8px / 16px 16px,
-    #ffffff;
+  background: #f5f7fb;
   cursor: grab;
   display: flex;
   flex: 1 1 auto;
