@@ -1,11 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fetchQuestionAssets, extractChoiceLabels, prefetchImagesFromHtml, prefetchQuestionAssets, rewriteAssetPaths, stripChoicesFromQuestionDisplay } from '../lib/qbank-html'
-import { getQuestionHighlight, getQuestionNote, setQuestionHighlight, setQuestionNote } from '../lib/annotations'
+import { getHighlightDoc, getQuestionNote, setHighlightDocTarget, setQuestionNote } from '../lib/annotations'
 import { addToBucket, isInBucket, removeFromBucket } from '../lib/progress'
 import { syncProgress } from '../lib/api'
 import { LAB_VALUE_SECTIONS, type ExamToolKey as ContentExamToolKey } from '../lib/exam-tools'
 import { navigate } from '../lib/navigation'
+import { isHighlightColor, type SerializedHighlight } from '../lib/highlighting'
 import { mountQuestionHighlighter } from '../lib/text-highlighting'
+import {
+  DEFAULT_UI_PREFS,
+  FONT_SIZE_MAX,
+  FONT_SIZE_MIN,
+  FONT_SIZE_STEP,
+  FONT_WEIGHT_MAX,
+  FONT_WEIGHT_MIN,
+  FONT_WEIGHT_STEP,
+  normalizeFontSizeScale,
+  normalizeFontWeightDelta,
+  useUiPreferences
+} from '../lib/uiPreferences'
 import { usePackPage } from '../lib/usePackPage'
 import { ExamShellV2 } from '../components/exam/ExamShellV2'
 import { FloatingWindow } from '../components/FloatingWindow'
@@ -96,6 +109,28 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
 }
 
+function parseSerializedHighlightEntries(serialized: string): SerializedHighlight[] {
+  if (!serialized || serialized === '[]') {
+    return []
+  }
+  try {
+    const parsed = JSON.parse(serialized)
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+    return parsed.filter((entry): entry is SerializedHighlight => (
+      entry &&
+      typeof entry === 'object' &&
+      typeof entry.id === 'string' &&
+      typeof entry.start === 'number' &&
+      typeof entry.end === 'number' &&
+      isHighlightColor((entry as { color?: unknown }).color)
+    ))
+  } catch {
+    return []
+  }
+}
+
 function formatCalculatorValue(value: number): string {
   if (!Number.isFinite(value)) {
     return 'Error'
@@ -147,7 +182,12 @@ export function ExamViewPage() {
   const timerBaseElapsedRef = useRef(0)
   const timeWarningRef = useRef(true)
   const scrollToExplanationRef = useRef(false)
-  const highlighterRef = useRef<ReturnType<typeof mountQuestionHighlighter> | null>(null)
+  const questionHighlighterRef = useRef<ReturnType<typeof mountQuestionHighlighter> | null>(null)
+  const explanationHighlighterRef = useRef<ReturnType<typeof mountQuestionHighlighter> | null>(null)
+  // Track the last highlight payload written by the engine itself so we can
+  // distinguish self-mutations from external changes (e.g. navigating to a
+  // new question) without destroying and recreating the engine.
+  const ownHighlightPayloadRef = useRef('[]')
   const noteQuestionIndexRef = useRef(0)
   const noteTextRef = useRef('')
   const questionBodyRef = useRef<HTMLDivElement | null>(null)
@@ -178,6 +218,7 @@ export function ExamViewPage() {
   const [fullscreenActive, setFullscreenActive] = useState(Boolean(document.fullscreenElement))
   const [timerLabel, setTimerLabel] = useState('Time Used')
   const [timerText, setTimerText] = useState('0:00:00')
+  const [uiPrefs, updateUiPrefs, resetUiPrefs] = useUiPreferences()
   const examUiMode = useMemo<'v2'>(() => 'v2', [])
   const filteredLabSections = useMemo(() => {
     const query = labSearchTerm.trim().toLowerCase()
@@ -225,6 +266,7 @@ export function ExamViewPage() {
     ? currentMeta.choice_presentation.display_order
     : (qbankinfo?.choices[currentQid]?.options ?? [])
   const highlightColor = MARKER_PRESETS.find((preset) => preset.key === selectedMarker)?.color ?? '#fff59d'
+  const currentHighlightPayload = block?.highlights[selectedQnum] ?? '[]'
   const factCheck = currentMeta?.fact_check
   const warningList = currentMeta?.warnings ?? []
   const showCaution = Boolean(
@@ -444,7 +486,8 @@ export function ExamViewPage() {
   }
 
   function clearAllHighlights(): void {
-    highlighterRef.current?.clearAll()
+    questionHighlighterRef.current?.clearAll()
+    explanationHighlighterRef.current?.clearAll()
   }
 
   function positionMarkerMenu(): void {
@@ -896,32 +939,97 @@ export function ExamViewPage() {
       return
     }
 
+    const initialPayload = JSON.stringify(getHighlightDoc(block, selectedQnum).question)
+    ownHighlightPayloadRef.current = currentHighlightPayload
     const mountedHighlighter = mountQuestionHighlighter({
       container: questionBodyRef.current,
       color: highlightColor,
-      serializedHighlights: getQuestionHighlight(block, selectedQnum),
+      target: 'question',
+      serializedHighlights: initialPayload,
       onSerializedChange(serialized) {
         const next = mutateCurrentInfo((draft) => {
           const nextBlock = draft.progress.blockhist[blockKey]!
           nextBlock.questionStates[selectedQnum]!.visited = true
-          setQuestionHighlight(nextBlock, selectedQnum, serialized)
+          setHighlightDocTarget(nextBlock, selectedQnum, 'question', parseSerializedHighlightEntries(serialized))
         })
+        ownHighlightPayloadRef.current = next?.progress.blockhist[blockKey]?.highlights[selectedQnum] ?? '[]'
         void persistInfo(next, { silent: true })
       }
     })
-    highlighterRef.current = mountedHighlighter
+    questionHighlighterRef.current = mountedHighlighter
     mountedHighlighter.setEnabled(selectedMarker !== 'none')
 
     return () => {
       mountedHighlighter.destroy()
-      highlighterRef.current = null
+      questionHighlighterRef.current = null
     }
-  }, [blockKey, highlightColor, questionHtml, selectedMarker, selectedQnum, syncedSelectedQnum])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blockKey, questionHtml, selectedQnum, syncedSelectedQnum])
 
   useEffect(() => {
-    highlighterRef.current?.setColor(highlightColor)
-    highlighterRef.current?.setEnabled(selectedMarker !== 'none')
+    if (!block || !explanationBodyRef.current || !explanationVisible) {
+      return
+    }
+    if (!explanationHtml) {
+      return
+    }
+    if (selectedQnum !== syncedSelectedQnum) {
+      return
+    }
+
+    const initialPayload = JSON.stringify(getHighlightDoc(block, selectedQnum).explanation)
+    ownHighlightPayloadRef.current = currentHighlightPayload
+    const mountedHighlighter = mountQuestionHighlighter({
+      container: explanationBodyRef.current,
+      color: highlightColor,
+      target: 'explanation',
+      serializedHighlights: initialPayload,
+      onSerializedChange(serialized) {
+        const next = mutateCurrentInfo((draft) => {
+          const nextBlock = draft.progress.blockhist[blockKey]!
+          nextBlock.questionStates[selectedQnum]!.visited = true
+          setHighlightDocTarget(nextBlock, selectedQnum, 'explanation', parseSerializedHighlightEntries(serialized))
+        })
+        ownHighlightPayloadRef.current = next?.progress.blockhist[blockKey]?.highlights[selectedQnum] ?? '[]'
+        void persistInfo(next, { silent: true })
+      }
+    })
+    explanationHighlighterRef.current = mountedHighlighter
+    mountedHighlighter.setEnabled(selectedMarker !== 'none')
+
+    return () => {
+      mountedHighlighter.destroy()
+      explanationHighlighterRef.current = null
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blockKey, explanationHtml, explanationVisible, selectedQnum, syncedSelectedQnum])
+
+  useEffect(() => {
+    questionHighlighterRef.current?.setColor(highlightColor)
+    questionHighlighterRef.current?.setEnabled(selectedMarker !== 'none')
+    explanationHighlighterRef.current?.setColor(highlightColor)
+    explanationHighlighterRef.current?.setEnabled(selectedMarker !== 'none')
   }, [highlightColor, selectedMarker])
+
+  // Sync external highlight payload changes (e.g. "Clear All Highlights"
+  // from the marker menu) into the live engine without destroying it.
+  // Self-mutations are tracked via ownHighlightPayloadRef so we skip
+  // redundant setEntries calls.
+  useEffect(() => {
+    if (currentHighlightPayload === ownHighlightPayloadRef.current) {
+      return
+    }
+    ownHighlightPayloadRef.current = currentHighlightPayload
+    if (questionHighlighterRef.current) {
+      const doc = block ? getHighlightDoc(block, selectedQnum) : { question: [], explanation: [] }
+      questionHighlighterRef.current.setEntries(doc.question)
+    }
+    if (explanationHighlighterRef.current) {
+      const doc = block ? getHighlightDoc(block, selectedQnum) : { question: [], explanation: [] }
+      explanationHighlighterRef.current.setEntries(doc.explanation)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentHighlightPayload])
 
   const openImageInspector = useCallback((image: HTMLImageElement) => {
     const src = image.getAttribute('src')
@@ -1265,7 +1373,7 @@ export function ExamViewPage() {
       ? 'Standard exam-style reference ranges based on the NBME laboratory values sheet.'
       : activeTool === 'calculator'
         ? 'A native in-block calculator so you can keep the exam workspace on one screen.'
-        : 'This panel opens like the other tools and is intentionally empty for now.'
+        : 'Adjust reading text and question rail indicators for this exam workspace.'
 
   return (
     <>
@@ -1444,7 +1552,7 @@ export function ExamViewPage() {
                       </svg>
                     </span>
                   ) : null}
-                  {!entry.flagged && !entry.state?.visited && entry.index !== selectedQnum ? <span className="q-unopened-dot" aria-hidden="true" /> : null}
+                  {uiPrefs.showUnsubmittedIndicator && !entry.flagged && !entry.state?.submitted && entry.index !== selectedQnum ? <span className="q-unsubmitted-dot" aria-hidden="true" /> : null}
                 </li>
               ))}
             </ul>
@@ -1455,7 +1563,7 @@ export function ExamViewPage() {
         <section className="exam-panel exam-panel-continuous">
           <div ref={scrollRef} id="continuousScroll" className="exam-scroll exam-scroll-continuous">
             <section className="exam-section">
-              <div ref={questionBodyRef} className="exam-question-body" dangerouslySetInnerHTML={{ __html: questionHtml }} />
+              <div ref={questionBodyRef} className="exam-question-body exam-reading-scale" dangerouslySetInnerHTML={{ __html: questionHtml }} />
               {showCaution ? (
                 <div className="alert alert-warning mt-3" role="alert">
                   {factCheck?.status && ['disputed', 'unresolved'].includes(factCheck.status) ? (
@@ -1480,7 +1588,7 @@ export function ExamViewPage() {
                   </button>
                 </div>
               ) : null}
-              <div className="exam-choices-container">
+              <div className="exam-choices-container exam-reading-scale">
                 <div className="exam-choice-list">
                   {displayChoices.map((choice) => {
                     const showOutcome = block.complete || (block.mode === 'tutor' && currentState.revealed)
@@ -1597,7 +1705,7 @@ export function ExamViewPage() {
                   ) : null}
                 </div>
               ) : null}
-              <div ref={explanationBodyRef} className="exam-explanation-body" dangerouslySetInnerHTML={{ __html: explanationHtml }} />
+              <div ref={explanationBodyRef} className="exam-explanation-body exam-reading-scale" dangerouslySetInnerHTML={{ __html: explanationHtml }} />
             </section>
           </div>
         </section>
@@ -1757,9 +1865,131 @@ export function ExamViewPage() {
           ) : null}
 
           {activeTool === 'settings' ? (
-            <div className="exam-v2-tool-empty">
-              <p className="exam-v2-tool-empty-title">{activeToolTitle}</p>
-              <p className="exam-v2-tool-empty-copy">This panel is intentionally empty for now.</p>
+            <div className="exam-v2-settings">
+              <section className="exam-v2-settings-row">
+                <div className="exam-v2-settings-label-wrap">
+                  <p className="exam-v2-settings-label">Font size</p>
+                  <p className="exam-v2-settings-value">{Math.round(uiPrefs.fontSizeScale * 100)}%</p>
+                </div>
+                <div className="exam-v2-settings-controls">
+                  <button
+                    type="button"
+                    className="exam-v2-settings-btn"
+                    aria-label="Decrease font size"
+                    disabled={uiPrefs.fontSizeScale <= FONT_SIZE_MIN + 1e-6}
+                    onClick={() => updateUiPrefs({ fontSizeScale: normalizeFontSizeScale(uiPrefs.fontSizeScale - FONT_SIZE_STEP) })}
+                  >
+                    −
+                  </button>
+                  <button
+                    type="button"
+                    className="exam-v2-settings-btn"
+                    aria-label="Increase font size"
+                    disabled={uiPrefs.fontSizeScale >= FONT_SIZE_MAX - 1e-6}
+                    onClick={() => updateUiPrefs({ fontSizeScale: normalizeFontSizeScale(uiPrefs.fontSizeScale + FONT_SIZE_STEP) })}
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    className="exam-v2-settings-btn exam-v2-settings-btn-reset"
+                    onClick={() => updateUiPrefs({ fontSizeScale: DEFAULT_UI_PREFS.fontSizeScale })}
+                  >
+                    Reset
+                  </button>
+                </div>
+              </section>
+
+              <section className="exam-v2-settings-row">
+                <div className="exam-v2-settings-label-wrap">
+                  <p className="exam-v2-settings-label">Font weight</p>
+                  <p className="exam-v2-settings-value">
+                    {uiPrefs.fontWeightDelta === 0 ? 'Normal' : (uiPrefs.fontWeightDelta > 0 ? `Heavier +${uiPrefs.fontWeightDelta}` : `Lighter ${uiPrefs.fontWeightDelta}`)}
+                  </p>
+                </div>
+                <div className="exam-v2-settings-controls">
+                  <button
+                    type="button"
+                    className="exam-v2-settings-btn"
+                    aria-label="Decrease font weight"
+                    disabled={uiPrefs.fontWeightDelta <= FONT_WEIGHT_MIN}
+                    onClick={() => updateUiPrefs({ fontWeightDelta: normalizeFontWeightDelta(uiPrefs.fontWeightDelta - FONT_WEIGHT_STEP) })}
+                  >
+                    −
+                  </button>
+                  <button
+                    type="button"
+                    className="exam-v2-settings-btn"
+                    aria-label="Increase font weight"
+                    disabled={uiPrefs.fontWeightDelta >= FONT_WEIGHT_MAX}
+                    onClick={() => updateUiPrefs({ fontWeightDelta: normalizeFontWeightDelta(uiPrefs.fontWeightDelta + FONT_WEIGHT_STEP) })}
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    className="exam-v2-settings-btn exam-v2-settings-btn-reset"
+                    onClick={() => updateUiPrefs({ fontWeightDelta: DEFAULT_UI_PREFS.fontWeightDelta })}
+                  >
+                    Reset
+                  </button>
+                </div>
+              </section>
+
+              <section className="exam-v2-settings-row exam-v2-settings-row-stack">
+                <p className="exam-v2-settings-label">Theme</p>
+                <div className="exam-v2-settings-theme">
+                  <label className={`exam-v2-settings-theme-option ${uiPrefs.theme === 'light' ? 'active' : ''}`}>
+                    <input
+                      type="radio"
+                      name="exam-v2-theme"
+                      value="light"
+                      checked={uiPrefs.theme === 'light'}
+                      onChange={() => updateUiPrefs({ theme: 'light' })}
+                    />
+                    <span>Light</span>
+                  </label>
+                  <label className="exam-v2-settings-theme-option disabled" aria-disabled="true" title="Coming soon">
+                    <input
+                      type="radio"
+                      name="exam-v2-theme"
+                      value="dark"
+                      disabled
+                      checked={false}
+                      readOnly
+                    />
+                    <span>Dark</span>
+                    <span className="exam-v2-settings-badge">Coming soon</span>
+                  </label>
+                </div>
+              </section>
+
+              <section className="exam-v2-settings-row">
+                <div className="exam-v2-settings-label-wrap">
+                  <p className="exam-v2-settings-label">Show unsubmitted question indicator</p>
+                  <p className="exam-v2-settings-hint">
+                    Blue dot in the left rail for questions you haven't submitted yet.
+                  </p>
+                </div>
+                <label className="exam-v2-settings-switch">
+                  <input
+                    type="checkbox"
+                    checked={uiPrefs.showUnsubmittedIndicator}
+                    onChange={(event) => updateUiPrefs({ showUnsubmittedIndicator: event.target.checked })}
+                  />
+                  <span className="exam-v2-settings-switch-slider" aria-hidden="true" />
+                </label>
+              </section>
+
+              <div className="exam-v2-settings-footer">
+                <button
+                  type="button"
+                  className="exam-v2-tool-action"
+                  onClick={resetUiPrefs}
+                >
+                  Reset all settings
+                </button>
+              </div>
             </div>
           ) : null}
         </aside>

@@ -1,0 +1,284 @@
+- generic [ref=e2]:
+  - generic [ref=e276]:
+    - banner [ref=e277]:
+      - generic [ref=e278]:
+        - button "Toggle sidebar" [pressed] [ref=e279] [cursor=pointer]:
+          - img [ref=e280]
+        - generic [ref=e281]:
+          - generic [ref=e282]: Item 10 of 10
+          - generic [ref=e283]: "Question Id: 102"
+        - button "Mark" [ref=e284] [cursor=pointer]:
+          - img [ref=e285]
+          - generic [ref=e287]: Mark
+      - generic [ref=e288]:
+        - button "Previous" [ref=e289] [cursor=pointer]:
+          - img [ref=e290]
+          - generic [ref=e292]: Previous
+        - button "Back" [ref=e293] [cursor=pointer]:
+          - img [ref=e294]
+          - generic [ref=e296]: Back
+      - generic [ref=e297]:
+        - button "Shortcuts" [pressed] [ref=e298] [cursor=pointer]:
+          - img [ref=e299]
+          - generic [ref=e302]: Shortcuts
+        - button "Full Screen" [ref=e303] [cursor=pointer]:
+          - img [ref=e304]
+          - generic [ref=e306]: Full Screen
+        - button "Marker" [ref=e307] [cursor=pointer]:
+          - img [ref=e308]
+          - generic [ref=e312]: Marker
+        - button "Lab Values" [ref=e313] [cursor=pointer]:
+          - img [ref=e314]
+          - generic [ref=e317]: Lab Values
+        - button "Notes" [ref=e318] [cursor=pointer]:
+          - img [ref=e319]
+          - generic [ref=e322]: Notes
+        - button "Calculator" [ref=e323] [cursor=pointer]:
+          - img [ref=e324]
+          - generic [ref=e327]: Calculator
+        - button "Settings" [expanded] [active] [ref=e328] [cursor=pointer]:
+          - img [ref=e329]
+          - generic [ref=e332]: Settings
+    - generic [ref=e333]:
+      - complementary [ref=e334]:
+        - list [ref=e336]:
+          - listitem [ref=e337] [cursor=pointer]:
+            - generic [ref=e338]: ✕
+            - generic [ref=e339]: "1"
+          - listitem [ref=e340] [cursor=pointer]:
+            - generic [ref=e341]: ✓
+            - generic [ref=e342]: "2"
+          - listitem [ref=e343] [cursor=pointer]:
+            - generic [ref=e344]: ✕
+            - generic [ref=e345]: "3"
+          - listitem [ref=e346] [cursor=pointer]:
+            - generic [ref=e347]: ✓
+            - generic [ref=e348]: "4"
+          - listitem [ref=e349] [cursor=pointer]:
+            - generic [ref=e350]: ✕
+            - generic [ref=e351]: "5"
+          - listitem [ref=e352] [cursor=pointer]:
+            - generic [ref=e353]: ✓
+            - generic [ref=e354]: "6"
+          - listitem [ref=e355] [cursor=pointer]:
+            - generic [ref=e356]: ✕
+            - generic [ref=e357]: "7"
+          - listitem [ref=e358] [cursor=pointer]:
+            - generic [ref=e359]: ✕
+            - generic [ref=e360]: "8"
+          - listitem [ref=e361] [cursor=pointer]:
+            - generic [ref=e362]: ✕
+            - generic [ref=e363]: "9"
+          - listitem [ref=e364] [cursor=pointer]:
+            - generic [ref=e365]: ✓
+            - generic [ref=e366]: "10"
+      - main [ref=e367]:
+        - generic [ref=e369]:
+          - generic [ref=e371]:
+            - paragraph [ref=e618]: A 52-year-old man undergoes overnight polysomnography to evaluate suspected sleep-disordered breathing. Which of the following polysomnography findings confirms the diagnosis of obstructive sleep apnea?
+            - paragraph [ref=e619]:
+              - strong [ref=e620]: Which polysomnography finding confirms obstructive sleep apnea?
+          - generic [ref=e375]:
+            - generic [ref=e377]:
+              - generic [ref=e378]:
+                - button "Select answer A" [disabled] [ref=e379]
+                - button "A More than 15 obstructive episodes per hour" [disabled] [ref=e380]:
+                  - generic [ref=e381]: A
+                  - generic [ref=e382]: More than 15 obstructive episodes per hour
+              - generic [ref=e383]:
+                - button "Select answer B" [disabled] [ref=e384]
+                - button "B Alternating apneic and hyperpneic episodes" [disabled] [ref=e385]:
+                  - generic [ref=e386]: B
+                  - generic [ref=e387]: Alternating apneic and hyperpneic episodes
+              - generic [ref=e388]:
+                - button "Select answer C" [disabled] [ref=e389]
+                - button "C More than 10 seconds of breathing cessation" [disabled] [ref=e390]:
+                  - generic [ref=e391]: C
+                  - generic [ref=e392]: More than 10 seconds of breathing cessation
+              - generic [ref=e393]:
+                - button "Select answer D" [disabled] [ref=e394]
+                - button "D Cessation of breathing without respiratory effort" [disabled] [ref=e395]:
+                  - generic [ref=e396]: D
+                  - generic [ref=e397]: Cessation of breathing without respiratory effort
+              - generic [ref=e398]:
+                - button "Select answer E" [disabled] [ref=e399]
+                - button "E Repetitive periodic limb movements throughout the night" [disabled] [ref=e400]:
+                  - generic [ref=e401]: E
+                  - generic [ref=e402]: Repetitive periodic limb movements throughout the night
+            - button "Back to Blocks" [ref=e404] [cursor=pointer]
+          - generic [ref=e406]:
+            - paragraph [ref=e621]:
+              - strong [ref=e622]: "Correct Answer: A"
+            - paragraph [ref=e623]:
+              - strong [ref=e624]: "Explanation:"
+              - text: Obstructive sleep apnea (OSA) is confirmed on polysomnography by an elevated apnea-hypopnea index (AHI) due to obstructive respiratory events (apneas/hypopneas with ongoing respiratory effort). An AHI of 15 or more events per hour is diagnostic for OSA even in the absence of additional clinical features; therefore, documenting more than 15 obstructive episodes per hour confirms the diagnosis.
+            - paragraph [ref=e625]:
+              - img [ref=e626]
+            - paragraph [ref=e627]:
+              - strong [ref=e628]: "Why other answers are incorrect:"
+            - list [ref=e629]:
+              - listitem [ref=e630]:
+                - strong [ref=e631]: "A:"
+                - text: Correct. An AHI (obstructive apneas/hypopneas) of ≥15 events/hour on polysomnography supports the diagnosis of obstructive sleep apnea.
+              - listitem [ref=e632]:
+                - strong [ref=e633]: "B:"
+                - text: This describes periodic crescendo-decrescendo ventilation with alternating apnea and hyperpnea (Cheyne-Stokes respiration), which is more consistent with central sleep apnea (eg, in heart failure or neurologic disease) rather than obstructive sleep apnea.
+              - listitem [ref=e634]:
+                - strong [ref=e635]: "C:"
+                - text: A cessation of breathing for ≥10 seconds defines an apnea event, but a single event (or this duration alone) does not confirm OSA; diagnosis depends on the frequency of events per hour (AHI) and whether events are obstructive vs central.
+              - listitem [ref=e636]:
+                - strong [ref=e637]: "D:"
+                - text: Absent respiratory effort during apneic episodes indicates central sleep apnea. In OSA, airflow ceases despite continued respiratory effort due to upper airway obstruction.
+              - listitem [ref=e638]:
+                - strong [ref=e639]: "E:"
+                - text: Periodic limb movement disorder can cause sleep fragmentation and daytime sleepiness and may be seen on polysomnography, but it is not diagnostic of obstructive sleep apnea and does not establish sleep-disordered breathing.
+            - paragraph [ref=e640]:
+              - strong [ref=e641]: "Educational Objective:"
+              - text: Obstructive sleep apnea is confirmed on polysomnography by an elevated apnea-hypopnea index due to obstructive events (continued respiratory effort with absent/reduced airflow). An AHI ≥15 events/hour is diagnostic even without additional symptoms; central sleep apnea is suggested by apneic episodes without respiratory effort and may show Cheyne-Stokes breathing.
+    - contentinfo [ref=e428]:
+      - generic [ref=e429]:
+        - generic [ref=e430]:
+          - generic [ref=e431]: Time Used
+          - generic [ref=e432]: 0:00:36
+        - generic [ref=e433]: TUTOR
+      - button "Back" [ref=e435] [cursor=pointer]:
+        - img [ref=e436]
+        - generic [ref=e438]: Back
+  - button "Close tool panel" [ref=e642] [cursor=pointer]
+  - complementary "Settings Panel" [ref=e643]:
+    - generic [ref=e644]:
+      - generic [ref=e645]:
+        - paragraph [ref=e646]: Settings
+        - paragraph [ref=e647]: This panel opens like the other tools and is intentionally empty for now.
+      - button "Close" [ref=e648] [cursor=pointer]
+    - generic [ref=e649]:
+      - paragraph [ref=e650]: Settings
+      - paragraph [ref=e651]: This panel is intentionally empty for now.
+  - button "Close shortcuts" [ref=e463] [cursor=pointer]
+  - dialog "Keyboard Shortcuts" [ref=e464]:
+    - generic [ref=e465]:
+      - img [ref=e467]
+      - heading "Keyboard Shortcuts" [level=2] [ref=e470]
+      - button "Close shortcuts" [ref=e471] [cursor=pointer]: ×
+    - generic [ref=e472]:
+      - tablist "Shortcut platform" [ref=e473]:
+        - tab "Windows" [ref=e474] [cursor=pointer]
+        - tab "macOS" [selected] [ref=e475] [cursor=pointer]
+      - generic [ref=e476]:
+        - generic [ref=e477]:
+          - generic [ref=e478]:
+            - generic [ref=e480]: ⌥
+            - generic [ref=e481]:
+              - generic [ref=e482]: +
+              - generic [ref=e483]: M
+          - generic [ref=e484]: →
+          - generic [ref=e485]: Mark Question
+        - generic [ref=e486]:
+          - generic [ref=e487]:
+            - generic [ref=e489]: ⌥
+            - generic [ref=e490]:
+              - generic [ref=e491]: +
+              - generic [ref=e492]: "N"
+          - generic [ref=e493]: →
+          - generic [ref=e494]: Notes
+        - generic [ref=e495]:
+          - generic [ref=e496]:
+            - generic [ref=e498]: ⌥
+            - generic [ref=e499]:
+              - generic [ref=e500]: +
+              - generic [ref=e501]: L
+          - generic [ref=e502]: →
+          - generic [ref=e503]: Lab Values
+        - generic [ref=e504]:
+          - generic [ref=e505]:
+            - generic [ref=e507]: ⌥
+            - generic [ref=e508]:
+              - generic [ref=e509]: +
+              - generic [ref=e510]: C
+          - generic [ref=e511]: →
+          - generic [ref=e512]: Calculator
+        - generic [ref=e513]:
+          - generic [ref=e514]:
+            - generic [ref=e516]: ⌥
+            - generic [ref=e517]:
+              - generic [ref=e518]: +
+              - generic [ref=e519]: ","
+          - generic [ref=e520]: →
+          - generic [ref=e521]: Settings
+        - generic [ref=e522]:
+          - generic [ref=e523]:
+            - generic [ref=e525]: ⌥
+            - generic [ref=e526]:
+              - generic [ref=e527]: +
+              - generic [ref=e528]: A
+          - generic [ref=e529]: →
+          - generic [ref=e530]: Sidebar
+        - generic [ref=e531]:
+          - generic [ref=e532]:
+            - generic [ref=e534]: ⌥
+            - generic [ref=e535]:
+              - generic [ref=e536]: +
+              - generic [ref=e537]: Enter
+          - generic [ref=e538]: →
+          - generic [ref=e539]: Submit Choice
+        - generic [ref=e540]:
+          - generic [ref=e543]: "`"
+          - generic [ref=e544]: →
+          - generic [ref=e545]: Highlight Marker - None
+        - generic [ref=e546]:
+          - generic [ref=e549]: "1"
+          - generic [ref=e550]: →
+          - generic [ref=e551]: Highlight Marker - Yellow
+        - generic [ref=e552]:
+          - generic [ref=e555]: "2"
+          - generic [ref=e556]: →
+          - generic [ref=e557]: Highlight Marker - Green
+        - generic [ref=e558]:
+          - generic [ref=e561]: "3"
+          - generic [ref=e562]: →
+          - generic [ref=e563]: Highlight Marker - Cyan
+        - generic [ref=e564]:
+          - generic [ref=e567]: "4"
+          - generic [ref=e568]: →
+          - generic [ref=e569]: Highlight Marker - Red
+        - generic [ref=e570]:
+          - generic [ref=e573]: ←
+          - generic [ref=e574]: →
+          - generic [ref=e575]: Previous Question
+        - generic [ref=e576]:
+          - generic [ref=e579]: →
+          - generic [ref=e580]: →
+          - generic [ref=e581]: Next Question
+        - generic [ref=e582]:
+          - generic [ref=e583]:
+            - generic [ref=e585]: ⌘
+            - generic [ref=e586]:
+              - generic [ref=e587]: +
+              - generic [ref=e588]: ⇧
+            - generic [ref=e589]:
+              - generic [ref=e590]: +
+              - generic [ref=e591]: F
+          - generic [ref=e592]: →
+          - generic [ref=e593]: Full Screen
+        - generic [ref=e594]:
+          - generic [ref=e595]:
+            - generic [ref=e597]: ⌥
+            - generic [ref=e598]:
+              - generic [ref=e599]: +
+              - generic [ref=e600]: /
+          - generic [ref=e601]: →
+          - generic [ref=e602]: Shortcuts
+        - generic [ref=e603]:
+          - generic [ref=e604]:
+            - generic [ref=e606]: A
+            - generic [ref=e607]:
+              - generic [ref=e608]: ","
+              - generic [ref=e609]: B
+            - generic [ref=e610]:
+              - generic [ref=e611]: ","
+              - generic [ref=e612]: C
+            - generic [ref=e613]:
+              - generic [ref=e614]: ","
+              - generic [ref=e615]: D
+          - generic [ref=e616]: →
+          - generic [ref=e617]: Choices

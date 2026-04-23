@@ -40,6 +40,23 @@ function asFiniteNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
 
+function hasSavedHighlight(raw: string | undefined): boolean {
+  if (!raw || raw === '[]') {
+    return false
+  }
+  try {
+    const parsed = JSON.parse(raw)
+    if (!parsed || parsed.v !== 1) {
+      return false
+    }
+    const questionCount = Array.isArray(parsed.question) ? parsed.question.length : 0
+    const explanationCount = Array.isArray(parsed.explanation) ? parsed.explanation.length : 0
+    return questionCount + explanationCount > 0
+  } catch {
+    return false
+  }
+}
+
 export function normalizeBlockRecord(block: LegacyBlockRecord, choices: QbankInfo['choices']): BlockRecord {
   const blockqlist = asStringArray(block.blockqlist)
   const answers = asStringArray(block.answers).slice(0, blockqlist.length)
@@ -72,7 +89,7 @@ export function normalizeBlockRecord(block: LegacyBlockRecord, choices: QbankInf
     const revealedDefault = Boolean(block.complete) || (mode === 'tutor' && submitted)
     const revealed = state?.revealed ?? revealedDefault
     const correct = state?.correct ?? (answer !== '' && answer === choiceMeta.correct)
-    const hasHighlight = (highlights[index] ?? '[]') !== '[]'
+    const hasHighlight = hasSavedHighlight(highlights[index])
     const hasNote = (notes[index] ?? '').trim() !== ''
     const visited = state?.visited ?? (submitted || revealed || hasHighlight || hasNote || index < asFiniteNumber(block.currentquesnum, 0))
     questionStates.push({

@@ -20,6 +20,52 @@
   --q-radius-sm: 10px;
   --q-font-sans: "Aptos", "Segoe UI", "Helvetica Neue", "Arial Nova", sans-serif;
   --q-font-serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+
+  /* Reading-area typography (question stem, explanation, answer choices).
+     Settings panel controls override --q-font-size-scale and --q-font-weight-delta
+     on the <html> element via JS. */
+  --q-reading-size-base: 16px;
+  --q-reading-weight-base: 400;
+  --q-font-size-scale: 1;
+  --q-font-weight-delta: 0;
+  --q-reading-font-size: 16px;
+  --q-reading-font-weight: 400;
+
+  /* Highlighter colors — referenced by ::highlight(quail-q-*) and ::highlight(quail-e-*)
+     rules in exam-v2.css. Exposed as vars so dark mode can swap them later. */
+  --q-hl-yellow: #fff59d;
+  --q-hl-green: #b8f2e6;
+  --q-hl-cyan: #cde7ff;
+  --q-hl-red: #ffd6d6;
+}
+
+/* Dark theme placeholder. The Settings panel renders "Dark" disabled
+   ("Coming soon") but flipping [data-theme="dark"] manually will at least
+   not explode. Finishing dark later is CSS-only work. */
+:root[data-theme="dark"] {
+  --q-bg: #111827;
+  --q-surface: #1f2937;
+  --q-surface-strong: #111827;
+  --q-border: #334155;
+  --q-border-strong: #475569;
+  --q-text: #e2e8f0;
+  --q-text-muted: #94a3b8;
+}
+
+/* Reading-area scaling — attached to the question body wrapper,
+   the explanation body wrapper, and the answer-choices container. */
+.exam-reading-scale {
+  font-size: var(--q-reading-font-size);
+  font-weight: var(--q-reading-font-weight);
+}
+
+.exam-reading-scale p,
+.exam-reading-scale li,
+.exam-reading-scale td,
+.exam-reading-scale th,
+.exam-reading-scale span {
+  font-size: inherit;
+  font-weight: inherit;
 }
 
 html,
@@ -886,7 +932,7 @@ body.q-shell {
   color: #ffffff;
 }
 
-.exam-question-list .list-group-item .q-unopened-dot {
+.exam-question-list .list-group-item .q-unsubmitted-dot {
   background: #3b82f6;
   border-radius: 999px;
   grid-column: 3;
@@ -895,7 +941,7 @@ body.q-shell {
   width: 8px;
 }
 
-.exam-question-list .list-group-item.active .q-unopened-dot {
+.exam-question-list .list-group-item.active .q-unsubmitted-dot {
   background: #ffffff;
 }
 
@@ -1195,13 +1241,6 @@ body.q-shell {
 
 .exam-hidden {
   display: none !important;
-}
-
-.highlighter-context .highlighted {
-  border-radius: 4px;
-  box-decoration-break: clone;
-  cursor: pointer;
-  padding: 0 1px;
 }
 
 @media (max-width: 1200px) {

@@ -38,6 +38,7 @@ const highlighting = vi.hoisted(() => {
       return {
         setColor: vi.fn(),
         setEnabled: vi.fn(),
+        setEntries: vi.fn(),
         clearAll: vi.fn(),
         destroy: vi.fn()
       }
@@ -164,7 +165,8 @@ describe('ExamViewPage', () => {
     expect(screen.getByLabelText('Calculator Display')).toHaveValue('15')
 
     await userEvent.click(screen.getByRole('button', { name: 'Settings' }))
-    expect(screen.getByText('This panel is intentionally empty for now.')).toBeInTheDocument()
+    expect(screen.getByText('Font size')).toBeInTheDocument()
+    expect(screen.getByText('Theme')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Shortcuts' }))
     expect(screen.getByRole('dialog', { name: 'Keyboard Shortcuts' })).toBeInTheDocument()
@@ -219,7 +221,8 @@ describe('ExamViewPage', () => {
     expect(requestFullscreen).toHaveBeenCalledTimes(1)
 
     fireEvent.keyDown(window, { altKey: true, code: 'Comma', key: ',' })
-    expect(screen.getByText('This panel is intentionally empty for now.')).toBeInTheDocument()
+    expect(screen.getByText('Font size')).toBeInTheDocument()
+    expect(screen.getByText('Show unsubmitted question indicator')).toBeInTheDocument()
 
     fireEvent.keyDown(window, { altKey: true, code: 'Slash', key: '/' })
     expect(screen.getByRole('dialog', { name: 'Keyboard Shortcuts' })).toBeInTheDocument()
@@ -328,7 +331,7 @@ describe('ExamViewPage', () => {
     expect(highlighting.mountQuestionHighlighter).toHaveBeenCalledTimes(1)
   })
 
-  it('renders rail states for current, flagged, correct, incorrect, visited, and unopened questions', async () => {
+  it('renders rail states for current, flagged, correct, incorrect, visited, and unsubmitted questions', async () => {
     fixture = createQbankInfoFixture()
     fixture.progress.blockhist['0']!.blockqlist = ['101', '102', '103']
     fixture.progress.blockhist['0']!.answers = ['B', 'B', '']
@@ -358,6 +361,35 @@ describe('ExamViewPage', () => {
     expect(items[1]?.querySelector('.q-status-dot svg')).not.toBeNull()
     expect(items[1]?.querySelector('.q-flag-dot svg')).not.toBeNull()
     expect(items[2]?.className).toContain('q-item-unopened')
-    expect(items[2]?.querySelector('.q-unopened-dot')).not.toBeNull()
+    expect(items[2]?.querySelector('.q-unsubmitted-dot')).not.toBeNull()
+  })
+
+  it('hides the unsubmitted dot when the setting is toggled off', async () => {
+    window.localStorage.setItem('quail-live:store:exam:ui-prefs', JSON.stringify({
+      fontSizeScale: 1,
+      fontWeightDelta: 0,
+      theme: 'light',
+      showUnsubmittedIndicator: false
+    }))
+
+    fixture = createQbankInfoFixture()
+    fixture.progress.blockhist['0']!.blockqlist = ['101', '102']
+    fixture.progress.blockhist['0']!.answers = ['', '']
+    fixture.progress.blockhist['0']!.highlights = ['[]', '[]']
+    fixture.progress.blockhist['0']!.notes = ['', '']
+    fixture.progress.blockhist['0']!.questionStates = [
+      { submitted: false, revealed: false, correct: false, visited: false, eliminatedChoices: [] },
+      { submitted: false, revealed: false, correct: false, visited: false, eliminatedChoices: [] }
+    ]
+
+    const { container } = render(<ExamViewPage />)
+
+    await waitFor(() => {
+      expect(htmlHelpers.fetchQuestionAssets).toHaveBeenCalled()
+    })
+
+    expect(container.querySelector('.q-unsubmitted-dot')).toBeNull()
+
+    window.localStorage.removeItem('quail-live:store:exam:ui-prefs')
   })
 })
