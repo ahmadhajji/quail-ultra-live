@@ -1,0 +1,89 @@
+- generic [ref=e159]:
+  - generic [ref=e160]:
+    - generic [ref=e161]:
+      - button "‹" [ref=e162] [cursor=pointer]
+      - generic [ref=e163]:
+        - generic [ref=e164]: Q
+        - generic [ref=e165]:
+          - paragraph [ref=e166]: Quail Ultra
+          - paragraph [ref=e167]: Session Builder
+    - list [ref=e169]:
+      - listitem [ref=e170]:
+        - button "Overview" [ref=e171] [cursor=pointer]
+      - listitem [ref=e172]:
+        - button "New Block" [ref=e173] [cursor=pointer]
+      - listitem [ref=e174]:
+        - button "Previous Blocks" [ref=e175] [cursor=pointer]
+  - generic [ref=e177]:
+    - generic [ref=e178]:
+      - generic [ref=e179]:
+        - generic [ref=e180]:
+          - generic [ref=e181]:
+            - paragraph [ref=e182]: Study Mode
+            - paragraph [ref=e183]: This build now uses tutor mode only. Timed and untimed sessions are deprecated because they were not reliable.
+          - generic [ref=e184]: Tutor mode
+        - button "Immediate Review Tutor Submit one question at a time, reveal the rationale instantly, and move through the block as guided review." [ref=e187] [cursor=pointer]:
+          - generic [ref=e188]: Immediate Review
+          - generic [ref=e189]: Tutor
+          - generic [ref=e190]: Submit one question at a time, reveal the rationale instantly, and move through the block as guided review.
+      - generic [ref=e191]:
+        - generic [ref=e193]:
+          - paragraph [ref=e194]: Question Pool
+          - paragraph [ref=e195]: Build focused blocks from unseen, incorrect, flagged, full-bank, or custom ID lists.
+        - group [ref=e197]:
+          - button "Unused 1" [ref=e198] [cursor=pointer]:
+            - text: Unused
+            - generic [ref=e199]: "1"
+          - button "Incorrects 0" [ref=e200] [cursor=pointer]:
+            - text: Incorrects
+            - generic [ref=e201]: "0"
+          - button "Flagged 0" [ref=e202] [cursor=pointer]:
+            - text: Flagged
+            - generic [ref=e203]: "0"
+          - button "All 1" [ref=e204] [cursor=pointer]:
+            - text: All
+            - generic [ref=e205]: "1"
+          - button "Custom IDs" [ref=e206] [cursor=pointer]
+      - generic [ref=e207]:
+        - generic [ref=e209]:
+          - paragraph [ref=e210]: Block Settings
+          - paragraph [ref=e211]: Keep the test builder compact, but expose the control points that matter for compatibility with existing Quail Ultra banks.
+        - generic [ref=e212]:
+          - generic [ref=e213]:
+            - generic [ref=e214]:
+              - generic [ref=e215]: Question Count
+              - generic [ref=e216]:
+                - textbox [ref=e217]
+                - generic [ref=e218]: questions
+              - generic [ref=e219]:
+                - generic [ref=e220]: "1"
+                - generic [ref=e221]: available with the current pool and filters
+            - generic [ref=e222]:
+              - generic [ref=e223]: Timing
+              - paragraph [ref=e224]: Tutor mode records elapsed time for the block and reveals the explanation immediately after each submission.
+          - generic [ref=e226] [cursor=pointer]:
+            - checkbox "Present question IDs sequentially instead of randomizing them." [ref=e227]
+            - generic [ref=e228]: Present question IDs sequentially instead of randomizing them.
+          - button "Start Block" [ref=e230] [cursor=pointer]
+    - generic [ref=e231]:
+      - generic [ref=e232]:
+        - generic [ref=e234]:
+          - paragraph [ref=e235]: Session Snapshot
+          - paragraph [ref=e236]: A compact summary of how the block will behave once it opens.
+        - generic [ref=e238]:
+          - generic [ref=e239]:
+            - strong [ref=e240]: Tutor mode
+            - text: Submit each question individually and reveal the explanation immediately after you lock the answer.
+          - generic [ref=e241]:
+            - strong [ref=e242]: Unused questions
+            - text: The pool starts with unseen items only, which is closest to a fresh first pass through the bank.
+          - generic [ref=e243]:
+            - strong [ref=e244]: All subjects included
+            - text: Every tag group is currently set to All Subtags, so the pool is not narrowed by subject filters.
+      - generic [ref=e245]:
+        - generic [ref=e247]:
+          - paragraph [ref=e248]: Compatibility Notes
+          - paragraph [ref=e249]: Quail Ultra remains BYO question bank, so this UI layer preserves the existing HTML and JSON bank format.
+        - generic [ref=e250]:
+          - paragraph [ref=e251]: The builder still honors grouped questions, custom ID lists, pane definitions, and saved progress from older Quail sessions.
+          - paragraph [ref=e252]: Legacy blocks will load with derived defaults for mode and review layout, so existing progress files remain readable.

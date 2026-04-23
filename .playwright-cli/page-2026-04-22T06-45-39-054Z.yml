@@ -1,0 +1,84 @@
+- generic [ref=e276]:
+  - banner [ref=e277]:
+    - generic [ref=e278]:
+      - button [ref=e279] [cursor=pointer]:
+        - img [ref=e280]
+      - generic [ref=e282]:
+        - generic [ref=e283]: Item 1 of 3
+        - generic [ref=e284]: "Question Id: 626"
+      - button "Flag" [ref=e285] [cursor=pointer]:
+        - img [ref=e286]
+        - text: Flag
+    - generic [ref=e288]:
+      - button "Previous" [disabled]:
+        - img
+        - text: Previous
+      - button "Next" [ref=e289] [cursor=pointer]:
+        - img [ref=e290]
+        - text: Next
+    - generic [ref=e292]:
+      - button "Notes" [ref=e293] [cursor=pointer]
+      - generic [ref=e294]:
+        - button [ref=e295] [cursor=pointer]
+        - button [ref=e296] [cursor=pointer]
+        - button [ref=e297] [cursor=pointer]
+        - button [ref=e298] [cursor=pointer]
+      - button "Lab Values" [ref=e299] [cursor=pointer]
+      - button "Calculator" [ref=e300] [cursor=pointer]
+  - generic [ref=e301]:
+    - complementary [ref=e302]:
+      - list [ref=e304]:
+        - listitem [ref=e305] [cursor=pointer]:
+          - generic [ref=e306]: "1"
+        - listitem [ref=e307] [cursor=pointer]:
+          - generic [ref=e308]: "2"
+        - listitem [ref=e310] [cursor=pointer]:
+          - generic [ref=e311]: "3"
+    - main [ref=e313]:
+      - generic [ref=e315]:
+        - generic [ref=e317]:
+          - paragraph [ref=e318]: A patient is evaluated in clinic and is found to have a heart rate of 108/min. An ECG is obtained and shows a classic sawtooth pattern. Which of the following is the most likely diagnosis?
+          - paragraph [ref=e319]:
+            - strong [ref=e320]: Which ECG diagnosis best explains these findings?
+        - generic [ref=e321]:
+          - generic [ref=e323]:
+            - generic [ref=e324]:
+              - button "Select answer A" [ref=e325] [cursor=pointer]
+              - button "A Atrial flutter" [ref=e326] [cursor=pointer]:
+                - generic [ref=e327]: A
+                - generic [ref=e328]: Atrial flutter
+            - generic [ref=e329]:
+              - button "Select answer B" [ref=e330] [cursor=pointer]
+              - button "B Atrial fibrillation" [ref=e331] [cursor=pointer]:
+                - generic [ref=e332]: B
+                - generic [ref=e333]: Atrial fibrillation
+            - generic [ref=e334]:
+              - button "Select answer C" [ref=e335] [cursor=pointer]
+              - button "C Anterior STEMI" [ref=e336] [cursor=pointer]:
+                - generic [ref=e337]: C
+                - generic [ref=e338]: Anterior STEMI
+            - generic [ref=e339]:
+              - button "Select answer D" [ref=e340] [cursor=pointer]
+              - button "D Ischemia" [ref=e341] [cursor=pointer]:
+                - generic [ref=e342]: D
+                - generic [ref=e343]: Ischemia
+            - generic [ref=e344]:
+              - button "Select answer E" [ref=e345] [cursor=pointer]
+              - button "E AVNRT" [ref=e346] [cursor=pointer]:
+                - generic [ref=e347]: E
+                - generic [ref=e348]: AVNRT
+          - generic [ref=e349]:
+            - button "Submit Answer" [disabled]
+  - contentinfo [ref=e350]:
+    - generic [ref=e351]:
+      - generic [ref=e352]:
+        - generic [ref=e353]: Time Used
+        - generic [ref=e354]: 0:00:02
+      - generic [ref=e355]: TUTOR
+    - generic [ref=e356]:
+      - button "Suspend" [ref=e357] [cursor=pointer]:
+        - img [ref=e358]
+        - generic [ref=e361]: Suspend
+      - button "End Block" [ref=e362] [cursor=pointer]:
+        - img [ref=e363]
+        - generic [ref=e365]: End Block

@@ -1,0 +1,62 @@
+- generic [ref=e253]:
+  - banner [ref=e254]:
+    - generic [ref=e255]:
+      - button [ref=e256] [cursor=pointer]:
+        - img [ref=e257]
+      - generic [ref=e259]:
+        - generic [ref=e260]: Item 1 of 1
+        - generic [ref=e261]: "Question Id: 1"
+      - button "Flag" [ref=e262] [cursor=pointer]:
+        - img [ref=e263]
+        - text: Flag
+    - generic [ref=e265]:
+      - button "Previous" [disabled]:
+        - img
+        - text: Previous
+      - button "Finish" [ref=e266] [cursor=pointer]:
+        - img [ref=e267]
+        - text: Finish
+    - generic [ref=e269]:
+      - button "Notes" [ref=e270] [cursor=pointer]
+      - generic [ref=e271]:
+        - button [ref=e272] [cursor=pointer]
+        - button [ref=e273] [cursor=pointer]
+        - button [ref=e274] [cursor=pointer]
+        - button [ref=e275] [cursor=pointer]
+      - button "Lab Values" [ref=e276] [cursor=pointer]
+      - button "Calculator" [ref=e277] [cursor=pointer]
+  - generic [ref=e278]:
+    - complementary [ref=e279]:
+      - list [ref=e281]:
+        - listitem [ref=e282] [cursor=pointer]:
+          - generic [ref=e283]: "1"
+    - main [ref=e284]:
+      - generic [ref=e286]:
+        - paragraph [ref=e289]: What is 2 + 2?
+        - generic [ref=e290]:
+          - generic [ref=e292]:
+            - generic [ref=e293]:
+              - button "Select answer A" [ref=e294] [cursor=pointer]
+              - button "A 4B. 5" [ref=e295] [cursor=pointer]:
+                - generic [ref=e296]: A
+                - generic [ref=e297]: 4B. 5
+            - generic [ref=e298]:
+              - button "Select answer B" [ref=e299] [cursor=pointer]
+              - button "B Choice B" [ref=e300] [cursor=pointer]:
+                - generic [ref=e301]: B
+                - generic [ref=e302]: Choice B
+          - generic [ref=e303]:
+            - button "Submit Answer" [disabled]
+  - contentinfo [ref=e304]:
+    - generic [ref=e305]:
+      - generic [ref=e306]:
+        - generic [ref=e307]: Time Used
+        - generic [ref=e308]: 0:00:01
+      - generic [ref=e309]: TUTOR
+    - generic [ref=e310]:
+      - button "Suspend" [ref=e311] [cursor=pointer]:
+        - img [ref=e312]
+        - generic [ref=e315]: Suspend
+      - button "End Block" [ref=e316] [cursor=pointer]:
+        - img [ref=e317]
+        - generic [ref=e319]: End Block

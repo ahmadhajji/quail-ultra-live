@@ -607,6 +607,198 @@ body[data-exam-ui="v2"] .exam-v2-tool-empty-copy {
   max-width: 240px;
 }
 
+body[data-exam-ui="v2"] .exam-v2-settings {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-row {
+  align-items: center;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding-bottom: 12px;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-row-stack {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 8px;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-label-wrap {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-label {
+  color: #243443;
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-value {
+  color: #64748b;
+  font-size: 12px;
+  margin: 0;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-hint {
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-controls {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-btn {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  color: #243443;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 700;
+  height: 28px;
+  line-height: 1;
+  min-width: 32px;
+  padding: 0 8px;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-btn:hover:not(:disabled) {
+  background: #eef3f8;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-btn:disabled {
+  color: #94a3b8;
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-btn-reset {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-theme {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-theme-option {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  flex: 1 1 50%;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 6px;
+  padding: 8px 10px;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-theme-option.active {
+  background: #ddeaf7;
+  border-color: #2a5e90;
+  color: #1f466b;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-theme-option.disabled {
+  color: #94a3b8;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-theme-option input {
+  margin: 0;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-badge {
+  background: #fbf3d7;
+  border-radius: 999px;
+  color: #8a6b16;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-left: auto;
+  padding: 2px 8px;
+  text-transform: uppercase;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-switch {
+  align-items: center;
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 22px;
+  position: relative;
+  width: 40px;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-switch input {
+  height: 0;
+  opacity: 0;
+  width: 0;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-switch-slider {
+  background: #cbd5e1;
+  border-radius: 999px;
+  height: 22px;
+  left: 0;
+  position: absolute;
+  top: 0;
+  transition: background 150ms ease;
+  width: 40px;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-switch-slider::after {
+  background: #ffffff;
+  border-radius: 999px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.25);
+  content: "";
+  height: 18px;
+  left: 2px;
+  position: absolute;
+  top: 2px;
+  transition: left 150ms ease;
+  width: 18px;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-switch input:checked + .exam-v2-settings-switch-slider {
+  background: #2a5e90;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-switch input:checked + .exam-v2-settings-switch-slider::after {
+  left: 20px;
+}
+
+body[data-exam-ui="v2"] .exam-v2-settings-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
 body[data-exam-ui="v2"] .exam-v2-calculator,
 body[data-exam-ui="v2"] .exam-v2-labs {
   display: flex;

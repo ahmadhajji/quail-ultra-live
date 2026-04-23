@@ -1,0 +1,237 @@
+- generic [ref=e2]:
+  - generic [ref=e276]:
+    - banner [ref=e277]:
+      - generic [ref=e278]:
+        - button "Toggle sidebar" [pressed] [ref=e279] [cursor=pointer]:
+          - img [ref=e280]
+        - generic [ref=e281]:
+          - generic [ref=e282]: Item 1 of 3
+          - generic [ref=e283]: "Question Id: 626"
+        - button "Mark" [ref=e284] [cursor=pointer]:
+          - img [ref=e285]
+          - generic [ref=e287]: Mark
+      - generic [ref=e288]:
+        - button "Previous" [disabled] [ref=e289] [cursor=pointer]:
+          - img [ref=e290]
+          - generic [ref=e292]: Previous
+        - button "Next" [ref=e293] [cursor=pointer]:
+          - img [ref=e294]
+          - generic [ref=e296]: Next
+      - generic [ref=e297]:
+        - button "Shortcuts" [active] [pressed] [ref=e298] [cursor=pointer]:
+          - img [ref=e299]
+          - generic [ref=e302]: Shortcuts
+        - button "Full Screen" [ref=e303] [cursor=pointer]:
+          - img [ref=e304]
+          - generic [ref=e306]: Full Screen
+        - button "Marker" [ref=e307] [cursor=pointer]:
+          - img [ref=e308]
+          - generic [ref=e310]: Marker
+        - button "Lab Values" [ref=e311] [cursor=pointer]:
+          - img [ref=e312]
+          - generic [ref=e314]: Lab Values
+        - button "Notes" [ref=e315] [cursor=pointer]:
+          - img [ref=e316]
+          - generic [ref=e319]: Notes
+        - button "Calculator" [ref=e320] [cursor=pointer]:
+          - img [ref=e321]
+          - generic [ref=e323]: Calculator
+        - button "Settings" [expanded] [ref=e324] [cursor=pointer]:
+          - img [ref=e325]
+          - generic [ref=e327]: Settings
+    - generic [ref=e328]:
+      - complementary [ref=e329]:
+        - list [ref=e331]:
+          - listitem [ref=e332] [cursor=pointer]:
+            - generic [ref=e333]: "1"
+          - listitem [ref=e334] [cursor=pointer]:
+            - generic [ref=e335]: "2"
+          - listitem [ref=e337] [cursor=pointer]:
+            - generic [ref=e338]: "3"
+      - main [ref=e340]:
+        - generic [ref=e342]:
+          - generic [ref=e344]:
+            - paragraph [ref=e412]: A patient is evaluated in clinic and is found to have a heart rate of 108/min. An ECG is obtained and shows a classic sawtooth pattern. Which of the following is the most likely diagnosis?
+            - paragraph [ref=e413]:
+              - strong [ref=e414]: Which ECG diagnosis best explains these findings?
+          - generic [ref=e348]:
+            - generic [ref=e350]:
+              - generic [ref=e351]:
+                - button "Select answer A" [ref=e352] [cursor=pointer]
+                - button "A Atrial flutter" [ref=e353] [cursor=pointer]:
+                  - generic [ref=e354]: A
+                  - generic [ref=e355]: Atrial flutter
+              - generic [ref=e356]:
+                - button "Select answer B" [ref=e357] [cursor=pointer]
+                - button "B Atrial fibrillation" [ref=e358] [cursor=pointer]:
+                  - generic [ref=e359]: B
+                  - generic [ref=e360]: Atrial fibrillation
+              - generic [ref=e361]:
+                - button "Select answer C" [ref=e362] [cursor=pointer]
+                - button "C Anterior STEMI" [ref=e363] [cursor=pointer]:
+                  - generic [ref=e364]: C
+                  - generic [ref=e365]: Anterior STEMI
+              - generic [ref=e366]:
+                - button "Select answer D" [ref=e367] [cursor=pointer]
+                - button "D Ischemia" [ref=e368] [cursor=pointer]:
+                  - generic [ref=e369]: D
+                  - generic [ref=e370]: Ischemia
+              - generic [ref=e371]:
+                - button "Select answer E" [ref=e372] [cursor=pointer]
+                - button "E AVNRT" [ref=e373] [cursor=pointer]:
+                  - generic [ref=e374]: E
+                  - generic [ref=e375]: AVNRT
+            - generic [ref=e376]:
+              - button "Submit Answer" [disabled]
+    - contentinfo [ref=e377]:
+      - generic [ref=e378]:
+        - generic [ref=e379]:
+          - generic [ref=e380]: Time Used
+          - generic [ref=e381]: 0:00:24
+        - generic [ref=e382]: TUTOR
+      - generic [ref=e383]:
+        - button "Suspend" [ref=e384] [cursor=pointer]:
+          - img [ref=e385]
+          - generic [ref=e388]: Suspend
+        - button "End Block" [ref=e389] [cursor=pointer]:
+          - img [ref=e390]
+          - generic [ref=e392]: End Block
+  - button "Close tool panel" [ref=e399] [cursor=pointer]
+  - complementary "Settings Panel" [ref=e400]:
+    - generic [ref=e401]:
+      - generic [ref=e402]:
+        - paragraph [ref=e403]: Settings
+        - paragraph [ref=e404]: Reserved for in-exam settings. The panel opens from the right like the other tools and can be populated next.
+      - button "Close" [ref=e405] [cursor=pointer]
+    - generic [ref=e406]:
+      - paragraph [ref=e407]: Settings
+      - paragraph [ref=e408]: This panel is intentionally empty for now. The toolbar button, side sheet, and keyboard shortcut are already live.
+  - button "Close shortcuts" [ref=e415] [cursor=pointer]
+  - dialog "Keyboard Shortcuts" [ref=e416]:
+    - generic [ref=e417]:
+      - button "Drag shortcuts window" [ref=e418] [cursor=pointer]:
+        - img [ref=e419]
+      - heading "Keyboard Shortcuts" [level=2] [ref=e421]
+      - button "Close shortcuts" [ref=e422] [cursor=pointer]: ×
+    - generic [ref=e423]:
+      - tablist "Shortcut platform" [ref=e424]:
+        - tab "Windows" [ref=e425] [cursor=pointer]
+        - tab "macOS" [selected] [ref=e426] [cursor=pointer]
+      - generic [ref=e427]:
+        - generic [ref=e428]:
+          - generic [ref=e429]:
+            - generic [ref=e431]: ⌥
+            - generic [ref=e432]:
+              - generic [ref=e433]: +
+              - generic [ref=e434]: M
+          - generic [ref=e435]: →
+          - generic [ref=e436]: Mark Question
+        - generic [ref=e437]:
+          - generic [ref=e438]:
+            - generic [ref=e440]: ⌥
+            - generic [ref=e441]:
+              - generic [ref=e442]: +
+              - generic [ref=e443]: "N"
+          - generic [ref=e444]: →
+          - generic [ref=e445]: Notes
+        - generic [ref=e446]:
+          - generic [ref=e447]:
+            - generic [ref=e449]: ⌥
+            - generic [ref=e450]:
+              - generic [ref=e451]: +
+              - generic [ref=e452]: L
+          - generic [ref=e453]: →
+          - generic [ref=e454]: Lab Values
+        - generic [ref=e455]:
+          - generic [ref=e456]:
+            - generic [ref=e458]: ⌥
+            - generic [ref=e459]:
+              - generic [ref=e460]: +
+              - generic [ref=e461]: C
+          - generic [ref=e462]: →
+          - generic [ref=e463]: Calculator
+        - generic [ref=e464]:
+          - generic [ref=e465]:
+            - generic [ref=e467]: ⌥
+            - generic [ref=e468]:
+              - generic [ref=e469]: +
+              - generic [ref=e470]: ","
+          - generic [ref=e471]: →
+          - generic [ref=e472]: Settings
+        - generic [ref=e473]:
+          - generic [ref=e474]:
+            - generic [ref=e476]: ⌥
+            - generic [ref=e477]:
+              - generic [ref=e478]: +
+              - generic [ref=e479]: A
+          - generic [ref=e480]: →
+          - generic [ref=e481]: Sidebar
+        - generic [ref=e482]:
+          - generic [ref=e483]:
+            - generic [ref=e485]: ⌥
+            - generic [ref=e486]:
+              - generic [ref=e487]: +
+              - generic [ref=e488]: Enter
+          - generic [ref=e489]: →
+          - generic [ref=e490]: Submit Choice
+        - generic [ref=e491]:
+          - generic [ref=e494]: "`"
+          - generic [ref=e495]: →
+          - generic [ref=e496]: Highlight Marker - None
+        - generic [ref=e497]:
+          - generic [ref=e500]: "1"
+          - generic [ref=e501]: →
+          - generic [ref=e502]: Highlight Marker - Yellow
+        - generic [ref=e503]:
+          - generic [ref=e506]: "2"
+          - generic [ref=e507]: →
+          - generic [ref=e508]: Highlight Marker - Green
+        - generic [ref=e509]:
+          - generic [ref=e512]: "3"
+          - generic [ref=e513]: →
+          - generic [ref=e514]: Highlight Marker - Cyan
+        - generic [ref=e515]:
+          - generic [ref=e518]: "4"
+          - generic [ref=e519]: →
+          - generic [ref=e520]: Highlight Marker - Red
+        - generic [ref=e521]:
+          - generic [ref=e524]: ←
+          - generic [ref=e525]: →
+          - generic [ref=e526]: Previous Question
+        - generic [ref=e527]:
+          - generic [ref=e530]: →
+          - generic [ref=e531]: →
+          - generic [ref=e532]: Next Question
+        - generic [ref=e533]:
+          - generic [ref=e534]:
+            - generic [ref=e536]: ⌘
+            - generic [ref=e537]:
+              - generic [ref=e538]: +
+              - generic [ref=e539]: ⇧
+            - generic [ref=e540]:
+              - generic [ref=e541]: +
+              - generic [ref=e542]: F
+          - generic [ref=e543]: →
+          - generic [ref=e544]: Full Screen
+        - generic [ref=e545]:
+          - generic [ref=e546]:
+            - generic [ref=e548]: ⌥
+            - generic [ref=e549]:
+              - generic [ref=e550]: +
+              - generic [ref=e551]: /
+          - generic [ref=e552]: →
+          - generic [ref=e553]: Shortcuts
+        - generic [ref=e554]:
+          - generic [ref=e555]:
+            - generic [ref=e557]: A
+            - generic [ref=e558]:
+              - generic [ref=e559]: ","
+              - generic [ref=e560]: B
+            - generic [ref=e561]:
+              - generic [ref=e562]: ","
+              - generic [ref=e563]: C
+            - generic [ref=e564]:
+              - generic [ref=e565]: ","
+              - generic [ref=e566]: D
+          - generic [ref=e567]: →
+          - generic [ref=e568]: Choices
