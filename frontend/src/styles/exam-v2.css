@@ -138,30 +138,6 @@ body[data-exam-ui="v2"] .exam-choice-content:focus-visible {
   background-color: var(--q-hl-red, #ffd6d6);
 }
 
-.quail-rendered-highlight {
-  border-radius: 3px;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-  cursor: pointer;
-  padding: 0 1px;
-}
-
-.quail-rendered-highlight-yellow {
-  background-color: var(--q-hl-yellow, #fff59d);
-}
-
-.quail-rendered-highlight-green {
-  background-color: var(--q-hl-green, #b8f2e6);
-}
-
-.quail-rendered-highlight-cyan {
-  background-color: var(--q-hl-cyan, #cde7ff);
-}
-
-.quail-rendered-highlight-red {
-  background-color: var(--q-hl-red, #ffd6d6);
-}
-
 /* Softer alert / caution surface to match the question card. */
 body[data-exam-ui="v2"] .exam-scroll .alert-warning {
   background: #fff8e1;

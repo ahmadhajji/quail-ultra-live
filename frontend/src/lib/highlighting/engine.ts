@@ -22,8 +22,10 @@ export class HighlightEngine {
   private highlights: SerializedHighlight[]
   private destroyed = false
   private suppressClickUntil = 0
-  private rendering = false
+  private pendingRaf = 0
+  private pendingTimer = 0
   private readonly observer: MutationObserver
+  private observerPaused = false
 
   constructor(options: HighlightEngineOptions) {
     this.container = options.container
@@ -34,8 +36,8 @@ export class HighlightEngine {
     this.index = buildNodeIndex(this.container)
     this.highlights = sanitizeHighlights(options.initial, this.index.text.length)
     this.observer = new MutationObserver(() => {
-      if (!this.rendering && !this.destroyed && this.highlights.length > 0) {
-        this.renderAfterReactCommit()
+      if (!this.observerPaused && !this.destroyed && this.highlights.length > 0) {
+        this.scheduleRender()
       }
     })
     this.observer.observe(this.container, { childList: true, subtree: true })
@@ -59,7 +61,7 @@ export class HighlightEngine {
     this.highlights = []
     this.render()
     this.onChange([])
-    this.renderAfterReactCommit()
+    this.scheduleRender()
   }
 
   destroy(): void {
@@ -72,7 +74,14 @@ export class HighlightEngine {
     document.removeEventListener('keyup', this.onSelectionFinalized)
     this.container.removeEventListener('click', this.onClick)
     this.observer.disconnect()
-    clearRenderedHighlights(this.container)
+    if (this.pendingRaf) {
+      cancelAnimationFrame(this.pendingRaf)
+      this.pendingRaf = 0
+    }
+    if (this.pendingTimer) {
+      clearTimeout(this.pendingTimer)
+      this.pendingTimer = 0
+    }
     clearTarget(this.target)
   }
 
@@ -115,7 +124,7 @@ export class HighlightEngine {
     this.suppressClickUntil = Date.now() + 250
     this.render()
     this.onChange(this.highlights)
-    this.renderAfterReactCommit()
+    this.scheduleRender()
   }
 
   private readonly onClick = (event: MouseEvent) => {
@@ -123,14 +132,6 @@ export class HighlightEngine {
       return
     }
     if (Date.now() < this.suppressClickUntil) {
-      return
-    }
-    const rendered = event.target instanceof Element
-      ? event.target.closest<HTMLElement>('[data-quail-highlight-rendered="true"]')
-      : null
-    const renderedId = rendered?.dataset.quailHighlightId
-    if (renderedId) {
-      this.removeHighlight(renderedId)
       return
     }
     this.index = buildNodeIndex(this.container)
@@ -145,17 +146,21 @@ export class HighlightEngine {
     this.highlights = this.highlights.filter((highlight) => highlight.id !== id)
     this.render()
     this.onChange(this.highlights)
-    this.renderAfterReactCommit()
+    this.scheduleRender()
   }
 
   private containsNode(node: Node): boolean {
     return node === this.container || this.container.contains(node)
   }
 
+  /**
+   * Core render: rebuild the node index once and push ranges into the CSS
+   * Custom Highlights registry. No DOM mutation — just Range objects handed
+   * to the browser's native highlight painting.
+   */
   private render(): void {
-    this.rendering = true
+    this.observerPaused = true
     try {
-      clearRenderedHighlights(this.container)
       this.index = buildNodeIndex(this.container)
       for (const color of HIGHLIGHT_COLORS) {
         const merged = mergeAdjacent(this.highlights.filter((entry) => entry.color === color))
@@ -164,23 +169,42 @@ export class HighlightEngine {
           .filter((range): range is Range => range !== null)
         setRangesFor(this.target, color, ranges)
       }
-      renderHighlightSpans(this.container, this.highlights)
-      this.index = buildNodeIndex(this.container)
     } finally {
-      window.setTimeout(() => {
-        this.rendering = false
-      }, 0)
+      // Keep the observer paused through the current microtask so any
+      // pending MutationObserver callbacks (which fire as microtasks) are
+      // also suppressed.
+      Promise.resolve().then(() => {
+        this.observerPaused = false
+      })
     }
   }
 
-  private renderAfterReactCommit(): void {
-    for (const delay of [0, 50, 150, 500, 900]) {
-      window.setTimeout(() => {
-        if (!this.destroyed) {
-          this.render()
-        }
-      }, delay)
+  /**
+   * Schedule a single deferred re-render to catch React commits or other
+   * DOM mutations that happen after our synchronous render. Uses
+   * requestAnimationFrame for the next paint, plus one 120ms safety net.
+   *
+   * Replaces the old shotgun approach of 5 setTimeout calls.
+   */
+  private scheduleRender(): void {
+    if (this.pendingRaf) {
+      cancelAnimationFrame(this.pendingRaf)
     }
+    if (this.pendingTimer) {
+      clearTimeout(this.pendingTimer)
+    }
+    this.pendingRaf = requestAnimationFrame(() => {
+      this.pendingRaf = 0
+      if (!this.destroyed) {
+        this.render()
+      }
+    })
+    this.pendingTimer = window.setTimeout(() => {
+      this.pendingTimer = 0
+      if (!this.destroyed) {
+        this.render()
+      }
+    }, 120)
   }
 }
 
@@ -202,71 +226,4 @@ export function sanitizeHighlights(entries: SerializedHighlight[], maxOffset: nu
       seen.add(entry.id)
       return true
     })
-}
-
-function clearRenderedHighlights(container: HTMLElement): void {
-  const rendered = Array.from(container.querySelectorAll<HTMLSpanElement>('span[data-quail-highlight-rendered="true"]'))
-  for (const span of rendered) {
-    const parent = span.parentNode
-    if (!parent) {
-      continue
-    }
-    while (span.firstChild) {
-      parent.insertBefore(span.firstChild, span)
-    }
-    parent.removeChild(span)
-    parent.normalize()
-  }
-  container.normalize()
-}
-
-function renderHighlightSpans(container: HTMLElement, highlights: SerializedHighlight[]): void {
-  const ordered = [...highlights].sort((left, right) => {
-    const leftPriority = HIGHLIGHT_COLORS.indexOf(left.color)
-    const rightPriority = HIGHLIGHT_COLORS.indexOf(right.color)
-    return leftPriority - rightPriority
-  })
-
-  for (const highlight of ordered) {
-    wrapHighlightText(container, highlight)
-  }
-}
-
-function wrapHighlightText(container: HTMLElement, highlight: SerializedHighlight): void {
-  const index = buildNodeIndex(container)
-  const pieces = index.entries
-    .map((entry, order) => ({
-      order,
-      node: entry.node,
-      start: Math.max(highlight.start, entry.start) - entry.start,
-      end: Math.min(highlight.end, entry.end) - entry.start
-    }))
-    .filter((piece) => piece.end > piece.start)
-    .sort((left, right) => right.order - left.order)
-
-  for (const piece of pieces) {
-    const text = piece.node.data
-    const before = text.slice(0, piece.start)
-    const selected = text.slice(piece.start, piece.end)
-    const after = text.slice(piece.end)
-    const fragment = document.createDocumentFragment()
-
-    if (before) {
-      fragment.appendChild(document.createTextNode(before))
-    }
-
-    const span = document.createElement('span')
-    span.className = `quail-rendered-highlight quail-rendered-highlight-${highlight.color}`
-    span.dataset.quailHighlightRendered = 'true'
-    span.dataset.quailHighlightId = highlight.id
-    span.dataset.quailHighlightColor = highlight.color
-    span.textContent = selected
-    fragment.appendChild(span)
-
-    if (after) {
-      fragment.appendChild(document.createTextNode(after))
-    }
-
-    piece.node.replaceWith(fragment)
-  }
 }
