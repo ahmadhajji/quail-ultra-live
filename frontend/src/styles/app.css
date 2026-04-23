@@ -1241,13 +1241,6 @@ body.q-shell {
   display: none !important;
 }
 
-.highlighter-context .highlighted {
-  border-radius: 4px;
-  box-decoration-break: clone;
-  cursor: pointer;
-  padding: 0 1px;
-}
-
 @media (max-width: 1200px) {
   .q-page-grid,
   .q-stat-grid,

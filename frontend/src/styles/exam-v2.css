@@ -111,6 +111,26 @@ body[data-exam-ui="v2"] .exam-choice-content:focus-visible {
   outline-offset: 2px;
 }
 
+::highlight(quail-q-yellow),
+::highlight(quail-e-yellow) {
+  background-color: var(--q-hl-yellow, #fff59d);
+}
+
+::highlight(quail-q-green),
+::highlight(quail-e-green) {
+  background-color: var(--q-hl-green, #b8f2e6);
+}
+
+::highlight(quail-q-cyan),
+::highlight(quail-e-cyan) {
+  background-color: var(--q-hl-cyan, #cde7ff);
+}
+
+::highlight(quail-q-red),
+::highlight(quail-e-red) {
+  background-color: var(--q-hl-red, #ffd6d6);
+}
+
 /* Softer alert / caution surface to match the question card. */
 body[data-exam-ui="v2"] .exam-scroll .alert-warning {
   background: #fff8e1;

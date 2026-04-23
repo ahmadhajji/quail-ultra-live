@@ -1,10 +1,11 @@
-import TextHighlighter from './text-highlighter-core'
+import { HighlightEngine, isHighlightColor, type HighlightColor, type SerializedHighlight, type Target } from './highlighting'
 
 interface MountQuestionHighlighterOptions {
   container: HTMLDivElement
   color: string
   serializedHighlights: string
   onSerializedChange: (serialized: string) => void
+  target?: Target
 }
 
 export interface MountedQuestionHighlighter {
@@ -14,18 +15,47 @@ export interface MountedQuestionHighlighter {
   destroy: () => void
 }
 
-function bindHighlightRemoval(highlighter: TextHighlighter, onSerializedChange: (serialized: string) => void): void {
-  highlighter.getHighlights().forEach((highlight: HTMLElement) => {
-    highlight.onclick = () => {
-      highlighter.removeHighlights(highlight)
-      onSerializedChange(highlighter.serializeHighlights())
+const COLOR_BY_HEX: Record<string, HighlightColor> = {
+  '#fff59d': 'yellow',
+  '#b8f2e6': 'green',
+  '#cde7ff': 'cyan',
+  '#ffd6d6': 'red'
+}
+
+function colorFromInput(color: string): HighlightColor | null {
+  const normalized = color.trim().toLowerCase()
+  if (isHighlightColor(normalized)) {
+    return normalized
+  }
+  return COLOR_BY_HEX[normalized] ?? null
+}
+
+function parseSerializedHighlights(serialized: string): SerializedHighlight[] {
+  if (!serialized || serialized === '[]') {
+    return []
+  }
+  try {
+    const parsed = JSON.parse(serialized)
+    if (!Array.isArray(parsed)) {
+      return []
     }
-  })
+    return parsed.filter((entry): entry is SerializedHighlight => (
+      entry &&
+      typeof entry === 'object' &&
+      typeof entry.id === 'string' &&
+      typeof entry.start === 'number' &&
+      typeof entry.end === 'number' &&
+      isHighlightColor((entry as { color?: unknown }).color)
+    ))
+  } catch {
+    return []
+  }
 }
 
 export function mountQuestionHighlighter(options: MountQuestionHighlighterOptions): MountedQuestionHighlighter {
-  const { container, color, serializedHighlights, onSerializedChange } = options
+  const { container, serializedHighlights, onSerializedChange, target = 'question' } = options
   let enabled = true
+  let activeColor = colorFromInput(options.color)
 
   // Image clicks are owned by the ExamViewPage image-inspector wiring, not
   // by the highlighter. We intentionally do NOT attach a click handler here;
@@ -33,38 +63,29 @@ export function mountQuestionHighlighter(options: MountQuestionHighlighterOption
   // inspector and caused images to sometimes fail to reopen after the
   // inspector was closed.
 
-  const highlighter = new TextHighlighter(container, {
-    color,
-    onBeforeHighlight: () => enabled,
-    onAfterHighlight: (_range: unknown, highlights: HTMLElement[]) => {
-      onSerializedChange(highlighter.serializeHighlights())
-      highlights.forEach((highlight: HTMLElement) => {
-        highlight.onclick = () => {
-          highlighter.removeHighlights(highlight)
-          onSerializedChange(highlighter.serializeHighlights())
-        }
-      })
-    }
+  const engine = new HighlightEngine({
+    container,
+    target,
+    initial: parseSerializedHighlights(serializedHighlights),
+    getActiveColor: () => activeColor,
+    isEnabled: () => enabled,
+    onChange(entries) {
+      onSerializedChange(entries.length > 0 ? JSON.stringify(entries) : '[]')
+    },
   })
-
-  highlighter.deserializeHighlights(serializedHighlights)
-  bindHighlightRemoval(highlighter, onSerializedChange)
 
   return {
     setColor(nextColor) {
-      highlighter.setColor(nextColor)
+      activeColor = colorFromInput(nextColor)
     },
     setEnabled(nextEnabled) {
       enabled = nextEnabled
     },
     clearAll() {
-      highlighter.removeHighlights()
-      onSerializedChange(highlighter.serializeHighlights())
+      engine.clearAll()
     },
     destroy() {
-      highlighter.getHighlights().forEach((highlight: HTMLElement) => {
-        highlight.onclick = null
-      })
+      engine.destroy()
     }
   }
 }

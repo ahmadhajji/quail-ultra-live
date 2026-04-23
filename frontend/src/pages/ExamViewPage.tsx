@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fetchQuestionAssets, extractChoiceLabels, prefetchImagesFromHtml, prefetchQuestionAssets, rewriteAssetPaths, stripChoicesFromQuestionDisplay } from '../lib/qbank-html'
-import { getQuestionHighlight, getQuestionNote, setQuestionHighlight, setQuestionNote } from '../lib/annotations'
+import { getHighlightDoc, getQuestionNote, setHighlightDocTarget, setQuestionNote } from '../lib/annotations'
 import { addToBucket, isInBucket, removeFromBucket } from '../lib/progress'
 import { syncProgress } from '../lib/api'
 import { LAB_VALUE_SECTIONS, type ExamToolKey as ContentExamToolKey } from '../lib/exam-tools'
 import { navigate } from '../lib/navigation'
+import { isHighlightColor, type SerializedHighlight } from '../lib/highlighting'
 import { mountQuestionHighlighter } from '../lib/text-highlighting'
 import {
   DEFAULT_UI_PREFS,
@@ -108,6 +109,28 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
 }
 
+function parseSerializedHighlightEntries(serialized: string): SerializedHighlight[] {
+  if (!serialized || serialized === '[]') {
+    return []
+  }
+  try {
+    const parsed = JSON.parse(serialized)
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+    return parsed.filter((entry): entry is SerializedHighlight => (
+      entry &&
+      typeof entry === 'object' &&
+      typeof entry.id === 'string' &&
+      typeof entry.start === 'number' &&
+      typeof entry.end === 'number' &&
+      isHighlightColor((entry as { color?: unknown }).color)
+    ))
+  } catch {
+    return []
+  }
+}
+
 function formatCalculatorValue(value: number): string {
   if (!Number.isFinite(value)) {
     return 'Error'
@@ -159,7 +182,8 @@ export function ExamViewPage() {
   const timerBaseElapsedRef = useRef(0)
   const timeWarningRef = useRef(true)
   const scrollToExplanationRef = useRef(false)
-  const highlighterRef = useRef<ReturnType<typeof mountQuestionHighlighter> | null>(null)
+  const questionHighlighterRef = useRef<ReturnType<typeof mountQuestionHighlighter> | null>(null)
+  const explanationHighlighterRef = useRef<ReturnType<typeof mountQuestionHighlighter> | null>(null)
   const noteQuestionIndexRef = useRef(0)
   const noteTextRef = useRef('')
   const questionBodyRef = useRef<HTMLDivElement | null>(null)
@@ -457,7 +481,8 @@ export function ExamViewPage() {
   }
 
   function clearAllHighlights(): void {
-    highlighterRef.current?.clearAll()
+    questionHighlighterRef.current?.clearAll()
+    explanationHighlighterRef.current?.clearAll()
   }
 
   function positionMarkerMenu(): void {
@@ -912,28 +937,65 @@ export function ExamViewPage() {
     const mountedHighlighter = mountQuestionHighlighter({
       container: questionBodyRef.current,
       color: highlightColor,
-      serializedHighlights: getQuestionHighlight(block, selectedQnum),
+      target: 'question',
+      serializedHighlights: JSON.stringify(getHighlightDoc(block, selectedQnum).question),
       onSerializedChange(serialized) {
         const next = mutateCurrentInfo((draft) => {
           const nextBlock = draft.progress.blockhist[blockKey]!
           nextBlock.questionStates[selectedQnum]!.visited = true
-          setQuestionHighlight(nextBlock, selectedQnum, serialized)
+          setHighlightDocTarget(nextBlock, selectedQnum, 'question', parseSerializedHighlightEntries(serialized))
         })
         void persistInfo(next, { silent: true })
       }
     })
-    highlighterRef.current = mountedHighlighter
+    questionHighlighterRef.current = mountedHighlighter
     mountedHighlighter.setEnabled(selectedMarker !== 'none')
 
     return () => {
       mountedHighlighter.destroy()
-      highlighterRef.current = null
+      questionHighlighterRef.current = null
     }
-  }, [blockKey, highlightColor, questionHtml, selectedMarker, selectedQnum, syncedSelectedQnum])
+  }, [blockKey, questionHtml, selectedQnum, syncedSelectedQnum])
 
   useEffect(() => {
-    highlighterRef.current?.setColor(highlightColor)
-    highlighterRef.current?.setEnabled(selectedMarker !== 'none')
+    if (!block || !explanationBodyRef.current || !explanationVisible) {
+      return
+    }
+    if (!explanationHtml) {
+      return
+    }
+    if (selectedQnum !== syncedSelectedQnum) {
+      return
+    }
+
+    const mountedHighlighter = mountQuestionHighlighter({
+      container: explanationBodyRef.current,
+      color: highlightColor,
+      target: 'explanation',
+      serializedHighlights: JSON.stringify(getHighlightDoc(block, selectedQnum).explanation),
+      onSerializedChange(serialized) {
+        const next = mutateCurrentInfo((draft) => {
+          const nextBlock = draft.progress.blockhist[blockKey]!
+          nextBlock.questionStates[selectedQnum]!.visited = true
+          setHighlightDocTarget(nextBlock, selectedQnum, 'explanation', parseSerializedHighlightEntries(serialized))
+        })
+        void persistInfo(next, { silent: true })
+      }
+    })
+    explanationHighlighterRef.current = mountedHighlighter
+    mountedHighlighter.setEnabled(selectedMarker !== 'none')
+
+    return () => {
+      mountedHighlighter.destroy()
+      explanationHighlighterRef.current = null
+    }
+  }, [blockKey, explanationHtml, explanationVisible, selectedQnum, syncedSelectedQnum])
+
+  useEffect(() => {
+    questionHighlighterRef.current?.setColor(highlightColor)
+    questionHighlighterRef.current?.setEnabled(selectedMarker !== 'none')
+    explanationHighlighterRef.current?.setColor(highlightColor)
+    explanationHighlighterRef.current?.setEnabled(selectedMarker !== 'none')
   }, [highlightColor, selectedMarker])
 
   const openImageInspector = useCallback((image: HTMLImageElement) => {
@@ -1278,7 +1340,7 @@ export function ExamViewPage() {
       ? 'Standard exam-style reference ranges based on the NBME laboratory values sheet.'
       : activeTool === 'calculator'
         ? 'A native in-block calculator so you can keep the exam workspace on one screen.'
-        : 'This panel opens like the other tools and is intentionally empty for now.'
+        : 'Adjust reading text and question rail indicators for this exam workspace.'
 
   return (
     <>
