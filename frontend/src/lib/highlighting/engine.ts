@@ -12,6 +12,17 @@ interface HighlightEngineOptions {
   onChange: (entries: SerializedHighlight[]) => void
 }
 
+/**
+ * Captured selection data, resolved synchronously at the moment the browser
+ * fires mouseup/touchend/keyup so we never reference a Range after React
+ * has had a chance to re-render the container (which invalidates the Range).
+ */
+interface CapturedSelection {
+  start: number
+  end: number
+  color: HighlightColor
+}
+
 export class HighlightEngine {
   private readonly container: HTMLElement
   private readonly target: Target
@@ -61,7 +72,6 @@ export class HighlightEngine {
     this.highlights = []
     this.render()
     this.onChange([])
-    this.scheduleRender()
   }
 
   destroy(): void {
@@ -85,39 +95,63 @@ export class HighlightEngine {
     clearTarget(this.target)
   }
 
+  /**
+   * Capture selection data synchronously so we have concrete offsets before
+   * React can re-render. Commit the highlight asynchronously (setTimeout 0)
+   * only to let the browser clear the native selection first.
+   */
   private readonly onSelectionFinalized = () => {
-    window.setTimeout(() => this.finalizeSelection(), 0)
+    const captured = this.captureSelection()
+    if (!captured) {
+      return
+    }
+    window.setTimeout(() => this.commitCapturedHighlight(captured), 0)
   }
 
-  private finalizeSelection(): void {
+  /**
+   * Resolve the current browser selection to character offsets right now,
+   * while the DOM is guaranteed to still contain the ranges' anchor nodes.
+   */
+  private captureSelection(): CapturedSelection | null {
     if (this.destroyed || !this.isEnabled()) {
-      return
+      return null
     }
     const color = this.getActiveColor()
     if (!color) {
-      return
+      return null
     }
     const selection = window.getSelection()
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
-      return
+      return null
     }
     const range = selection.getRangeAt(0)
     if (!this.containsNode(range.commonAncestorContainer)) {
-      return
+      return null
     }
     this.index = buildNodeIndex(this.container)
     const offsets = offsetsFromRange(this.index, range)
-    selection.removeAllRanges()
     if (!offsets) {
+      return null
+    }
+    return { start: offsets.start, end: offsets.end, color }
+  }
+
+  /**
+   * Apply a previously-captured highlight and clear the browser selection.
+   */
+  private commitCapturedHighlight(captured: CapturedSelection): void {
+    if (this.destroyed) {
       return
     }
+    window.getSelection()?.removeAllRanges()
+    this.index = buildNodeIndex(this.container)
     const next = sanitizeHighlights([
       ...this.highlights,
       {
         id: makeHighlightId(),
-        start: offsets.start,
-        end: offsets.end,
-        color
+        start: captured.start,
+        end: captured.end,
+        color: captured.color
       }
     ], this.index.text.length)
     this.highlights = next
@@ -183,8 +217,6 @@ export class HighlightEngine {
    * Schedule a single deferred re-render to catch React commits or other
    * DOM mutations that happen after our synchronous render. Uses
    * requestAnimationFrame for the next paint, plus one 120ms safety net.
-   *
-   * Replaces the old shotgun approach of 5 setTimeout calls.
    */
   private scheduleRender(): void {
     if (this.pendingRaf) {

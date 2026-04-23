@@ -184,6 +184,10 @@ export function ExamViewPage() {
   const scrollToExplanationRef = useRef(false)
   const questionHighlighterRef = useRef<ReturnType<typeof mountQuestionHighlighter> | null>(null)
   const explanationHighlighterRef = useRef<ReturnType<typeof mountQuestionHighlighter> | null>(null)
+  // Track the last highlight payload written by the engine itself so we can
+  // distinguish self-mutations from external changes (e.g. navigating to a
+  // new question) without destroying and recreating the engine.
+  const ownHighlightPayloadRef = useRef('[]')
   const noteQuestionIndexRef = useRef(0)
   const noteTextRef = useRef('')
   const questionBodyRef = useRef<HTMLDivElement | null>(null)
@@ -935,17 +939,20 @@ export function ExamViewPage() {
       return
     }
 
+    const initialPayload = JSON.stringify(getHighlightDoc(block, selectedQnum).question)
+    ownHighlightPayloadRef.current = currentHighlightPayload
     const mountedHighlighter = mountQuestionHighlighter({
       container: questionBodyRef.current,
       color: highlightColor,
       target: 'question',
-      serializedHighlights: JSON.stringify(getHighlightDoc(block, selectedQnum).question),
+      serializedHighlights: initialPayload,
       onSerializedChange(serialized) {
         const next = mutateCurrentInfo((draft) => {
           const nextBlock = draft.progress.blockhist[blockKey]!
           nextBlock.questionStates[selectedQnum]!.visited = true
           setHighlightDocTarget(nextBlock, selectedQnum, 'question', parseSerializedHighlightEntries(serialized))
         })
+        ownHighlightPayloadRef.current = next?.progress.blockhist[blockKey]?.highlights[selectedQnum] ?? '[]'
         void persistInfo(next, { silent: true })
       }
     })
@@ -956,7 +963,8 @@ export function ExamViewPage() {
       mountedHighlighter.destroy()
       questionHighlighterRef.current = null
     }
-  }, [blockKey, currentHighlightPayload, questionHtml, selectedQnum, syncedSelectedQnum])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blockKey, questionHtml, selectedQnum, syncedSelectedQnum])
 
   useEffect(() => {
     if (!block || !explanationBodyRef.current || !explanationVisible) {
@@ -969,17 +977,20 @@ export function ExamViewPage() {
       return
     }
 
+    const initialPayload = JSON.stringify(getHighlightDoc(block, selectedQnum).explanation)
+    ownHighlightPayloadRef.current = currentHighlightPayload
     const mountedHighlighter = mountQuestionHighlighter({
       container: explanationBodyRef.current,
       color: highlightColor,
       target: 'explanation',
-      serializedHighlights: JSON.stringify(getHighlightDoc(block, selectedQnum).explanation),
+      serializedHighlights: initialPayload,
       onSerializedChange(serialized) {
         const next = mutateCurrentInfo((draft) => {
           const nextBlock = draft.progress.blockhist[blockKey]!
           nextBlock.questionStates[selectedQnum]!.visited = true
           setHighlightDocTarget(nextBlock, selectedQnum, 'explanation', parseSerializedHighlightEntries(serialized))
         })
+        ownHighlightPayloadRef.current = next?.progress.blockhist[blockKey]?.highlights[selectedQnum] ?? '[]'
         void persistInfo(next, { silent: true })
       }
     })
@@ -990,7 +1001,8 @@ export function ExamViewPage() {
       mountedHighlighter.destroy()
       explanationHighlighterRef.current = null
     }
-  }, [blockKey, currentHighlightPayload, explanationHtml, explanationVisible, selectedQnum, syncedSelectedQnum])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blockKey, explanationHtml, explanationVisible, selectedQnum, syncedSelectedQnum])
 
   useEffect(() => {
     questionHighlighterRef.current?.setColor(highlightColor)
@@ -998,6 +1010,26 @@ export function ExamViewPage() {
     explanationHighlighterRef.current?.setColor(highlightColor)
     explanationHighlighterRef.current?.setEnabled(selectedMarker !== 'none')
   }, [highlightColor, selectedMarker])
+
+  // Sync external highlight payload changes (e.g. "Clear All Highlights"
+  // from the marker menu) into the live engine without destroying it.
+  // Self-mutations are tracked via ownHighlightPayloadRef so we skip
+  // redundant setEntries calls.
+  useEffect(() => {
+    if (currentHighlightPayload === ownHighlightPayloadRef.current) {
+      return
+    }
+    ownHighlightPayloadRef.current = currentHighlightPayload
+    if (questionHighlighterRef.current) {
+      const doc = block ? getHighlightDoc(block, selectedQnum) : { question: [], explanation: [] }
+      questionHighlighterRef.current.setEntries(doc.question)
+    }
+    if (explanationHighlighterRef.current) {
+      const doc = block ? getHighlightDoc(block, selectedQnum) : { question: [], explanation: [] }
+      explanationHighlighterRef.current.setEntries(doc.explanation)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentHighlightPayload])
 
   const openImageInspector = useCallback((image: HTMLImageElement) => {
     const src = image.getAttribute('src')

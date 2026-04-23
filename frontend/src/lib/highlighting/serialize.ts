@@ -19,6 +19,8 @@ export interface NodeIndex {
   readonly container: HTMLElement
   readonly text: string
   readonly entries: NodeIndexEntry[]
+  /** O(1) lookup from a Text node to its index entry. */
+  readonly byNode: ReadonlyMap<Text, NodeIndexEntry>
 }
 
 /**
@@ -27,22 +29,25 @@ export interface NodeIndex {
  */
 export function buildNodeIndex(container: HTMLElement): NodeIndex {
   if (typeof document === 'undefined') {
-    return { container, text: '', entries: [] }
+    return { container, text: '', entries: [], byNode: new Map() }
   }
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
   const entries: NodeIndexEntry[] = []
+  const byNode = new Map<Text, NodeIndexEntry>()
   let cursor = 0
   let current = walker.nextNode()
   const parts: string[] = []
   while (current) {
     const textNode = current as Text
     const length = textNode.data.length
-    entries.push({ node: textNode, start: cursor, end: cursor + length })
+    const entry: NodeIndexEntry = { node: textNode, start: cursor, end: cursor + length }
+    entries.push(entry)
+    byNode.set(textNode, entry)
     parts.push(textNode.data)
     cursor += length
     current = walker.nextNode()
   }
-  return { container, text: parts.join(''), entries }
+  return { container, text: parts.join(''), entries, byNode }
 }
 
 /** Binary-search the entries for the one containing `offset`. */
@@ -119,7 +124,7 @@ export function rangeFromOffsets(index: NodeIndex, start: number, end: number): 
 export function offsetFromPoint(index: NodeIndex, node: Node, localOffset: number, which: 'start' | 'end'): number | null {
   if (node.nodeType === Node.TEXT_NODE) {
     const text = node as Text
-    const match = index.entries.find((entry) => entry.node === text)
+    const match = index.byNode.get(text)
     if (match) {
       const clamped = Math.max(0, Math.min(text.data.length, localOffset))
       return match.start + clamped
@@ -161,15 +166,20 @@ export function offsetFromPoint(index: NodeIndex, node: Node, localOffset: numbe
 
 function firstTextDescendant(root: Node, index: NodeIndex): NodeIndexEntry | null {
   if (root.nodeType === Node.TEXT_NODE) {
-    return index.entries.find((entry) => entry.node === root) ?? null
+    return index.byNode.get(root as Text) ?? null
   }
-  const match = index.entries.find((entry) => root.contains(entry.node))
-  return match ?? null
+  // The entries are in document order, so the first match is the right one.
+  for (const entry of index.entries) {
+    if (root.contains(entry.node)) {
+      return entry
+    }
+  }
+  return null
 }
 
 function lastTextDescendant(root: Node, index: NodeIndex): NodeIndexEntry | null {
   if (root.nodeType === Node.TEXT_NODE) {
-    return index.entries.find((entry) => entry.node === root) ?? null
+    return index.byNode.get(root as Text) ?? null
   }
   let last: NodeIndexEntry | null = null
   for (const entry of index.entries) {

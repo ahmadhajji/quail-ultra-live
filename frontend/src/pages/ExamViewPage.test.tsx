@@ -38,6 +38,7 @@ const highlighting = vi.hoisted(() => {
       return {
         setColor: vi.fn(),
         setEnabled: vi.fn(),
+        setEntries: vi.fn(),
         clearAll: vi.fn(),
         destroy: vi.fn()
       }

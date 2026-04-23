@@ -11,6 +11,7 @@ interface MountQuestionHighlighterOptions {
 export interface MountedQuestionHighlighter {
   setColor: (color: string) => void
   setEnabled: (enabled: boolean) => void
+  setEntries: (entries: SerializedHighlight[]) => void
   clearAll: () => void
   destroy: () => void
 }
@@ -80,6 +81,9 @@ export function mountQuestionHighlighter(options: MountQuestionHighlighterOption
     },
     setEnabled(nextEnabled) {
       enabled = nextEnabled
+    },
+    setEntries(entries) {
+      engine.setEntries(entries)
     },
     clearAll() {
       engine.clearAll()
