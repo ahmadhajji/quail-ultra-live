@@ -1,6 +1,6 @@
 body[data-exam-ui="v2"] .exam-v2-shell {
   --qx-panel-bg: #ffffff;
-  --qx-panel-border: #e2e8f0;
+  --qx-panel-border: #d7dfec;
   --qx-panel-heading: #243443;
 }
 
@@ -9,18 +9,33 @@ body[data-exam-ui="v2"] .exam-v2-stage {
   grid-template-columns: 88px minmax(0, 1fr);
 }
 
+body[data-exam-ui="v2"] .exam-v2-stage-sidebar-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+
 body[data-exam-ui="v2"] .exam-v2-workspace {
   min-width: 0;
 }
 
-body[data-exam-ui="v2"] .exam-v2-tool-scrim {
+body[data-exam-ui="v2"] .exam-v2-tool-scrim,
+body[data-exam-ui="v2"] .exam-shortcuts-scrim {
   background: rgba(15, 23, 42, 0.2);
-  bottom: 44px;
+  border: none;
   left: 0;
+  margin: 0;
+  padding: 0;
   position: fixed;
   right: 0;
   top: 54px;
   z-index: 25;
+}
+
+body[data-exam-ui="v2"] .exam-v2-tool-scrim {
+  bottom: 44px;
+}
+
+body[data-exam-ui="v2"] .exam-shortcuts-scrim {
+  bottom: 0;
 }
 
 body[data-exam-ui="v2"] .exam-v2-tool-sheet {
@@ -56,7 +71,15 @@ body[data-exam-ui="v2"] .exam-v2-tool-title {
   margin: 0;
 }
 
-body[data-exam-ui="v2"] .exam-v2-tool-close {
+body[data-exam-ui="v2"] .exam-v2-tool-copy {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+
+body[data-exam-ui="v2"] .exam-v2-tool-close,
+body[data-exam-ui="v2"] .exam-v2-tool-action {
   background: transparent;
   border: 1px solid #cbd5e1;
   border-radius: 2px;
@@ -66,15 +89,8 @@ body[data-exam-ui="v2"] .exam-v2-tool-close {
   padding: 6px 10px;
 }
 
-body[data-exam-ui="v2"] .exam-v2-tool-copy {
-  color: #64748b;
-  font-size: 12px;
-  line-height: 1.5;
-  margin: 0 0 12px;
-}
-
 body[data-exam-ui="v2"] .exam-v2-note-input {
-  background: #fff;
+  background: #ffffff;
   border: 1px solid #cbd5e1;
   border-radius: 2px;
   color: #1f2d3d;
@@ -83,6 +99,122 @@ body[data-exam-ui="v2"] .exam-v2-note-input {
   padding: 10px 12px;
   resize: vertical;
   width: 100%;
+}
+
+body[data-exam-ui="v2"] .exam-marker-menu {
+  background: #4d66b4;
+  border: 1px solid #3a4f93;
+  border-radius: 4px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.28);
+  color: #ffffff;
+  min-width: 220px;
+  overflow: hidden;
+  padding: 0;
+  position: fixed;
+  z-index: 35;
+}
+
+body[data-exam-ui="v2"] .exam-marker-menu-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+body[data-exam-ui="v2"] .exam-marker-menu-item {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  font-size: 14px;
+  font-weight: 600;
+  gap: 10px;
+  padding: 10px 12px;
+  text-align: left;
+  width: 100%;
+}
+
+body[data-exam-ui="v2"] .exam-marker-menu-item:hover {
+  background: #445aa3;
+}
+
+body[data-exam-ui="v2"] .exam-marker-menu-item.active {
+  background: #3f538f;
+}
+
+body[data-exam-ui="v2"] .exam-marker-menu-icon {
+  align-items: center;
+  background: rgba(169, 193, 255, 0.3);
+  border-radius: 4px;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+body[data-exam-ui="v2"] .exam-marker-menu-label {
+  flex: 1 1 auto;
+}
+
+body[data-exam-ui="v2"] .exam-marker-menu-action {
+  background: #4d66b4;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  cursor: pointer;
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 12px;
+  text-align: center;
+  width: 100%;
+}
+
+body[data-exam-ui="v2"] .exam-marker-menu-action:hover {
+  background: #445aa3;
+}
+
+body[data-exam-ui="v2"] .exam-v2-tool-action {
+  background: transparent;
+  border: 1px solid #cbd5e1;
+  border-radius: 2px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 0;
+  min-height: 36px;
+  padding: 6px 10px;
+  width: 100%;
+}
+
+body[data-exam-ui="v2"] .exam-v2-tool-empty {
+  align-items: center;
+  border: 1px dashed #cbd5e1;
+  border-radius: 4px;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 140px;
+  padding: 16px;
+  text-align: center;
+}
+
+body[data-exam-ui="v2"] .exam-v2-tool-empty-title {
+  color: #243443;
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+body[data-exam-ui="v2"] .exam-v2-tool-empty-copy {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 240px;
 }
 
 body[data-exam-ui="v2"] .exam-v2-calculator,
@@ -177,6 +309,143 @@ body[data-exam-ui="v2"] .exam-v2-empty-state {
   min-height: auto;
 }
 
+body[data-exam-ui="v2"] .exam-shortcuts-window {
+  background: #ffffff;
+  border: 2px solid rgba(163, 181, 236, 0.95);
+  border-radius: 4px;
+  color: #243443;
+  max-height: calc(100vh - 136px);
+  overflow: hidden;
+  position: fixed;
+  width: min(1040px, calc(100vw - 72px));
+  z-index: 40;
+}
+
+body[data-exam-ui="v2"] .exam-shortcuts-header {
+  align-items: center;
+  background: #4860b0;
+  color: #ffffff;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 24px minmax(0, 1fr) 32px;
+  padding: 10px 14px;
+  user-select: none;
+  cursor: move;
+}
+
+body[data-exam-ui="v2"] .exam-shortcuts-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+  text-align: center;
+}
+
+body[data-exam-ui="v2"] .exam-shortcuts-drag,
+body[data-exam-ui="v2"] .exam-shortcuts-close {
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  display: inline-flex;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+body[data-exam-ui="v2"] .exam-shortcuts-close {
+  background: #ff4a4a;
+  border-radius: 2px;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  height: 32px;
+  width: 32px;
+}
+
+body[data-exam-ui="v2"] .exam-shortcuts-body {
+  background: #ffffff;
+  max-height: calc(100vh - 188px);
+  overflow: auto;
+  padding: 18px 22px 24px;
+}
+
+body[data-exam-ui="v2"] .exam-shortcuts-platforms {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+
+body[data-exam-ui="v2"] .exam-shortcuts-platform {
+  background: #eef1f8;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: #243443;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 8px 14px;
+}
+
+body[data-exam-ui="v2"] .exam-shortcuts-platform.active {
+  background: #5a74c8;
+  border-color: #29498d;
+  color: #ffffff;
+}
+
+body[data-exam-ui="v2"] .exam-shortcuts-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body[data-exam-ui="v2"] .exam-shortcuts-card {
+  align-items: center;
+  border: 1px solid #d9dee8;
+  border-radius: 4px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, auto) auto minmax(0, 1fr);
+  min-height: 66px;
+  padding: 12px 16px;
+}
+
+body[data-exam-ui="v2"] .exam-shortcuts-keys {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+body[data-exam-ui="v2"] .exam-shortcuts-keygroup {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+body[data-exam-ui="v2"] .exam-shortcuts-key {
+  background: #ffffff;
+  border: 1px solid #d8dee8;
+  border-radius: 2px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  min-width: 34px;
+  padding: 7px 10px;
+  text-align: center;
+}
+
+body[data-exam-ui="v2"] .exam-shortcuts-plus,
+body[data-exam-ui="v2"] .exam-shortcuts-arrow {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+body[data-exam-ui="v2"] .exam-shortcuts-action {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
 @media (max-width: 1180px) {
   body[data-exam-ui="v2"] .exam-v2-stage {
     grid-template-columns: 88px minmax(0, 1fr);
@@ -188,5 +457,72 @@ body[data-exam-ui="v2"] .exam-v2-empty-state {
 
   body[data-exam-ui="v2"] .exam-v2-tool-sheet-wide {
     width: min(420px, 100vw);
+  }
+
+  body[data-exam-ui="v2"] .exam-shortcuts-window {
+    border-radius: 4px;
+    width: min(860px, calc(100vw - 32px));
+  }
+
+  body[data-exam-ui="v2"] .exam-shortcuts-body {
+    padding: 18px 20px 22px;
+  }
+
+  body[data-exam-ui="v2"] .exam-shortcuts-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  body[data-exam-ui="v2"] .exam-v2-tool-scrim,
+  body[data-exam-ui="v2"] .exam-shortcuts-scrim {
+    top: 170px;
+  }
+
+  body[data-exam-ui="v2"] .exam-v2-tool-sheet {
+    bottom: 0;
+    top: 170px;
+    width: 100vw;
+  }
+
+  body[data-exam-ui="v2"] .exam-shortcuts-window {
+    border-radius: 4px;
+    left: 16px !important;
+    right: 16px;
+    top: 186px !important;
+    width: auto;
+  }
+
+  body[data-exam-ui="v2"] .exam-shortcuts-header {
+    grid-template-columns: 22px minmax(0, 1fr) 32px;
+    padding: 10px 12px;
+  }
+
+  body[data-exam-ui="v2"] .exam-shortcuts-title {
+    font-size: 16px;
+  }
+
+  body[data-exam-ui="v2"] .exam-shortcuts-body {
+    max-height: calc(100vh - 236px);
+    padding: 16px 14px 20px;
+  }
+
+  body[data-exam-ui="v2"] .exam-shortcuts-platform {
+    border-radius: 2px;
+    font-size: 13px;
+  }
+
+  body[data-exam-ui="v2"] .exam-shortcuts-card {
+    gap: 12px;
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  body[data-exam-ui="v2"] .exam-shortcuts-arrow {
+    display: none;
+  }
+
+  body[data-exam-ui="v2"] .exam-shortcuts-action {
+    font-size: 14px;
   }
 }
