@@ -247,7 +247,7 @@ describe('ExamViewPage', () => {
     expect(flagButton).toHaveAttribute('aria-pressed', 'true')
     expect(flagButton).toHaveClass('active')
     expect(container.querySelectorAll('.q-flag-dot')).toHaveLength(1)
-    expect(container.querySelector('.q-flag-dot')?.textContent).toBe('🚩')
+    expect(container.querySelector('.q-flag-dot svg')).not.toBeNull()
 
     await userEvent.click(flagButton)
 
@@ -335,11 +335,11 @@ describe('ExamViewPage', () => {
     const items = container.querySelectorAll('.exam-question-list .list-group-item')
     expect(items[0]?.className).toContain('q-item-correct')
     expect(items[0]?.className).toContain('q-item-visited')
-    expect(items[0]?.querySelector('.q-status-dot')?.textContent).toBe('✓')
+    expect(items[0]?.querySelector('.q-status-dot svg')).not.toBeNull()
     expect(items[1]?.className).toContain('active')
     expect(items[1]?.className).toContain('q-item-incorrect')
-    expect(items[1]?.querySelector('.q-status-dot')?.textContent).toBe('✕')
-    expect(items[1]?.querySelector('.q-flag-dot')?.textContent).toBe('🚩')
+    expect(items[1]?.querySelector('.q-status-dot svg')).not.toBeNull()
+    expect(items[1]?.querySelector('.q-flag-dot svg')).not.toBeNull()
     expect(items[2]?.className).toContain('q-item-unopened')
     expect(items[2]?.querySelector('.q-unopened-dot')).not.toBeNull()
   })

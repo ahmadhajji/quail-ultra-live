@@ -17,8 +17,7 @@ body[data-exam-ui="v2"] .exam-v2-workspace {
   min-width: 0;
 }
 
-body[data-exam-ui="v2"] .exam-v2-tool-scrim,
-body[data-exam-ui="v2"] .exam-shortcuts-scrim {
+body[data-exam-ui="v2"] .exam-v2-tool-scrim {
   background: rgba(15, 23, 42, 0.2);
   border: none;
   left: 0;
@@ -34,8 +33,153 @@ body[data-exam-ui="v2"] .exam-v2-tool-scrim {
   bottom: 44px;
 }
 
-body[data-exam-ui="v2"] .exam-shortcuts-scrim {
+/* -------------------------------------------------------------------------
+ * FloatingWindow (reusable)
+ *
+ * Dim scrim behind, rounded card with layered drop shadow for depth, and a
+ * macOS-style circular red close button in the top-left corner.
+ * ----------------------------------------------------------------------- */
+
+.floating-window-scrim {
+  background: rgba(15, 23, 42, 0.32);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  border: none;
   bottom: 0;
+  cursor: default;
+  left: 0;
+  margin: 0;
+  padding: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 90;
+}
+
+.floating-window {
+  background: #ffffff;
+  border-radius: 14px;
+  color: #1e293b;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: fixed;
+  z-index: 100;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.6) inset,
+    0 0 0 1px rgba(15, 23, 42, 0.08),
+    0 18px 40px -12px rgba(15, 23, 42, 0.32),
+    0 32px 60px -16px rgba(15, 23, 42, 0.28);
+}
+
+.floating-window-header {
+  align-items: center;
+  background: linear-gradient(180deg, #5a76d6 0%, #4860b0 100%);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.16);
+  color: #ffffff;
+  cursor: grab;
+  display: grid;
+  flex: 0 0 auto;
+  gap: 12px;
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
+  padding: 10px 14px;
+  user-select: none;
+}
+
+.floating-window-header:active {
+  cursor: grabbing;
+}
+
+.floating-window-title-wrap {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  justify-content: center;
+  min-width: 0;
+}
+
+.floating-window-title {
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  margin: 0;
+  text-align: center;
+  text-shadow: 0 1px 0 rgba(15, 23, 42, 0.18);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.floating-window-header-extras {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.floating-window-close {
+  align-items: center;
+  background: linear-gradient(180deg, #ff6b6b 0%, #e23b3b 100%);
+  border: 1px solid rgba(127, 29, 29, 0.35);
+  border-radius: 999px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.45) inset,
+    0 1px 2px rgba(127, 29, 29, 0.4);
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  height: 20px;
+  justify-content: center;
+  padding: 0;
+  transition: filter 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+  width: 20px;
+}
+
+.floating-window-close svg {
+  opacity: 0.9;
+  transition: opacity 120ms ease;
+}
+
+.floating-window-close:hover svg,
+.floating-window-close:focus-visible svg {
+  opacity: 1;
+}
+
+.floating-window-close:hover {
+  filter: brightness(1.08);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.55) inset,
+    0 2px 4px rgba(127, 29, 29, 0.45);
+}
+
+.floating-window-close:active {
+  transform: translateY(1px);
+  filter: brightness(0.95);
+}
+
+.floating-window-close:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.floating-window-drag-hint {
+  color: rgba(255, 255, 255, 0.55);
+  display: inline-flex;
+  height: 18px;
+  justify-content: flex-end;
+  width: 18px;
+}
+
+.floating-window-body {
+  background: #ffffff;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
 }
 
 body[data-exam-ui="v2"] .exam-v2-tool-sheet {
@@ -309,81 +453,45 @@ body[data-exam-ui="v2"] .exam-v2-empty-state {
   min-height: auto;
 }
 
-body[data-exam-ui="v2"] .exam-shortcuts-window {
-  background: #ffffff;
-  border: 2px solid rgba(163, 181, 236, 0.95);
-  border-radius: 4px;
+/* -------------------------------------------------------------------------
+ * Keyboard Shortcuts (rendered inside FloatingWindow)
+ *
+ * The grid is sized so all 21 shortcuts fit on one screen at common
+ * resolutions (>= ~720px tall) without needing to scroll. The card padding
+ * and key sizes are intentionally tight.
+ * ----------------------------------------------------------------------- */
+
+.floating-window.exam-shortcuts-window {
   color: #243443;
-  max-height: calc(100vh - 136px);
-  overflow: hidden;
-  position: fixed;
-  width: min(1040px, calc(100vw - 72px));
-  z-index: 40;
+  max-height: min(720px, calc(100vh - 96px));
+  width: min(960px, calc(100vw - 64px));
 }
 
-body[data-exam-ui="v2"] .exam-shortcuts-header {
-  align-items: center;
-  background: #4860b0;
-  color: #ffffff;
-  display: grid;
-  gap: 10px;
-  grid-template-columns: 24px minmax(0, 1fr) 32px;
-  padding: 10px 14px;
-  user-select: none;
-  cursor: move;
-}
-
-body[data-exam-ui="v2"] .exam-shortcuts-title {
-  font-size: 18px;
-  font-weight: 700;
-  margin: 0;
-  text-align: center;
-}
-
-body[data-exam-ui="v2"] .exam-shortcuts-drag,
-body[data-exam-ui="v2"] .exam-shortcuts-close {
-  align-items: center;
-  background: transparent;
-  border: none;
-  color: #ffffff;
-  display: inline-flex;
-  height: 24px;
-  justify-content: center;
-  width: 24px;
-}
-
-body[data-exam-ui="v2"] .exam-shortcuts-close {
-  background: #ff4a4a;
-  border-radius: 2px;
-  font-size: 22px;
-  line-height: 1;
-  cursor: pointer;
-  height: 32px;
-  width: 32px;
-}
-
-body[data-exam-ui="v2"] .exam-shortcuts-body {
-  background: #ffffff;
-  max-height: calc(100vh - 188px);
-  overflow: auto;
-  padding: 18px 22px 24px;
+.floating-window.exam-shortcuts-window .floating-window-body {
+  padding: 14px 18px 18px;
 }
 
 body[data-exam-ui="v2"] .exam-shortcuts-platforms {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   justify-content: center;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 
 body[data-exam-ui="v2"] .exam-shortcuts-platform {
   background: #eef1f8;
   border: 1px solid transparent;
-  border-radius: 2px;
+  border-radius: 6px;
   color: #243443;
-  font-size: 14px;
+  cursor: pointer;
+  font-size: 13px;
   font-weight: 700;
-  padding: 8px 14px;
+  padding: 6px 14px;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+body[data-exam-ui="v2"] .exam-shortcuts-platform:hover {
+  background: #e1e7f5;
 }
 
 body[data-exam-ui="v2"] .exam-shortcuts-platform.active {
@@ -394,56 +502,72 @@ body[data-exam-ui="v2"] .exam-shortcuts-platform.active {
 
 body[data-exam-ui="v2"] .exam-shortcuts-grid {
   display: grid;
-  gap: 12px;
+  gap: 8px 14px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 body[data-exam-ui="v2"] .exam-shortcuts-card {
   align-items: center;
-  border: 1px solid #d9dee8;
-  border-radius: 4px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset;
   display: grid;
-  gap: 14px;
+  gap: 10px;
   grid-template-columns: minmax(0, auto) auto minmax(0, 1fr);
-  min-height: 66px;
-  padding: 12px 16px;
+  min-height: 0;
+  padding: 7px 12px;
 }
 
 body[data-exam-ui="v2"] .exam-shortcuts-keys {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
 }
 
 body[data-exam-ui="v2"] .exam-shortcuts-keygroup {
   align-items: center;
   display: inline-flex;
-  gap: 6px;
+  gap: 4px;
 }
 
 body[data-exam-ui="v2"] .exam-shortcuts-key {
   background: #ffffff;
-  border: 1px solid #d8dee8;
-  border-radius: 2px;
-  font-size: 13px;
+  border: 1px solid #cbd5e1;
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
+  color: #1e293b;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
-  min-width: 34px;
-  padding: 7px 10px;
+  min-width: 26px;
+  padding: 5px 7px;
   text-align: center;
 }
 
-body[data-exam-ui="v2"] .exam-shortcuts-plus,
+body[data-exam-ui="v2"] .exam-shortcuts-plus {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 body[data-exam-ui="v2"] .exam-shortcuts-arrow {
-  font-size: 16px;
+  color: #94a3b8;
+  font-size: 14px;
   font-weight: 700;
 }
 
 body[data-exam-ui="v2"] .exam-shortcuts-action {
-  font-size: 14px;
+  color: #1e293b;
+  font-size: 13px;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 1180px) {
@@ -459,23 +583,13 @@ body[data-exam-ui="v2"] .exam-shortcuts-action {
     width: min(420px, 100vw);
   }
 
-  body[data-exam-ui="v2"] .exam-shortcuts-window {
-    border-radius: 4px;
-    width: min(860px, calc(100vw - 32px));
-  }
-
-  body[data-exam-ui="v2"] .exam-shortcuts-body {
-    padding: 18px 20px 22px;
-  }
-
-  body[data-exam-ui="v2"] .exam-shortcuts-grid {
-    grid-template-columns: minmax(0, 1fr);
+  .floating-window.exam-shortcuts-window {
+    width: min(820px, calc(100vw - 32px));
   }
 }
 
 @media (max-width: 900px) {
-  body[data-exam-ui="v2"] .exam-v2-tool-scrim,
-  body[data-exam-ui="v2"] .exam-shortcuts-scrim {
+  body[data-exam-ui="v2"] .exam-v2-tool-scrim {
     top: 170px;
   }
 
@@ -485,44 +599,15 @@ body[data-exam-ui="v2"] .exam-shortcuts-action {
     width: 100vw;
   }
 
-  body[data-exam-ui="v2"] .exam-shortcuts-window {
-    border-radius: 4px;
-    left: 16px !important;
-    right: 16px;
-    top: 186px !important;
-    width: auto;
+  .floating-window.exam-shortcuts-window {
+    width: calc(100vw - 24px);
   }
 
-  body[data-exam-ui="v2"] .exam-shortcuts-header {
-    grid-template-columns: 22px minmax(0, 1fr) 32px;
-    padding: 10px 12px;
-  }
-
-  body[data-exam-ui="v2"] .exam-shortcuts-title {
-    font-size: 16px;
-  }
-
-  body[data-exam-ui="v2"] .exam-shortcuts-body {
-    max-height: calc(100vh - 236px);
-    padding: 16px 14px 20px;
-  }
-
-  body[data-exam-ui="v2"] .exam-shortcuts-platform {
-    border-radius: 2px;
-    font-size: 13px;
-  }
-
-  body[data-exam-ui="v2"] .exam-shortcuts-card {
-    gap: 12px;
+  body[data-exam-ui="v2"] .exam-shortcuts-grid {
     grid-template-columns: minmax(0, 1fr);
-    min-height: 0;
   }
 
   body[data-exam-ui="v2"] .exam-shortcuts-arrow {
     display: none;
-  }
-
-  body[data-exam-ui="v2"] .exam-shortcuts-action {
-    font-size: 14px;
   }
 }

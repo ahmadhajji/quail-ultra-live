@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { fetchQuestionAssets, extractChoiceLabels, rewriteAssetPaths, stripChoicesFromQuestionDisplay } from '../lib/qbank-html'
 import { getQuestionHighlight, getQuestionNote, setQuestionHighlight, setQuestionNote } from '../lib/annotations'
 import { addToBucket, isInBucket, removeFromBucket } from '../lib/progress'
@@ -8,6 +8,7 @@ import { navigate } from '../lib/navigation'
 import { mountQuestionHighlighter } from '../lib/text-highlighting'
 import { usePackPage } from '../lib/usePackPage'
 import { ExamShellV2 } from '../components/exam/ExamShellV2'
+import { FloatingWindow } from '../components/FloatingWindow'
 import type { Mode, QbankInfo, SyncProgressOptions } from '../types/domain'
 
 function modeLabel(mode: Mode): string {
@@ -93,16 +94,6 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
 }
 
-function clampWindowPosition(nextX: number, nextY: number, width: number, height: number): { x: number, y: number } {
-  const padding = 16
-  const maxX = Math.max(padding, window.innerWidth - width - padding)
-  const maxY = Math.max(padding, window.innerHeight - height - padding)
-  return {
-    x: Math.min(Math.max(padding, nextX), maxX),
-    y: Math.min(Math.max(padding, nextY), maxY)
-  }
-}
-
 function formatCalculatorValue(value: number): string {
   if (!Number.isFinite(value)) {
     return 'Error'
@@ -159,8 +150,6 @@ export function ExamViewPage() {
   const noteTextRef = useRef('')
   const questionBodyRef = useRef<HTMLDivElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
-  const shortcutWindowRef = useRef<HTMLDivElement | null>(null)
-  const shortcutDragRef = useRef<{ pointerId: number, startX: number, startY: number, originX: number, originY: number } | null>(null)
   const markerButtonRef = useRef<HTMLButtonElement | null>(null)
   const markerMenuRef = useRef<HTMLDivElement | null>(null)
   const [markerMenuOpen, setMarkerMenuOpen] = useState(false)
@@ -182,7 +171,6 @@ export function ExamViewPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [shortcutWindowOpen, setShortcutWindowOpen] = useState(false)
   const [shortcutPlatform, setShortcutPlatform] = useState<ShortcutPlatform>(() => detectShortcutPlatform())
-  const [shortcutWindowPosition, setShortcutWindowPosition] = useState({ x: 44, y: 112 })
   const [fullscreenActive, setFullscreenActive] = useState(Boolean(document.fullscreenElement))
   const [timerLabel, setTimerLabel] = useState('Time Used')
   const [timerText, setTimerText] = useState('0:00:00')
@@ -483,22 +471,6 @@ export function ExamViewPage() {
       return
     }
     openMarkerMenu()
-  }
-
-  function beginShortcutWindowDrag(event: ReactPointerEvent<HTMLDivElement>): void {
-    const modal = shortcutWindowRef.current
-    const target = event.target instanceof HTMLElement ? event.target : null
-    if (!modal || event.button !== 0 || target?.closest('[data-no-drag="true"]')) {
-      return
-    }
-    event.preventDefault()
-    shortcutDragRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      originX: shortcutWindowPosition.x,
-      originY: shortcutWindowPosition.y
-    }
   }
 
   function resetCalculator(): void {
@@ -904,51 +876,6 @@ export function ExamViewPage() {
   }, [])
 
   useEffect(() => {
-    if (!shortcutWindowOpen) {
-      shortcutDragRef.current = null
-      return
-    }
-
-    function handlePointerMove(event: PointerEvent): void {
-      const dragState = shortcutDragRef.current
-      const modal = shortcutWindowRef.current
-      if (!dragState || !modal || dragState.pointerId !== event.pointerId) {
-        return
-      }
-      const nextPosition = clampWindowPosition(
-        dragState.originX + (event.clientX - dragState.startX),
-        dragState.originY + (event.clientY - dragState.startY),
-        modal.offsetWidth,
-        modal.offsetHeight
-      )
-      setShortcutWindowPosition(nextPosition)
-    }
-
-    function handlePointerUp(event: PointerEvent): void {
-      if (shortcutDragRef.current?.pointerId === event.pointerId) {
-        shortcutDragRef.current = null
-      }
-    }
-
-    function handleResize(): void {
-      const modal = shortcutWindowRef.current
-      if (!modal) {
-        return
-      }
-      setShortcutWindowPosition((current) => clampWindowPosition(current.x, current.y, modal.offsetWidth, modal.offsetHeight))
-    }
-
-    window.addEventListener('pointermove', handlePointerMove)
-    window.addEventListener('pointerup', handlePointerUp)
-    window.addEventListener('resize', handleResize)
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove)
-      window.removeEventListener('pointerup', handlePointerUp)
-      window.removeEventListener('resize', handleResize)
-    }
-  }, [shortcutWindowOpen])
-
-  useEffect(() => {
     if (!markerMenuOpen) {
       return
     }
@@ -979,24 +906,6 @@ export function ExamViewPage() {
       window.removeEventListener('resize', handleResize)
     }
   }, [markerMenuOpen])
-
-  useEffect(() => {
-    if (!shortcutWindowOpen) {
-      return
-    }
-    const modal = shortcutWindowRef.current
-    if (!modal) {
-      return
-    }
-    setShortcutWindowPosition(
-      clampWindowPosition(
-        Math.max(24, Math.round((window.innerWidth - modal.offsetWidth) / 2)),
-        Math.max(96, Math.round((window.innerHeight - modal.offsetHeight) / 2)),
-        modal.offsetWidth,
-        modal.offsetHeight
-      )
-    )
-  }, [shortcutWindowOpen, shortcutPlatform])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1236,7 +1145,7 @@ export function ExamViewPage() {
             >
               <svg className="flag-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path className="flag-pole" d="M5 3v18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                <path className="flag-fill" d="M6.8 4.2c1.1-.4 2.2-.7 3.2-.7 1.6 0 3 .4 4.4.8 1.3.4 2.5.7 3.6.7.5 0 .9 0 1.4-.2v9.7c-.5.1-1 .2-1.5.2-1.3 0-2.6-.3-3.8-.7-1.4-.4-2.7-.7-4-.7-.9 0-1.9.2-3.3.6z" />
+                <path className="flag-fill" d="M6.8 4.2H18.3V12.9H6.8z" />
               </svg>
               <span>Mark</span>
             </button>
@@ -1365,11 +1274,26 @@ export function ExamViewPage() {
                 >
                   {block.complete || (block.mode === 'tutor' && entry.state?.revealed) ? (
                     <span className={`q-status-dot ${entry.state?.correct ? 'correct' : 'incorrect'}`} aria-hidden="true">
-                      {entry.state?.correct ? '\u2713' : '\u2715'}
+                      {entry.state?.correct ? (
+                        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+                          <path d="M3 8.5 L6.5 12 L13 4.5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      ) : (
+                        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+                          <path d="M4 4 L12 12 M12 4 L4 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+                        </svg>
+                      )}
                     </span>
                   ) : null}
                   <span className="q-item-number">{entry.index + 1}</span>
-                  {entry.flagged ? <span className="q-flag-dot" aria-hidden="true">🚩</span> : null}
+                  {entry.flagged ? (
+                    <span className="q-flag-dot" aria-hidden="true">
+                      <svg width="11" height="13" viewBox="0 0 12 14" aria-hidden="true">
+                        <path d="M2 1 H10 V5.5 H2 Z" fill="currentColor" />
+                        <line x1="2" y1="1" x2="2" y2="13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                      </svg>
+                    </span>
+                  ) : null}
                   {!entry.flagged && !entry.state?.visited && entry.index !== selectedQnum ? <span className="q-unopened-dot" aria-hidden="true" /> : null}
                 </li>
               ))}
@@ -1681,57 +1605,37 @@ export function ExamViewPage() {
           ) : null}
         </aside>
       ) : null}
-      {shortcutWindowOpen ? (
-        <>
-          <button className="exam-shortcuts-scrim" type="button" aria-label="Close shortcuts" onClick={() => setShortcutWindowOpen(false)} />
-          <div
-            ref={shortcutWindowRef}
-            className="exam-shortcuts-window"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="exam-shortcuts-title"
-            style={{ left: shortcutWindowPosition.x, top: shortcutWindowPosition.y }}
-          >
-            <div className="exam-shortcuts-header" onPointerDown={beginShortcutWindowDrag}>
-              <span className="exam-shortcuts-drag" aria-hidden="true">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 2v5M12 17v5M2 12h5M17 12h5" />
-                  <path d="m8 6 4-4 4 4M8 18l4 4 4-4M6 8l-4 4 4 4M18 8l4 4-4 4" />
-                </svg>
-              </span>
-              <h2 id="exam-shortcuts-title" className="exam-shortcuts-title">Keyboard Shortcuts</h2>
-              <button className="exam-shortcuts-close" type="button" data-no-drag="true" aria-label="Close shortcuts" onClick={() => setShortcutWindowOpen(false)}>
-                ×
-              </button>
-            </div>
-            <div className="exam-shortcuts-body">
-              <div className="exam-shortcuts-platforms" role="tablist" aria-label="Shortcut platform">
-                <button className={`exam-shortcuts-platform ${shortcutPlatform === 'windows' ? 'active' : ''}`} type="button" role="tab" aria-selected={shortcutPlatform === 'windows'} onClick={() => setShortcutPlatform('windows')}>Windows</button>
-                <button className={`exam-shortcuts-platform ${shortcutPlatform === 'mac' ? 'active' : ''}`} type="button" role="tab" aria-selected={shortcutPlatform === 'mac'} onClick={() => setShortcutPlatform('mac')}>macOS</button>
+      <FloatingWindow
+        open={shortcutWindowOpen}
+        onClose={() => setShortcutWindowOpen(false)}
+        title="Keyboard Shortcuts"
+        titleId="exam-shortcuts-title"
+        className="exam-shortcuts-window"
+      >
+        <div className="exam-shortcuts-platforms" role="tablist" aria-label="Shortcut platform">
+          <button className={`exam-shortcuts-platform ${shortcutPlatform === 'windows' ? 'active' : ''}`} type="button" role="tab" aria-selected={shortcutPlatform === 'windows'} onClick={() => setShortcutPlatform('windows')}>Windows</button>
+          <button className={`exam-shortcuts-platform ${shortcutPlatform === 'mac' ? 'active' : ''}`} type="button" role="tab" aria-selected={shortcutPlatform === 'mac'} onClick={() => setShortcutPlatform('mac')}>macOS</button>
+        </div>
+        <div className="exam-shortcuts-grid">
+          {SHORTCUT_DEFINITIONS.map((definition) => {
+            const keys = shortcutPlatform === 'mac' ? definition.macKeys : definition.windowsKeys
+            return (
+              <div key={definition.action} className="exam-shortcuts-card">
+                <div className="exam-shortcuts-keys">
+                  {keys.map((shortcutKey, index) => (
+                    <span key={`${definition.action}-${shortcutKey}-${index}`} className="exam-shortcuts-keygroup">
+                      {index > 0 ? <span className="exam-shortcuts-plus">{keys.length === 4 ? ',' : '+'}</span> : null}
+                      <span className="exam-shortcuts-key">{shortcutKey}</span>
+                    </span>
+                  ))}
+                </div>
+                <span className="exam-shortcuts-arrow">→</span>
+                <span className="exam-shortcuts-action">{definition.action}</span>
               </div>
-              <div className="exam-shortcuts-grid">
-                {SHORTCUT_DEFINITIONS.map((definition) => {
-                  const keys = shortcutPlatform === 'mac' ? definition.macKeys : definition.windowsKeys
-                  return (
-                    <div key={definition.action} className="exam-shortcuts-card">
-                      <div className="exam-shortcuts-keys">
-                        {keys.map((shortcutKey, index) => (
-                          <span key={`${definition.action}-${shortcutKey}-${index}`} className="exam-shortcuts-keygroup">
-                            {index > 0 ? <span className="exam-shortcuts-plus">{keys.length === 4 ? ',' : '+'}</span> : null}
-                            <span className="exam-shortcuts-key">{shortcutKey}</span>
-                          </span>
-                        ))}
-                      </div>
-                      <span className="exam-shortcuts-arrow">→</span>
-                      <span className="exam-shortcuts-action">{definition.action}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-        </>
-      ) : null}
+            )
+          })}
+        </div>
+      </FloatingWindow>
       {markerMenuOpen ? (
         <div
           ref={markerMenuRef}
