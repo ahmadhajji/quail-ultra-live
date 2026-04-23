@@ -2,6 +2,252 @@ body[data-exam-ui="v2"] .exam-v2-shell {
   --qx-panel-bg: #ffffff;
   --qx-panel-border: #d7dfec;
   --qx-panel-heading: #243443;
+  /* Soft background + reading surface for the main workspace. Replaces the
+   * harsh stark-white canvas with a gentle warm-cool off-white that matches
+   * the target design from the reference screenshots. */
+  --qx-workspace-bg: #f3f5fa;
+  --qx-question-surface: #fbfcfe;
+  --qx-question-border: #e4e9f2;
+  --qx-choices-border: #c3d5f4;
+  --qx-choices-ring: rgba(99, 150, 232, 0.22);
+}
+
+body[data-exam-ui="v2"] .exam-workspace.exam-v2-workspace {
+  background: var(--qx-workspace-bg);
+}
+
+body[data-exam-ui="v2"] .exam-panel.exam-panel-continuous {
+  background: transparent;
+}
+
+body[data-exam-ui="v2"] .exam-scroll.exam-scroll-continuous {
+  background: transparent;
+}
+
+/* Give the question stem its own softer card-surface so the workspace
+ * background bleeds through around it. */
+body[data-exam-ui="v2"] .exam-scroll.exam-scroll-continuous .exam-section {
+  padding: 20px 40px 12px;
+}
+
+body[data-exam-ui="v2"] .exam-scroll.exam-scroll-continuous .exam-answer-section,
+body[data-exam-ui="v2"] .exam-scroll.exam-scroll-continuous .exam-explanation-section {
+  background: transparent;
+  border-top: none;
+  margin-top: 0;
+  padding: 8px 40px 28px;
+}
+
+body[data-exam-ui="v2"] .exam-question-body {
+  font-family: "Aptos", "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
+  color: #1d2a3a;
+  font-size: 16.5px;
+  line-height: 1.6;
+}
+
+body[data-exam-ui="v2"] .exam-question-body p,
+body[data-exam-ui="v2"] .exam-explanation-body p {
+  color: #1d2a3a;
+  margin-bottom: 12px;
+}
+
+body[data-exam-ui="v2"] .exam-explanation-body {
+  color: #1d2a3a;
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+body[data-exam-ui="v2"] .exam-explanation-body h1,
+body[data-exam-ui="v2"] .exam-explanation-body h2,
+body[data-exam-ui="v2"] .exam-explanation-body h3,
+body[data-exam-ui="v2"] .exam-explanation-body h4 {
+  color: #1f466b;
+}
+
+/* Soften the answer options group so it reads as a grouped card rather
+ * than a harsh bordered box. */
+body[data-exam-ui="v2"] .exam-choices-container {
+  background: #ffffff;
+  border: 1px solid var(--qx-choices-border, #c3d5f4);
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(31, 70, 107, 0.04);
+  min-width: 0;
+  padding: 18px 22px;
+  width: 100%;
+  max-width: 760px;
+}
+
+body[data-exam-ui="v2"] .exam-choice-row {
+  border-radius: 6px;
+  padding: 2px 6px 2px 2px;
+  transition: background 120ms ease;
+}
+
+body[data-exam-ui="v2"] .exam-choice-row:hover {
+  background: rgba(99, 150, 232, 0.08);
+}
+
+body[data-exam-ui="v2"] .exam-choice-content {
+  color: #1d2a3a;
+  font-size: 15px;
+}
+
+body[data-exam-ui="v2"] .exam-choice-label {
+  color: #1d2a3a;
+}
+
+body[data-exam-ui="v2"] .exam-choice-selector {
+  border-color: #9aa9bf;
+}
+
+body[data-exam-ui="v2"] .exam-choice-selector.active {
+  border-color: #4f7ae0;
+  background: radial-gradient(#4f7ae0 0%, #4f7ae0 40%, transparent 45%, transparent);
+}
+
+body[data-exam-ui="v2"] .exam-choice-selector:focus-visible,
+body[data-exam-ui="v2"] .exam-choice-content:focus-visible {
+  outline: 2px solid #4f7ae0;
+  outline-offset: 2px;
+}
+
+/* Softer alert / caution surface to match the question card. */
+body[data-exam-ui="v2"] .exam-scroll .alert-warning {
+  background: #fff8e1;
+  border: 1px solid #f1d9a6;
+  border-radius: 8px;
+  color: #5c4208;
+}
+
+/* Explanation header pill row. */
+body[data-exam-ui="v2"] .exam-explanation-section .exam-section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+/* New result-pill header for the explanation section. Replaces the previous
+ * "Explanation / Explanation visible immediately after answer submission /
+ * Revealed" label stack with a clear red-or-blue pill that communicates the
+ * result and the correct answer letter at a glance. */
+body[data-exam-ui="v2"] .exam-explanation-header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+body[data-exam-ui="v2"] .exam-explanation-empty-note {
+  color: #64768a;
+  font-size: 13px;
+}
+
+body[data-exam-ui="v2"] .exam-explanation-source-btn {
+  margin-left: auto;
+}
+
+.exam-result-pill {
+  align-items: center;
+  background: #eaf1fd;
+  border: 1px solid #b8cff1;
+  border-radius: 999px;
+  color: #244a85;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 10px;
+  letter-spacing: 0.01em;
+  padding: 7px 14px 7px 12px;
+}
+
+.exam-result-pill-correct {
+  background: #eaf1fd;
+  border-color: #b8cff1;
+  color: #244a85;
+}
+
+.exam-result-pill-incorrect {
+  background: #fde9e7;
+  border-color: #f1b7b2;
+  color: #a53a36;
+}
+
+.exam-result-pill-status {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.exam-result-pill-divider {
+  background: currentColor;
+  display: inline-block;
+  height: 14px;
+  margin: 0 2px;
+  opacity: 0.3;
+  width: 1px;
+}
+
+.exam-result-pill-answer-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  opacity: 0.82;
+  text-transform: uppercase;
+}
+
+.exam-result-pill-answer {
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 999px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  line-height: 1;
+  min-width: 22px;
+  padding: 4px 9px;
+  text-align: center;
+}
+
+.exam-result-pill-correct .exam-result-pill-answer {
+  background: rgba(255, 255, 255, 0.82);
+  color: #1d3f75;
+}
+
+.exam-result-pill-incorrect .exam-result-pill-answer {
+  background: rgba(255, 255, 255, 0.82);
+  color: #922d29;
+}
+
+body[data-exam-ui="v2"] .exam-question-body table,
+body[data-exam-ui="v2"] .exam-explanation-body table {
+  border-collapse: separate;
+  border-radius: 8px;
+  border-spacing: 0;
+  border: 1px solid #dfe6f1;
+  margin: 10px 0 14px;
+  overflow: hidden;
+}
+
+body[data-exam-ui="v2"] .exam-question-body th,
+body[data-exam-ui="v2"] .exam-question-body td,
+body[data-exam-ui="v2"] .exam-explanation-body th,
+body[data-exam-ui="v2"] .exam-explanation-body td {
+  border: none;
+  border-bottom: 1px solid #edf1f8;
+  padding: 8px 12px;
+}
+
+body[data-exam-ui="v2"] .exam-question-body tr:last-child td,
+body[data-exam-ui="v2"] .exam-explanation-body tr:last-child td {
+  border-bottom: none;
+}
+
+body[data-exam-ui="v2"] .exam-question-body ul,
+body[data-exam-ui="v2"] .exam-question-body ol,
+body[data-exam-ui="v2"] .exam-explanation-body ul,
+body[data-exam-ui="v2"] .exam-explanation-body ol {
+  padding-left: 22px;
 }
 
 body[data-exam-ui="v2"] .exam-v2-stage {
@@ -609,5 +855,322 @@ body[data-exam-ui="v2"] .exam-shortcuts-action {
 
   body[data-exam-ui="v2"] .exam-shortcuts-arrow {
     display: none;
+  }
+}
+
+/* -------------------------------------------------------------------------
+ * Openable images (question stem + explanation)
+ *
+ * Any image rewritten by qbank-html carries `data-openable-image="true"`.
+ * The click handler opens the floating ImageInspector; these styles make the
+ * affordance discoverable without screaming for attention.
+ * ----------------------------------------------------------------------- */
+
+.exam-question-body img.exam-openable-image,
+.exam-explanation-body img.exam-openable-image {
+  border-radius: 8px;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03), 0 2px 6px rgba(15, 23, 42, 0.06);
+  cursor: zoom-in;
+  outline: none;
+  transition: box-shadow 140ms ease, transform 140ms ease;
+}
+
+.exam-question-body img.exam-openable-image:hover,
+.exam-explanation-body img.exam-openable-image:hover {
+  box-shadow: 0 2px 10px rgba(31, 70, 107, 0.18);
+  transform: translateY(-1px);
+}
+
+.exam-question-body img.exam-openable-image:focus-visible,
+.exam-explanation-body img.exam-openable-image:focus-visible {
+  box-shadow: 0 0 0 3px rgba(99, 150, 232, 0.45);
+}
+
+/* -------------------------------------------------------------------------
+ * Sync status pill
+ *
+ * Replaces the flashing toast that fired on every save/visit. Shows a quiet
+ * dot + short label in the top-right of the viewport. Turns amber/orange
+ * when sync is not healthy, and fades to a subtle grey once everything is
+ * synced.
+ * ----------------------------------------------------------------------- */
+
+.sync-status-pill {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 999px;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+  color: #475569;
+  display: inline-flex;
+  font-size: 11.5px;
+  font-weight: 600;
+  gap: 8px;
+  letter-spacing: 0.02em;
+  padding: 5px 11px 5px 9px;
+  pointer-events: none;
+  position: fixed;
+  right: 14px;
+  top: 64px;
+  transition: background 160ms ease, color 160ms ease, opacity 160ms ease;
+  user-select: none;
+  z-index: 60;
+}
+
+.sync-status-pill-dot {
+  border-radius: 999px;
+  display: inline-block;
+  height: 8px;
+  width: 8px;
+}
+
+.sync-status-pill-label {
+  line-height: 1;
+}
+
+.sync-status-pill-synced {
+  background: rgba(241, 245, 249, 0.82);
+  color: #6b7a90;
+  opacity: 0.65;
+}
+
+.sync-status-pill-synced .sync-status-pill-dot {
+  background: #4ea672;
+  box-shadow: 0 0 0 2px rgba(78, 166, 114, 0.2);
+}
+
+.sync-status-pill-syncing,
+.sync-status-pill-pending {
+  background: rgba(233, 240, 254, 0.95);
+  color: #2f4b86;
+}
+
+.sync-status-pill-syncing .sync-status-pill-dot,
+.sync-status-pill-pending .sync-status-pill-dot {
+  background: #4f7ae0;
+  box-shadow: 0 0 0 2px rgba(79, 122, 224, 0.25);
+  animation: sync-status-pill-pulse 1200ms ease-in-out infinite;
+}
+
+.sync-status-pill-offline {
+  background: rgba(255, 245, 232, 0.95);
+  color: #8a5a1a;
+}
+
+.sync-status-pill-offline .sync-status-pill-dot {
+  background: #d08b28;
+  box-shadow: 0 0 0 2px rgba(208, 139, 40, 0.25);
+}
+
+.sync-status-pill-error {
+  background: rgba(253, 234, 232, 0.95);
+  color: #a53a36;
+}
+
+.sync-status-pill-error .sync-status-pill-dot {
+  background: #e25b54;
+  box-shadow: 0 0 0 2px rgba(226, 91, 84, 0.25);
+  animation: sync-status-pill-pulse 900ms ease-in-out infinite;
+}
+
+@keyframes sync-status-pill-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* -------------------------------------------------------------------------
+ * Image Inspector
+ *
+ * Reuses FloatingWindow chrome, adds a zoomable viewport and a toolbar of
+ * actions. Matches the target UI from the reference screenshots.
+ * ----------------------------------------------------------------------- */
+
+.floating-window.exam-image-inspector {
+  max-height: min(880px, calc(100vh - 96px));
+  width: min(960px, calc(100vw - 48px));
+}
+
+.floating-window.exam-image-inspector .floating-window-body {
+  background: #f5f7fb;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.floating-window.exam-image-inspector-fullscreen {
+  border-radius: 0;
+  height: 100vh;
+  left: 0 !important;
+  max-height: 100vh;
+  top: 0 !important;
+  transform: none !important;
+  width: 100vw;
+}
+
+.floating-window.exam-image-inspector-fullscreen .floating-window-header {
+  border-radius: 0;
+}
+
+.exam-image-inspector-viewport {
+  align-items: center;
+  background: #f5f7fb;
+  cursor: grab;
+  display: flex;
+  flex: 1 1 auto;
+  justify-content: center;
+  min-height: 360px;
+  overflow: hidden;
+  position: relative;
+  touch-action: none;
+  user-select: none;
+}
+
+.exam-image-inspector-viewport:active {
+  cursor: grabbing;
+}
+
+.exam-image-inspector-image {
+  display: block;
+  max-height: 100%;
+  max-width: 100%;
+  pointer-events: none;
+  transform-origin: center center;
+  transition: transform 60ms ease-out;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.exam-image-inspector-toolbar {
+  align-items: center;
+  background: #ffffff;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  padding: 10px 14px;
+}
+
+.exam-image-inspector-btn {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #475569;
+  cursor: pointer;
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  padding: 0;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  width: 36px;
+}
+
+.exam-image-inspector-btn:hover {
+  background: #eef2fb;
+  border-color: #cdd9ee;
+  color: #2f4b86;
+}
+
+.exam-image-inspector-btn:focus-visible {
+  background: #eef2fb;
+  border-color: #4f7ae0;
+  color: #2f4b86;
+  outline: none;
+}
+
+.exam-image-inspector-btn.is-active {
+  background: #4f7ae0;
+  border-color: #3d65c8;
+  color: #ffffff;
+}
+
+.exam-image-inspector-btn.is-success {
+  background: #e0f5e7;
+  border-color: #9dd7af;
+  color: #2f7a4c;
+}
+
+.exam-image-inspector-btn.is-error {
+  background: #fdeae8;
+  border-color: #f1b7b2;
+  color: #a53a36;
+}
+
+.exam-image-inspector-zoom {
+  color: #64748b;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin: 0 4px;
+  min-width: 42px;
+  text-align: center;
+}
+
+.exam-image-inspector-divider {
+  background: #e2e8f0;
+  display: inline-block;
+  height: 22px;
+  margin: 0 6px;
+  width: 1px;
+}
+
+/* -------------------------------------------------------------------------
+ * Left question rail polish
+ *
+ * Keep the polish surgical — spacing, hover states, and correct/incorrect
+ * indicator sizing only. Layout and colors were approved separately.
+ * ----------------------------------------------------------------------- */
+
+body[data-exam-ui="v2"] .exam-sidebar {
+  background: #ffffff;
+  border-right: 1px solid #e4e9f2;
+}
+
+body[data-exam-ui="v2"] .exam-question-list .list-group-item {
+  border-bottom: 1px solid #f1f4fa;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+body[data-exam-ui="v2"] .exam-question-list .list-group-item:hover {
+  background: #eef3fb;
+}
+
+body[data-exam-ui="v2"] .exam-question-list .list-group-item.q-item-visited {
+  background: #f6f8fc;
+}
+
+body[data-exam-ui="v2"] .exam-question-list .list-group-item.q-item-visited:hover {
+  background: #eef3fb;
+}
+
+body[data-exam-ui="v2"] .exam-question-list .list-group-item.active,
+body[data-exam-ui="v2"] .exam-question-list .list-group-item.active:hover {
+  background: #4f7ae0;
+  color: #ffffff;
+}
+
+body[data-exam-ui="v2"] .exam-question-list .list-group-item .q-status-dot svg {
+  display: block;
+}
+
+body[data-exam-ui="v2"] .exam-question-list .list-group-item.q-item-correct .q-status-dot {
+  color: #2a9a5a;
+}
+
+body[data-exam-ui="v2"] .exam-question-list .list-group-item.q-item-incorrect .q-status-dot {
+  color: #d1433e;
+}
+
+@media (max-width: 900px) {
+  .sync-status-pill {
+    right: 10px;
+    top: 176px;
   }
 }

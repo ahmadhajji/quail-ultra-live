@@ -111,7 +111,32 @@ export function rewriteAssetPaths(html: string, basePath: string, maxHeight: str
   return document.body.innerHTML
 }
 
-export async function fetchQuestionAssets(basePath: string, qid: string): Promise<{ questionHtml: string; explanationHtml: string }> {
+interface CachedAssets {
+  questionHtml: string
+  explanationHtml: string
+}
+
+// In-memory cache keyed by `${basePath}::${qid}`. Question HTML is small
+// (usually a few KB) and fetching adds noticeable lag when navigating between
+// questions, so we keep the last N entries hot.
+const QUESTION_ASSET_CACHE = new Map<string, CachedAssets | Promise<CachedAssets>>()
+const QUESTION_ASSET_CACHE_LIMIT = 64
+
+function cacheKey(basePath: string, qid: string): string {
+  return `${basePath}::${qid}`
+}
+
+function trimCache(): void {
+  while (QUESTION_ASSET_CACHE.size > QUESTION_ASSET_CACHE_LIMIT) {
+    const oldest = QUESTION_ASSET_CACHE.keys().next().value
+    if (!oldest) {
+      return
+    }
+    QUESTION_ASSET_CACHE.delete(oldest)
+  }
+}
+
+async function fetchQuestionAssetsUncached(basePath: string, qid: string): Promise<CachedAssets> {
   const [questionResponse, explanationResponse] = await Promise.all([
     window.fetch(`${basePath}/${qid}-q.html`, { credentials: 'include' }),
     window.fetch(`${basePath}/${qid}-s.html`, { credentials: 'include' })
@@ -127,4 +152,77 @@ export async function fetchQuestionAssets(basePath: string, qid: string): Promis
   ])
 
   return { questionHtml, explanationHtml }
+}
+
+export async function fetchQuestionAssets(basePath: string, qid: string): Promise<CachedAssets> {
+  if (!basePath || !qid) {
+    throw new Error('Unable to load question content.')
+  }
+  const key = cacheKey(basePath, qid)
+  const cached = QUESTION_ASSET_CACHE.get(key)
+  if (cached && !(cached instanceof Promise)) {
+    return cached
+  }
+  if (cached instanceof Promise) {
+    return cached
+  }
+  const pending = fetchQuestionAssetsUncached(basePath, qid)
+    .then((assets) => {
+      QUESTION_ASSET_CACHE.set(key, assets)
+      trimCache()
+      return assets
+    })
+    .catch((error) => {
+      QUESTION_ASSET_CACHE.delete(key)
+      throw error
+    })
+  QUESTION_ASSET_CACHE.set(key, pending)
+  return pending
+}
+
+/**
+ * Kick off a background fetch for a question's assets without awaiting it.
+ * The promise is still cached, so a subsequent `fetchQuestionAssets` call
+ * resolves immediately once the prefetch completes.
+ */
+export function prefetchQuestionAssets(basePath: string, qid: string): void {
+  if (!basePath || !qid) {
+    return
+  }
+  const key = cacheKey(basePath, qid)
+  if (QUESTION_ASSET_CACHE.has(key)) {
+    return
+  }
+  void fetchQuestionAssets(basePath, qid).catch(() => {
+    // Swallow errors; the on-demand fetch will surface them.
+  })
+}
+
+/**
+ * Warm the browser image cache by issuing Image() loads for every
+ * `data-openable-image` URL in the supplied HTML. This runs in the
+ * background so the next render paints instantly.
+ */
+export function prefetchImagesFromHtml(html: string): void {
+  if (!html || typeof window === 'undefined') {
+    return
+  }
+  try {
+    const document = createDocument(html)
+    const images = document.querySelectorAll<HTMLImageElement>('img[src]')
+    images.forEach((image) => {
+      const src = image.getAttribute('src')
+      if (!src) {
+        return
+      }
+      // new Image() uses the browser's normal cache. Setting src triggers a
+      // GET with credentials matching the page. No handlers needed — we just
+      // want it cached by the time the user clicks Next.
+      const preload = new window.Image()
+      preload.decoding = 'async'
+      preload.src = src
+    })
+  } catch {
+    // Parsing can fail on malformed snippets; ignore.
+  }
 }

@@ -27,9 +27,11 @@ export function mountQuestionHighlighter(options: MountQuestionHighlighterOption
   const { container, color, serializedHighlights, onSerializedChange } = options
   let enabled = true
 
-  container.querySelectorAll<HTMLImageElement>('img[data-openable-image="true"]').forEach((image) => {
-    image.onclick = () => window.open(image.src)
-  })
+  // Image clicks are owned by the ExamViewPage image-inspector wiring, not
+  // by the highlighter. We intentionally do NOT attach a click handler here;
+  // opening the image in a new tab (the previous behavior) competed with the
+  // inspector and caused images to sometimes fail to reopen after the
+  // inspector was closed.
 
   const highlighter = new TextHighlighter(container, {
     color,

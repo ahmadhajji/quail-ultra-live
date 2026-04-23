@@ -21,7 +21,9 @@ const htmlHelpers = vi.hoisted(() => ({
   fetchQuestionAssets: vi.fn(),
   extractChoiceLabels: vi.fn(),
   rewriteAssetPaths: vi.fn((html: string) => html),
-  stripChoicesFromQuestionDisplay: vi.fn((html: string) => html)
+  stripChoicesFromQuestionDisplay: vi.fn((html: string) => html),
+  prefetchQuestionAssets: vi.fn(),
+  prefetchImagesFromHtml: vi.fn()
 }))
 
 const highlighting = vi.hoisted(() => {
@@ -97,7 +99,11 @@ describe('ExamViewPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Select answer A' }))
     await userEvent.click(screen.getByRole('button', { name: 'Submit Answer' }))
 
-    expect(await screen.findByText('Explanation')).toBeInTheDocument()
+    // The explanation section now shows a result pill instead of a text
+    // label — assert on the pill so the test verifies the user-visible state.
+    await waitFor(() => {
+      expect(container.querySelector('.exam-result-pill')).not.toBeNull()
+    })
     expect(container.querySelector('#explanationSection')?.className.includes('exam-hidden')).toBe(false)
   })
 
@@ -110,13 +116,18 @@ describe('ExamViewPage', () => {
     })
 
     expect(screen.queryByPlaceholderText('Add your note for this question...')).not.toBeInTheDocument()
+    // Capture the fetch count after the initial pack load (which includes
+    // neighbor prefetches). Interactions on the current question should not
+    // add to this count.
+    const baselineCalls = htmlHelpers.fetchQuestionAssets.mock.calls.length
+
     await userEvent.click(screen.getByRole('button', { name: 'Notes' }))
     const textarea = screen.getByLabelText('Question Notes')
     await userEvent.type(textarea, 'Persistent note')
     await userEvent.tab()
 
     expect(api.syncProgress).toHaveBeenCalled()
-    expect(htmlHelpers.fetchQuestionAssets).toHaveBeenCalledTimes(1)
+    expect(htmlHelpers.fetchQuestionAssets).toHaveBeenCalledTimes(baselineCalls)
   })
 
   it('keeps notes hidden by default and toggles them on demand', async () => {
@@ -197,7 +208,9 @@ describe('ExamViewPage', () => {
 
     fireEvent.keyDown(window, { key: 'b', code: 'KeyB' })
     fireEvent.keyDown(window, { altKey: true, key: 'Enter', code: 'Enter' })
-    expect(await screen.findByText('Explanation')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(document.querySelector('.exam-result-pill')).not.toBeNull()
+    })
 
     fireEvent.keyDown(window, { key: 'ArrowRight', code: 'ArrowRight' })
     expect(await screen.findByText('Item 2 of 2')).toBeInTheDocument()
@@ -277,8 +290,12 @@ describe('ExamViewPage', () => {
     render(<ExamViewPage />)
 
     await waitFor(() => {
-      expect(htmlHelpers.fetchQuestionAssets).toHaveBeenCalledTimes(1)
+      expect(htmlHelpers.fetchQuestionAssets).toHaveBeenCalled()
     })
+
+    // After the initial load + neighbor prefetch settles, no same-question
+    // interaction should re-issue a fetch for the current question's HTML.
+    const baselineCalls = htmlHelpers.fetchQuestionAssets.mock.calls.length
 
     await userEvent.click(screen.getByRole('button', { name: 'Mark' }))
     await userEvent.click(screen.getByRole('button', { name: 'Notes' }))
@@ -286,7 +303,7 @@ describe('ExamViewPage', () => {
     await userEvent.type(textarea, 'abc')
     await userEvent.tab()
 
-    expect(htmlHelpers.fetchQuestionAssets).toHaveBeenCalledTimes(1)
+    expect(htmlHelpers.fetchQuestionAssets).toHaveBeenCalledTimes(baselineCalls)
   })
 
   it('keeps the highlighter mounted while saving multiple highlight payloads', async () => {

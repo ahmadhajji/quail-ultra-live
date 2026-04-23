@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { fetchQuestionAssets, extractChoiceLabels, rewriteAssetPaths, stripChoicesFromQuestionDisplay } from '../lib/qbank-html'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { fetchQuestionAssets, extractChoiceLabels, prefetchImagesFromHtml, prefetchQuestionAssets, rewriteAssetPaths, stripChoicesFromQuestionDisplay } from '../lib/qbank-html'
 import { getQuestionHighlight, getQuestionNote, setQuestionHighlight, setQuestionNote } from '../lib/annotations'
 import { addToBucket, isInBucket, removeFromBucket } from '../lib/progress'
 import { syncProgress } from '../lib/api'
@@ -9,6 +9,8 @@ import { mountQuestionHighlighter } from '../lib/text-highlighting'
 import { usePackPage } from '../lib/usePackPage'
 import { ExamShellV2 } from '../components/exam/ExamShellV2'
 import { FloatingWindow } from '../components/FloatingWindow'
+import { ImageInspector, type ImageInspectorItem } from '../components/ImageInspector'
+import { SyncStatusPill } from '../components/SyncStatusPill'
 import type { Mode, QbankInfo, SyncProgressOptions } from '../types/domain'
 
 function modeLabel(mode: Mode): string {
@@ -171,6 +173,8 @@ export function ExamViewPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [shortcutWindowOpen, setShortcutWindowOpen] = useState(false)
   const [shortcutPlatform, setShortcutPlatform] = useState<ShortcutPlatform>(() => detectShortcutPlatform())
+  const [inspectorItem, setInspectorItem] = useState<ImageInspectorItem | null>(null)
+  const explanationBodyRef = useRef<HTMLDivElement | null>(null)
   const [fullscreenActive, setFullscreenActive] = useState(Boolean(document.fullscreenElement))
   const [timerLabel, setTimerLabel] = useState('Time Used')
   const [timerText, setTimerText] = useState('0:00:00')
@@ -803,6 +807,10 @@ export function ExamViewPage() {
         setChoiceLabels({ ...nextChoiceLabels, ...metadataChoiceLabels })
         setQuestionHtml(questionMarkup)
         setExplanationHtml(explanationMarkup)
+        // Warm the browser image cache for the current question so the images
+        // paint as soon as the HTML is committed, not on a second roundtrip.
+        prefetchImagesFromHtml(questionMarkup)
+        prefetchImagesFromHtml(explanationMarkup)
       })
       .catch((error) => {
         window.alert(error instanceof Error ? error.message : 'Unable to load question content.')
@@ -812,6 +820,57 @@ export function ExamViewPage() {
       cancelled = true
     }
   }, [currentQid, qbankPath, selectedQnum, syncedSelectedQnum])
+
+  // Build a stable, memoized list of neighbor qids to prefetch. Using a joined
+  // key keeps the effect below from re-firing on every unrelated rerender
+  // (e.g. opening the Notes panel), which would otherwise trigger redundant
+  // network calls for already-cached questions.
+  const prefetchNeighborKey = useMemo(() => {
+    const ids: string[] = []
+    for (let offset = -1; offset <= 2; offset += 1) {
+      const index = selectedQnum + offset
+      if (index < 0 || index >= blockqlist.length || index === selectedQnum) {
+        continue
+      }
+      const qid = blockqlist[index]
+      if (qid) {
+        ids.push(qid)
+      }
+    }
+    return ids.join('|')
+  }, [blockqlist, selectedQnum])
+
+  // Prefetch a small window of adjacent questions so clicking Next/Previous
+  // feels instantaneous. Once we have each neighbor's HTML, we also warm up
+  // the image URLs it references so figures don't blink in after navigation.
+  useEffect(() => {
+    if (!qbankPath || !prefetchNeighborKey) {
+      return
+    }
+    let cancelled = false
+    const qids = prefetchNeighborKey.split('|').filter(Boolean)
+    for (const qid of qids) {
+      prefetchQuestionAssets(qbankPath, qid)
+      // Also warm images once the HTML is in the cache. Because
+      // `fetchQuestionAssets` memoizes by (basePath, qid) in production, this
+      // is a no-op on cache hits.
+      void fetchQuestionAssets(qbankPath, qid)
+        .then(({ questionHtml, explanationHtml }) => {
+          if (cancelled) {
+            return
+          }
+          const hint = `${Math.floor(window.innerHeight * 0.4)}px`
+          prefetchImagesFromHtml(rewriteAssetPaths(questionHtml, qbankPath, hint))
+          prefetchImagesFromHtml(rewriteAssetPaths(explanationHtml, qbankPath, hint))
+        })
+        .catch(() => {
+          // Prefetch failures are non-fatal; the on-demand fetch will retry.
+        })
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [prefetchNeighborKey, qbankPath])
 
   useEffect(() => {
     if (!questionHtml) {
@@ -863,6 +922,97 @@ export function ExamViewPage() {
     highlighterRef.current?.setColor(highlightColor)
     highlighterRef.current?.setEnabled(selectedMarker !== 'none')
   }, [highlightColor, selectedMarker])
+
+  const openImageInspector = useCallback((image: HTMLImageElement) => {
+    const src = image.getAttribute('src')
+    if (!src) {
+      return
+    }
+    const alt = image.getAttribute('alt') ?? ''
+    setInspectorItem({
+      src,
+      alt: alt || 'Question image'
+    })
+  }, [])
+
+  // Enhance images inside the question stem and explanation so clicking any
+  // of them opens the floating image inspector. We use event delegation
+  // (capture phase) at the container level so the wiring survives the
+  // highlighter remounting the DOM or stamping its own onclick on the image.
+  useEffect(() => {
+    const containers: Array<HTMLElement | null> = [questionBodyRef.current, explanationBodyRef.current]
+    const cleanups: Array<() => void> = []
+
+    function decorateImage(image: HTMLImageElement): void {
+      image.classList.add('exam-openable-image')
+      image.setAttribute('tabindex', '0')
+      image.setAttribute('role', 'button')
+      if (!image.getAttribute('aria-label')) {
+        image.setAttribute('aria-label', image.getAttribute('alt')?.trim() || 'Open image')
+      }
+      // Null out any legacy onclick so window.open can't race our inspector.
+      image.onclick = null
+    }
+
+    for (const container of containers) {
+      if (!container) {
+        continue
+      }
+      const images = Array.from(container.querySelectorAll<HTMLImageElement>('img[data-openable-image="true"]'))
+      for (const image of images) {
+        decorateImage(image)
+      }
+
+      const onClickCapture = (event: Event) => {
+        const target = event.target
+        if (!(target instanceof HTMLImageElement)) {
+          return
+        }
+        if (target.getAttribute('data-openable-image') !== 'true') {
+          return
+        }
+        // Re-apply decoration defensively in case the highlighter added a new
+        // handler between our last render and this click.
+        decorateImage(target)
+        event.preventDefault()
+        event.stopPropagation()
+        // Stop immediate propagation too: this guarantees any onclick the
+        // highlighter may have attached to the image itself does not run.
+        if (typeof (event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation === 'function') {
+          (event as Event & { stopImmediatePropagation: () => void }).stopImmediatePropagation()
+        }
+        openImageInspector(target)
+      }
+
+      const onKeyDownCapture = (event: Event) => {
+        const keyboardEvent = event as KeyboardEvent
+        const target = event.target
+        if (!(target instanceof HTMLImageElement)) {
+          return
+        }
+        if (target.getAttribute('data-openable-image') !== 'true') {
+          return
+        }
+        if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
+          event.preventDefault()
+          openImageInspector(target)
+        }
+      }
+
+      container.addEventListener('click', onClickCapture, true)
+      container.addEventListener('keydown', onKeyDownCapture, true)
+      cleanups.push(() => {
+        container.removeEventListener('click', onClickCapture, true)
+        container.removeEventListener('keydown', onKeyDownCapture, true)
+      })
+    }
+
+    return () => {
+      for (const cleanup of cleanups) {
+        cleanup()
+      }
+    }
+  }, [questionHtml, explanationHtml, openImageInspector])
 
   useEffect(() => {
     function handleFullscreenChange(): void {
@@ -1406,23 +1556,32 @@ export function ExamViewPage() {
             </section>
 
             <section id="explanationSection" className={`exam-section exam-explanation-section ${explanationVisible ? '' : 'exam-hidden'}`}>
-              <div className="exam-section-header">
-                <div>
-                  <p className="exam-panel-title mb-1">Explanation</p>
-                  <p className="exam-panel-note mb-0">
-                    {explanationVisible
-                      ? (block.complete ? 'Full review is available for this completed block.' : 'Explanation visible immediately after answer submission.')
-                      : (block.mode === 'tutor' ? 'Submit the current question to reveal the explanation.' : 'Explanation hidden until you end the block and enter review mode.')}
+              <div className="exam-explanation-header">
+                {explanationVisible ? (() => {
+                  const correctChoice = qbankinfo.choices[currentQid]?.correct ?? ''
+                  const isCorrect = currentAnswer !== '' && currentAnswer === correctChoice
+                  return (
+                    <div className={`exam-result-pill ${isCorrect ? 'exam-result-pill-correct' : 'exam-result-pill-incorrect'}`} role="status" aria-live="polite">
+                      <span className="exam-result-pill-status">{isCorrect ? 'Correct' : 'Incorrect'}</span>
+                      {correctChoice ? (
+                        <>
+                          <span className="exam-result-pill-divider" aria-hidden="true" />
+                          <span className="exam-result-pill-answer-label">{isCorrect ? 'Answer' : 'Correct answer'}</span>
+                          <span className="exam-result-pill-answer">{correctChoice}</span>
+                        </>
+                      ) : null}
+                    </div>
+                  )
+                })() : (
+                  <p className="exam-panel-note exam-explanation-empty-note mb-0">
+                    {block.mode === 'tutor' ? 'Submit the current question to reveal the explanation.' : 'Explanation hidden until you end the block and enter review mode.'}
                   </p>
-                </div>
-                <div className="d-flex align-items-center" style={{ gap: '0.75rem' }}>
-                  {sourceSlideAsset ? (
-                    <button className="btn btn-outline-secondary btn-sm" type="button" onClick={() => setSourceSlideOpen(true)}>
-                      Source Slide
-                    </button>
-                  ) : null}
-                  <span className={`exam-state-pill ${explanationVisible ? 'review' : 'awaiting'}`}>{explanationVisible ? (block.complete ? 'Review' : 'Revealed') : 'Hidden'}</span>
-                </div>
+                )}
+                {sourceSlideAsset ? (
+                  <button className="btn btn-outline-secondary btn-sm exam-explanation-source-btn" type="button" onClick={() => setSourceSlideOpen(true)}>
+                    Source Slide
+                  </button>
+                ) : null}
               </div>
               {factCheck?.status && ['disputed', 'unresolved'].includes(factCheck.status) ? (
                 <div className="alert alert-warning mt-3" role="alert">
@@ -1438,7 +1597,7 @@ export function ExamViewPage() {
                   ) : null}
                 </div>
               ) : null}
-              <div className="exam-explanation-body" dangerouslySetInnerHTML={{ __html: explanationHtml }} />
+              <div ref={explanationBodyRef} className="exam-explanation-body" dangerouslySetInnerHTML={{ __html: explanationHtml }} />
             </section>
           </div>
         </section>
@@ -1697,6 +1856,8 @@ export function ExamViewPage() {
           </div>
         </div>
       ) : null}
+      <ImageInspector open={Boolean(inspectorItem)} item={inspectorItem} onClose={() => setInspectorItem(null)} />
+      <SyncStatusPill />
     </>
   )
 }

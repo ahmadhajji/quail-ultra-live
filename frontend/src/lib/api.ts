@@ -68,21 +68,58 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
-function showSyncBanner(mode: 'info' | 'warning' | 'success' | null, text: string): void {
-  let banner = document.getElementById('syncBanner')
-  if (!banner) {
-    banner = document.createElement('div')
-    banner.id = 'syncBanner'
-    banner.className = 'sync-banner sync-banner-hidden'
-    document.body.appendChild(banner)
-  }
-  if (!mode || !text) {
-    banner.className = 'sync-banner sync-banner-hidden'
-    banner.textContent = ''
+/**
+ * Sync status surface. The exam UI renders a small pill driven by these
+ * states rather than a per-event toast so users aren't distracted on every
+ * save. States are coarse and durable:
+ *   - `synced`   → all known changes have been acknowledged by the server
+ *   - `syncing`  → a flush is in-flight
+ *   - `pending`  → changes are queued locally; not yet sent
+ *   - `offline`  → navigator is offline; changes buffered for later
+ *   - `error`    → the last attempt failed; will retry on the next flush
+ */
+export type SyncStatusState = 'synced' | 'syncing' | 'pending' | 'offline' | 'error'
+
+export interface SyncStatus {
+  state: SyncStatusState
+  message?: string
+}
+
+let currentSyncStatus: SyncStatus = { state: 'synced' }
+const syncStatusListeners = new Set<(status: SyncStatus) => void>()
+
+function setSyncStatus(next: SyncStatus): void {
+  const sameState = currentSyncStatus.state === next.state
+  const sameMessage = (currentSyncStatus.message ?? '') === (next.message ?? '')
+  if (sameState && sameMessage) {
     return
   }
-  banner.className = `sync-banner sync-banner-${mode}`
-  banner.textContent = text
+  currentSyncStatus = next
+  for (const listener of syncStatusListeners) {
+    try {
+      listener(next)
+    } catch (error) {
+      console.warn('Sync status listener failed.', error)
+    }
+  }
+}
+
+export function getSyncStatus(): SyncStatus {
+  return currentSyncStatus
+}
+
+export function subscribeSyncStatus(listener: (status: SyncStatus) => void): () => void {
+  syncStatusListeners.add(listener)
+  listener(currentSyncStatus)
+  return () => {
+    syncStatusListeners.delete(listener)
+  }
+}
+
+// Legacy no-op kept for API compatibility; the UI now owns status rendering
+// through the `SyncStatusPill` component.
+function showSyncBanner(_mode: 'info' | 'warning' | 'success' | null, _text: string): void {
+  // intentionally left blank
 }
 
 function summarizeTextError(text: string): string {
@@ -553,35 +590,37 @@ async function updateCachedProgress(packId: string, progress: ProgressRecord, re
 async function sendProgressEntry(entry: DirtyProgressEntry, options: SyncProgressOptions = {}): Promise<SyncProgressResult> {
   if (!window.navigator.onLine) {
     await setDirtyProgress(entry)
-    if (!options.silent) {
-      showSyncBanner('warning', 'Offline: progress saved locally and queued for sync.')
-    }
+    setSyncStatus({ state: 'offline' })
     return { queued: true }
   }
 
-  const payload = await request(`/api/study-packs/${entry.packId}/progress`, revisionResponseSchema, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      progress: entry.progress,
-      baseRevision: entry.baseRevision,
-      ...syncMetadataFromDirtyEntry(entry)
-    }),
-    ...(options.keepalive !== undefined ? { keepalive: options.keepalive } : {})
-  }, PROGRESS_REQUEST_TIMEOUT_MS)
+  setSyncStatus({ state: 'syncing' })
 
-  await updateCachedProgress(entry.packId, entry.progress, payload.revision)
-  await idbDelete(DIRTY_STORE, entry.packId)
+  try {
+    const payload = await request(`/api/study-packs/${entry.packId}/progress`, revisionResponseSchema, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        progress: entry.progress,
+        baseRevision: entry.baseRevision,
+        ...syncMetadataFromDirtyEntry(entry)
+      }),
+      ...(options.keepalive !== undefined ? { keepalive: options.keepalive } : {})
+    }, PROGRESS_REQUEST_TIMEOUT_MS)
 
-  if (!options.silent) {
-    showSyncBanner('success', 'All changes saved.')
-    window.setTimeout(() => showSyncBanner(null, ''), 1200)
-  }
+    await updateCachedProgress(entry.packId, entry.progress, payload.revision)
+    await idbDelete(DIRTY_STORE, entry.packId)
 
-  return {
-    revision: payload.revision,
-    ...(payload.applied !== undefined ? { applied: payload.applied } : {}),
-    ...(payload.serverAcceptedAt !== undefined ? { serverAcceptedAt: payload.serverAcceptedAt } : {})
+    setSyncStatus({ state: 'synced' })
+
+    return {
+      revision: payload.revision,
+      ...(payload.applied !== undefined ? { applied: payload.applied } : {}),
+      ...(payload.serverAcceptedAt !== undefined ? { serverAcceptedAt: payload.serverAcceptedAt } : {})
+    }
+  } catch (error) {
+    setSyncStatus({ state: 'error' })
+    throw error
   }
 }
 
@@ -595,7 +634,7 @@ export async function loadPack(packId: string, blockKey: string): Promise<QbankI
   } catch (error) {
     const cached = await getPackCache(packId)
     if (cached?.qbankinfo) {
-      showSyncBanner('warning', 'Offline mode: using the cached study pack on this device.')
+      setSyncStatus({ state: 'offline' })
       return {
         ...cached.qbankinfo,
         blockToOpen: blockKey || ''
@@ -646,22 +685,17 @@ export async function syncProgress(packId: string, progress: ProgressRecord, opt
   await setDirtyProgress(entry)
 
   if (!window.navigator.onLine) {
-    if (!options.silent) {
-      showSyncBanner('warning', 'Offline: progress saved locally and queued for sync.')
-    }
+    setSyncStatus({ state: 'offline' })
     return { queued: true }
   }
 
+  setSyncStatus({ state: options.immediate ? 'syncing' : 'pending' })
+
   try {
-    if (!options.silent) {
-      showSyncBanner('info', options.immediate ? 'Syncing changes...' : 'Saving locally. Sync pending...')
-    }
     return await progressSyncCoordinator.queue(entry, options)
   } catch (error) {
     await setDirtyProgress(entry)
-    if (!options.silent) {
-      showSyncBanner('warning', 'Saved locally. Sync will retry when the connection returns.')
-    }
+    setSyncStatus({ state: 'error' })
     return { queued: true }
   }
 }
@@ -847,8 +881,16 @@ export function registerServiceWorker(): void {
 
 export function installOnlineSyncHandler(): void {
   window.addEventListener('online', () => {
-    showSyncBanner('info', 'Connection restored. Syncing queued progress...')
-    void flushDirtyProgress({ immediate: true, silent: true }).then(() => showSyncBanner(null, ''))
+    setSyncStatus({ state: 'syncing' })
+    void flushDirtyProgress({ immediate: true, silent: true }).then(() => {
+      if (currentSyncStatus.state === 'syncing') {
+        setSyncStatus({ state: 'synced' })
+      }
+    })
+  })
+
+  window.addEventListener('offline', () => {
+    setSyncStatus({ state: 'offline' })
   })
 
   const flushLifecycleChanges = () => {
