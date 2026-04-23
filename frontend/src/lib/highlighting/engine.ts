@@ -1,6 +1,13 @@
-import { clearTarget, setRangesFor } from './cssRegistry'
+import { clearTarget, promoteHighlight, setRangesFor } from './cssRegistry'
 import { hitTestHighlight } from './hitTest'
-import { buildNodeIndex, mergeAdjacent, offsetsFromRange, rangeFromOffsets, type NodeIndex } from './serialize'
+import {
+  buildNodeIndex,
+  mergeAdjacent,
+  offsetsFromRange,
+  rangeFromOffsets,
+  trimWhitespaceOffsets,
+  type NodeIndex
+} from './serialize'
 import { HIGHLIGHT_COLORS, makeHighlightId, type HighlightColor, type SerializedHighlight, type Target } from './types'
 
 interface HighlightEngineOptions {
@@ -37,6 +44,7 @@ export class HighlightEngine {
   private pendingTimer = 0
   private readonly observer: MutationObserver
   private observerPaused = false
+  private lastRenderedText: string
 
   constructor(options: HighlightEngineOptions) {
     this.container = options.container
@@ -46,12 +54,25 @@ export class HighlightEngine {
     this.onChange = options.onChange
     this.index = buildNodeIndex(this.container)
     this.highlights = sanitizeHighlights(options.initial, this.index.text.length)
+    this.lastRenderedText = this.index.text
     this.observer = new MutationObserver(() => {
-      if (!this.observerPaused && !this.destroyed && this.highlights.length > 0) {
-        this.scheduleRender()
+      if (this.observerPaused || this.destroyed || this.highlights.length === 0) {
+        return
       }
+      // Skip storms of no-op mutations: MathJax typesetting, lazy-loaded
+      // images flipping attributes, aria updates, etc. When the container's
+      // textContent is unchanged, our offsets still anchor to new text nodes
+      // with the same content, so we do need to rebuild ranges — but only
+      // once the mutation storm settles. The structural rebuild itself is
+      // handled by scheduleRender; the guard here just avoids rebuilding
+      // when nothing text-affecting has happened since the last render.
+      const currentText = this.container.textContent ?? ''
+      if (currentText === this.lastRenderedText) {
+        return
+      }
+      this.scheduleRender()
     })
-    this.observer.observe(this.container, { childList: true, subtree: true })
+    this.observer.observe(this.container, { childList: true, subtree: true, characterData: true })
     this.render()
     document.addEventListener('mouseup', this.onSelectionFinalized)
     document.addEventListener('touchend', this.onSelectionFinalized)
@@ -133,7 +154,15 @@ export class HighlightEngine {
     if (!offsets) {
       return null
     }
-    return { start: offsets.start, end: offsets.end, color }
+    // Trim whitespace at the edges so the highlight visually ends at the
+    // last glyph the user dragged across. Without this the CSS Highlights
+    // API paints trailing newlines/indents as a "wing" past the line and
+    // leading indent as a bar to the left of the first visible character.
+    const trimmed = trimWhitespaceOffsets(this.index.text, offsets.start, offsets.end)
+    if (!trimmed) {
+      return null
+    }
+    return { start: trimmed.start, end: trimmed.end, color }
   }
 
   /**
@@ -155,7 +184,15 @@ export class HighlightEngine {
       }
     ], this.index.text.length)
     this.highlights = next
-    this.suppressClickUntil = Date.now() + 250
+    // Small suppress window so the trailing `click` that the browser fires
+    // after a drag-select doesn't immediately remove the highlight we just
+    // created. 60ms is enough to cover the post-mouseup click but short
+    // enough that a user who deliberately clicks to remove the highlight
+    // doesn't feel a stall.
+    this.suppressClickUntil = Date.now() + 60
+    // Last-drawn color wins on overlap. Promote before render so the
+    // Highlight object already has its new priority when ranges are added.
+    promoteHighlight(this.target, captured.color)
     this.render()
     this.onChange(this.highlights)
     this.scheduleRender()
@@ -196,6 +233,7 @@ export class HighlightEngine {
     this.observerPaused = true
     try {
       this.index = buildNodeIndex(this.container)
+      this.lastRenderedText = this.index.text
       for (const color of HIGHLIGHT_COLORS) {
         const merged = mergeAdjacent(this.highlights.filter((entry) => entry.color === color))
         const ranges = merged
@@ -216,23 +254,36 @@ export class HighlightEngine {
   /**
    * Schedule a single deferred re-render to catch React commits or other
    * DOM mutations that happen after our synchronous render. Uses
-   * requestAnimationFrame for the next paint, plus one 120ms safety net.
+   * requestAnimationFrame for the next paint with a 120ms timer as a
+   * fallback for backgrounded tabs where rAF is throttled. The two are
+   * mutually exclusive: whichever runs first cancels the other so we never
+   * render twice for a single scheduled pass.
    */
   private scheduleRender(): void {
     if (this.pendingRaf) {
       cancelAnimationFrame(this.pendingRaf)
+      this.pendingRaf = 0
     }
     if (this.pendingTimer) {
       clearTimeout(this.pendingTimer)
+      this.pendingTimer = 0
     }
     this.pendingRaf = requestAnimationFrame(() => {
       this.pendingRaf = 0
+      if (this.pendingTimer) {
+        clearTimeout(this.pendingTimer)
+        this.pendingTimer = 0
+      }
       if (!this.destroyed) {
         this.render()
       }
     })
     this.pendingTimer = window.setTimeout(() => {
       this.pendingTimer = 0
+      if (this.pendingRaf) {
+        cancelAnimationFrame(this.pendingRaf)
+        this.pendingRaf = 0
+      }
       if (!this.destroyed) {
         this.render()
       }

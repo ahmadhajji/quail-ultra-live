@@ -30,12 +30,22 @@ interface HighlightsRegistry {
   delete(name: string): boolean
 }
 
+/**
+ * Base priorities seed the initial layering when two colors are first used.
+ * Overlap of different colors is rare; what the user actually notices is
+ * that the most-recently-touched color should paint on top (otherwise
+ * adding yellow over an existing red leaves red on top, which feels wrong).
+ * We bump the priority of the color we just updated in setRangesFor via
+ * `nextDrawPriority` so last-drawn wins.
+ */
 const COLOR_PRIORITY: Record<HighlightColor, number> = {
   yellow: 1,
   green: 2,
   cyan: 3,
   red: 4
 }
+
+let nextDrawPriority = 100
 
 function targetPrefix(target: Target): 'q' | 'e' {
   return target === 'question' ? 'q' : 'e'
@@ -98,6 +108,22 @@ export function setRangesFor(target: Target, color: HighlightColor, ranges: Rang
   }
 }
 
+/**
+ * Push (target, color) to the top of the highlight stack. The engine calls
+ * this right after the user commits a new highlight so the most recently
+ * drawn color paints on top of any older colors it overlaps. Bumping a
+ * module-global counter guarantees strict monotonicity even across
+ * question navigations.
+ */
+export function promoteHighlight(target: Target, color: HighlightColor): void {
+  const highlight = ensureRegistered(target, color)
+  if (!highlight) {
+    return
+  }
+  nextDrawPriority += 1
+  highlight.priority = nextDrawPriority
+}
+
 export function clearTarget(target: Target): void {
   for (const color of HIGHLIGHT_COLORS) {
     const highlight = getRegistry()?.get(highlightName(target, color))
@@ -125,4 +151,5 @@ export function __resetRegistryForTests(): void {
     registry.delete(name)
   }
   registeredKeys.clear()
+  nextDrawPriority = 100
 }

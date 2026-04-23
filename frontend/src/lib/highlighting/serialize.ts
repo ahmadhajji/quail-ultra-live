@@ -203,6 +203,58 @@ export function offsetsFromRange(index: NodeIndex, range: Range): { start: numbe
   return { start, end }
 }
 
+/**
+ * Shrink [start, end) so it no longer starts or ends with whitespace as seen
+ * in the indexed textContent. Returns null if the range is entirely
+ * whitespace after trimming.
+ *
+ * This is the single biggest precision fix: raw selections routinely include
+ * leading/trailing spaces, the newline + indent between two block elements
+ * (which prints as a "wing" extending past the line in the CSS Highlights
+ * API), and trailing whitespace after the final word on a line.
+ */
+export function trimWhitespaceOffsets(
+  text: string,
+  start: number,
+  end: number
+): { start: number; end: number } | null {
+  let lo = Math.max(0, Math.min(text.length, start))
+  let hi = Math.max(lo, Math.min(text.length, end))
+  while (lo < hi && isWhitespace(text.charCodeAt(lo))) {
+    lo += 1
+  }
+  while (hi > lo && isWhitespace(text.charCodeAt(hi - 1))) {
+    hi -= 1
+  }
+  if (hi <= lo) {
+    return null
+  }
+  return { start: lo, end: hi }
+}
+
+/**
+ * Match \s without the regex overhead. Covers space, tab, CR, LF, FF, VT,
+ * and the Unicode no-break / thin / hair spaces we actually see in imported
+ * qbank HTML. Anything rare falls back to the Unicode property below.
+ */
+function isWhitespace(code: number): boolean {
+  return (
+    code === 0x20 || // space
+    code === 0x09 || // tab
+    code === 0x0a || // LF
+    code === 0x0d || // CR
+    code === 0x0c || // FF
+    code === 0x0b || // VT
+    code === 0xa0 || // NBSP
+    code === 0x2028 || // line separator
+    code === 0x2029 || // paragraph separator
+    (code >= 0x2000 && code <= 0x200a) || // en/em/thin/hair spaces
+    code === 0x202f || // narrow no-break space
+    code === 0x205f || // medium mathematical space
+    code === 0x3000 // ideographic space
+  )
+}
+
 /** Merge overlapping/adjacent ranges of the SAME color for a tidy CSS registry. */
 export function mergeAdjacent(
   entries: Array<{ start: number; end: number }>

@@ -4,7 +4,8 @@ import {
   mergeAdjacent,
   offsetsFromRange,
   pointFromOffset,
-  rangeFromOffsets
+  rangeFromOffsets,
+  trimWhitespaceOffsets
 } from './serialize'
 
 function container(html: string): HTMLElement {
@@ -144,6 +145,46 @@ describe('offsetsFromRange for element-typed endpoints (Safari quirk)', () => {
     range.setStart(secondP, 0)
     range.setEnd(index.entries[1]!.node, 4)
     expect(offsetsFromRange(index, range)).toEqual({ start: 5, end: 9 })
+  })
+})
+
+describe('trimWhitespaceOffsets', () => {
+  it('returns original range when no whitespace at edges', () => {
+    expect(trimWhitespaceOffsets('hello world', 0, 5)).toEqual({ start: 0, end: 5 })
+  })
+
+  it('trims trailing spaces', () => {
+    expect(trimWhitespaceOffsets('hello   ', 0, 8)).toEqual({ start: 0, end: 5 })
+  })
+
+  it('trims leading spaces', () => {
+    expect(trimWhitespaceOffsets('   world', 0, 8)).toEqual({ start: 3, end: 8 })
+  })
+
+  it('trims cross-block newline + indent (the phantom-wing case)', () => {
+    // textContent between two <p> elements looks like "first\n  second".
+    // A selection ending right after "first" that extended to the next line
+    // picks up "\n  " which paints as a wing on the CSS Highlights API.
+    const text = 'first\n  second'
+    expect(trimWhitespaceOffsets(text, 0, 8)).toEqual({ start: 0, end: 5 })
+  })
+
+  it('trims non-breaking and Unicode spaces', () => {
+    //   NBSP,   thin space,   narrow NBSP.
+    const text = '  word '
+    expect(trimWhitespaceOffsets(text, 0, text.length)).toEqual({ start: 2, end: 6 })
+  })
+
+  it('returns null for all-whitespace range', () => {
+    expect(trimWhitespaceOffsets('   \n\t  ', 0, 7)).toBeNull()
+  })
+
+  it('returns null for empty range', () => {
+    expect(trimWhitespaceOffsets('anything', 3, 3)).toBeNull()
+  })
+
+  it('clamps inputs outside the string bounds', () => {
+    expect(trimWhitespaceOffsets('abc', -5, 100)).toEqual({ start: 0, end: 3 })
   })
 })
 
