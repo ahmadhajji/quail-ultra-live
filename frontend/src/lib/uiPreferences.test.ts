@@ -87,12 +87,16 @@ describe('uiPreferences.applyToDocument', () => {
     document.documentElement.removeAttribute('data-theme')
     document.documentElement.style.removeProperty('--q-font-size-scale')
     document.documentElement.style.removeProperty('--q-font-weight-delta')
+    document.documentElement.style.removeProperty('--q-reading-font-size')
+    document.documentElement.style.removeProperty('--q-reading-font-weight')
   })
 
   it('writes CSS variables and theme attribute to <html>', () => {
     applyUiPreferencesToDocument({ fontSizeScale: 1.15, fontWeightDelta: 50, theme: 'light', showUnsubmittedIndicator: true })
     expect(document.documentElement.style.getPropertyValue('--q-font-size-scale')).toBe('1.15')
     expect(document.documentElement.style.getPropertyValue('--q-font-weight-delta')).toBe('50')
+    expect(document.documentElement.style.getPropertyValue('--q-reading-font-size')).toBe('18.4px')
+    expect(document.documentElement.style.getPropertyValue('--q-reading-font-weight')).toBe('500')
     expect(document.documentElement.dataset.theme).toBe('light')
   })
 })

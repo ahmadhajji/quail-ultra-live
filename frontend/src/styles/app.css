@@ -28,6 +28,8 @@
   --q-reading-weight-base: 400;
   --q-font-size-scale: 1;
   --q-font-weight-delta: 0;
+  --q-reading-font-size: 16px;
+  --q-reading-font-weight: 400;
 
   /* Highlighter colors — referenced by ::highlight(quail-q-*) and ::highlight(quail-e-*)
      rules in exam-v2.css. Exposed as vars so dark mode can swap them later. */
@@ -53,8 +55,8 @@
 /* Reading-area scaling — attached to the question body wrapper,
    the explanation body wrapper, and the answer-choices container. */
 .exam-reading-scale {
-  font-size: calc(var(--q-reading-size-base) * var(--q-font-size-scale));
-  font-weight: calc(var(--q-reading-weight-base) + var(--q-font-weight-delta));
+  font-size: var(--q-reading-font-size);
+  font-weight: var(--q-reading-font-weight);
 }
 
 .exam-reading-scale p,

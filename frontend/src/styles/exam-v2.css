@@ -41,19 +41,23 @@ body[data-exam-ui="v2"] .exam-scroll.exam-scroll-continuous .exam-explanation-se
 body[data-exam-ui="v2"] .exam-question-body {
   font-family: "Aptos", "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
   color: #1d2a3a;
-  font-size: 16.5px;
+  font-size: var(--q-reading-font-size);
+  font-weight: var(--q-reading-font-weight);
   line-height: 1.6;
 }
 
 body[data-exam-ui="v2"] .exam-question-body p,
 body[data-exam-ui="v2"] .exam-explanation-body p {
   color: #1d2a3a;
+  font-size: inherit;
+  font-weight: inherit;
   margin-bottom: 12px;
 }
 
 body[data-exam-ui="v2"] .exam-explanation-body {
   color: #1d2a3a;
-  font-size: 15px;
+  font-size: var(--q-reading-font-size);
+  font-weight: var(--q-reading-font-weight);
   line-height: 1.65;
 }
 
@@ -89,11 +93,14 @@ body[data-exam-ui="v2"] .exam-choice-row:hover {
 
 body[data-exam-ui="v2"] .exam-choice-content {
   color: #1d2a3a;
-  font-size: 15px;
+  font-size: var(--q-reading-font-size);
+  font-weight: var(--q-reading-font-weight);
 }
 
 body[data-exam-ui="v2"] .exam-choice-label {
   color: #1d2a3a;
+  font-size: var(--q-reading-font-size);
+  font-weight: var(--q-reading-font-weight);
 }
 
 body[data-exam-ui="v2"] .exam-choice-selector {
@@ -128,6 +135,30 @@ body[data-exam-ui="v2"] .exam-choice-content:focus-visible {
 
 ::highlight(quail-q-red),
 ::highlight(quail-e-red) {
+  background-color: var(--q-hl-red, #ffd6d6);
+}
+
+.quail-rendered-highlight {
+  border-radius: 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  cursor: pointer;
+  padding: 0 1px;
+}
+
+.quail-rendered-highlight-yellow {
+  background-color: var(--q-hl-yellow, #fff59d);
+}
+
+.quail-rendered-highlight-green {
+  background-color: var(--q-hl-green, #b8f2e6);
+}
+
+.quail-rendered-highlight-cyan {
+  background-color: var(--q-hl-cyan, #cde7ff);
+}
+
+.quail-rendered-highlight-red {
   background-color: var(--q-hl-red, #ffd6d6);
 }
 

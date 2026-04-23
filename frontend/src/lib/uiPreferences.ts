@@ -97,6 +97,13 @@ export function saveUiPreferences(prefs: UiPreferences): void {
   localStore.set(STORE_KEY, prefs, STORE_NAMESPACE)
 }
 
+function renderedFontWeight(delta: number): number {
+  if (delta <= 0) {
+    return 400 + delta
+  }
+  return Math.min(800, 400 + (delta * 2))
+}
+
 export function applyUiPreferencesToDocument(prefs: UiPreferences): void {
   if (typeof document === 'undefined') {
     return
@@ -104,6 +111,8 @@ export function applyUiPreferencesToDocument(prefs: UiPreferences): void {
   const root = document.documentElement
   root.style.setProperty('--q-font-size-scale', String(prefs.fontSizeScale))
   root.style.setProperty('--q-font-weight-delta', String(prefs.fontWeightDelta))
+  root.style.setProperty('--q-reading-font-size', `${16 * prefs.fontSizeScale}px`)
+  root.style.setProperty('--q-reading-font-weight', String(renderedFontWeight(prefs.fontWeightDelta)))
   root.dataset.theme = prefs.theme
 }
 

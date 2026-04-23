@@ -262,6 +262,7 @@ export function ExamViewPage() {
     ? currentMeta.choice_presentation.display_order
     : (qbankinfo?.choices[currentQid]?.options ?? [])
   const highlightColor = MARKER_PRESETS.find((preset) => preset.key === selectedMarker)?.color ?? '#fff59d'
+  const currentHighlightPayload = block?.highlights[selectedQnum] ?? '[]'
   const factCheck = currentMeta?.fact_check
   const warningList = currentMeta?.warnings ?? []
   const showCaution = Boolean(
@@ -955,7 +956,7 @@ export function ExamViewPage() {
       mountedHighlighter.destroy()
       questionHighlighterRef.current = null
     }
-  }, [blockKey, questionHtml, selectedQnum, syncedSelectedQnum])
+  }, [blockKey, currentHighlightPayload, questionHtml, selectedQnum, syncedSelectedQnum])
 
   useEffect(() => {
     if (!block || !explanationBodyRef.current || !explanationVisible) {
@@ -989,7 +990,7 @@ export function ExamViewPage() {
       mountedHighlighter.destroy()
       explanationHighlighterRef.current = null
     }
-  }, [blockKey, explanationHtml, explanationVisible, selectedQnum, syncedSelectedQnum])
+  }, [blockKey, currentHighlightPayload, explanationHtml, explanationVisible, selectedQnum, syncedSelectedQnum])
 
   useEffect(() => {
     questionHighlighterRef.current?.setColor(highlightColor)
