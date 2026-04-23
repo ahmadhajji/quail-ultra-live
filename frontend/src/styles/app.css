@@ -1361,33 +1361,16 @@ body.q-shell {
   margin: 0;
 }
 
-.sync-banner {
-  border-radius: 999px;
-  box-shadow: 0 18px 42px rgba(20, 38, 63, 0.18);
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 700;
-  padding: 10px 16px;
-  position: fixed;
-  right: 18px;
-  top: 18px;
-  z-index: 4000;
-}
-
-.sync-banner-hidden {
-  display: none;
-}
-
-.sync-banner-info {
-  background: #335e9c;
-}
-
-.sync-banner-success {
-  background: #1b7c5e;
-}
-
+/* Legacy sync-banner styles retained for backward-compatibility. The app
+ * now renders sync state through the <SyncStatusPill /> component in the
+ * exam UI, and the banner is never attached to the DOM. Keeping the
+ * classes as a no-op hidden element guards against any stray references. */
+.sync-banner,
+.sync-banner-hidden,
+.sync-banner-info,
+.sync-banner-success,
 .sync-banner-warning {
-  background: #8f5d12;
+  display: none;
 }
 
 @media (max-width: 1200px) {
