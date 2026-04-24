@@ -1216,6 +1216,59 @@ body[data-exam-ui="v2"] .exam-shortcuts-action {
 }
 
 /* -------------------------------------------------------------------------
+ * Inline footer variant.
+ *
+ * When the pill lives inside the exam bottom bar (.exam-footer > .footer-sync)
+ * we ditch the fixed-position floating look and blend into the blue bar:
+ * transparent background, light text on blue, no shadow, tighter padding.
+ * This keeps the pill informational without competing with the timer or
+ * block controls next to it.
+ * ----------------------------------------------------------------------- */
+.footer-sync {
+  align-items: center;
+  display: flex;
+}
+
+.footer-sync .sync-status-pill {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: none;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  gap: 6px;
+  letter-spacing: 0.03em;
+  padding: 3px 9px 3px 8px;
+  position: static;
+  right: auto;
+  top: auto;
+  z-index: auto;
+}
+
+.footer-sync .sync-status-pill-synced {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  opacity: 0.85;
+}
+
+.footer-sync .sync-status-pill-syncing,
+.footer-sync .sync-status-pill-pending {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.footer-sync .sync-status-pill-offline {
+  background: rgba(255, 221, 170, 0.18);
+  color: #ffe1b3;
+}
+
+.footer-sync .sync-status-pill-error {
+  background: rgba(255, 180, 175, 0.2);
+  color: #ffd5d2;
+}
+
+/* -------------------------------------------------------------------------
  * Image Inspector
  *
  * Reuses FloatingWindow chrome, adds a zoomable viewport and a toolbar of
@@ -1399,12 +1452,8 @@ body[data-exam-ui="v2"] .exam-question-list .list-group-item.q-item-incorrect .q
   color: #d1433e;
 }
 
-@media (max-width: 900px) {
-  .sync-status-pill {
-    right: 10px;
-    top: 176px;
-  }
-}
+/* The old fixed-position max-width nudge was for when the pill floated at
+ * the top-right; it now lives in the footer so no override is needed. */
 
 /* ============================================================
  * Dark mode overrides for the exam v2 shell.

@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { AppShell } from '../components/AppShell'
 import { LoadingScreen } from '../components/LoadingScreen'
-import { SyncStatusPill } from '../components/SyncStatusPill'
 import { deleteBlock } from '../lib/api'
 import { navigate } from '../lib/navigation'
 import { usePackPage } from '../lib/usePackPage'
@@ -39,7 +38,6 @@ export function PreviousBlocksPage() {
       packId={packId}
       packName={packName}
       title={packName ? `${packName} — Previous Blocks` : 'Previous Blocks'}
-      rightSlot={<SyncStatusPill />}
     >
       <div className="q-panel" style={{ margin: '0 8px 24px' }}>
         <div className="q-panel-header">

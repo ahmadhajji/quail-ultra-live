@@ -2901,6 +2901,36 @@ select.form-control:focus,
   color: var(--q-blue-strong);
 }
 
+/* Inline footer pill in dark mode: the exam footer gets re-tinted to
+ * --q-surface-strong with light text, so lift the pill background slightly
+ * off the surface and use the regular token palette. Overrides the
+ * .footer-sync rules in exam-v2.css which assume the bright-blue light-mode
+ * footer. */
+[data-theme="dark"] .footer-sync .sync-status-pill {
+  border-color: var(--q-border);
+  color: var(--q-text-muted);
+}
+
+[data-theme="dark"] .footer-sync .sync-status-pill-synced {
+  color: var(--q-text-muted);
+}
+
+[data-theme="dark"] .footer-sync .sync-status-pill-syncing,
+[data-theme="dark"] .footer-sync .sync-status-pill-pending {
+  background: color-mix(in oklab, var(--q-blue-soft) 80%, transparent);
+  color: var(--q-blue-strong);
+}
+
+[data-theme="dark"] .footer-sync .sync-status-pill-offline {
+  background: rgba(208, 139, 40, 0.18);
+  color: #e3b56a;
+}
+
+[data-theme="dark"] .footer-sync .sync-status-pill-error {
+  background: rgba(226, 91, 84, 0.18);
+  color: #f1a8a3;
+}
+
 /* ============================================================
  * Dark-mode patch: table bodies, summary/metric rows, accordions.
  *
@@ -3096,4 +3126,16 @@ select.form-control:focus,
 [data-theme="dark"] .highlight-swatch.active {
   border-color: var(--q-text);
   box-shadow: 0 0 0 2px var(--q-blue-ring);
+}
+
+/* Small informational chips used on the New Block page: the "Tutor mode"
+ * label next to the mode selector and the question-count badge (e.g. "607")
+ * that sits beside each filter option. The light base uses a pale blue wash
+ * (#eff6ff / #bfdbfe / #1d4ed8) which blows out against the dark surface.
+ * Re-tint to a muted blue-on-deep-blue that matches the rest of the dark
+ * palette. */
+[data-theme="dark"] .q-badge {
+  background: var(--q-blue-soft);
+  border-color: rgba(106, 147, 236, 0.28);
+  color: var(--q-blue-strong);
 }
