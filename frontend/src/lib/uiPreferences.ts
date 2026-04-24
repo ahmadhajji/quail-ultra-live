@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { localStore } from './store'
+import { getCurrentTheme, onThemeChange, setTheme as setGlobalTheme } from './theme'
 
 const STORE_NAMESPACE = 'exam'
 const STORE_KEY = 'ui-prefs'
@@ -113,25 +114,48 @@ export function applyUiPreferencesToDocument(prefs: UiPreferences): void {
   root.style.setProperty('--q-font-weight-delta', String(prefs.fontWeightDelta))
   root.style.setProperty('--q-reading-font-size', `${16 * prefs.fontSizeScale}px`)
   root.style.setProperty('--q-reading-font-weight', String(renderedFontWeight(prefs.fontWeightDelta)))
-  root.dataset.theme = prefs.theme
+  // Delegate theme to the global theme helper so the sidebar ThemeToggle and
+  // the in-exam Settings panel share one source of truth (localStorage key
+  // `quail-theme` + `quail-theme-change` custom event). setGlobalTheme also
+  // writes the data-theme attribute, so we always go through it.
+  setGlobalTheme(prefs.theme)
 }
 
 export type UiPreferencesHook = readonly [UiPreferences, (patch: Partial<UiPreferences>) => void, () => void]
 
 export function useUiPreferences(): UiPreferencesHook {
-  const [prefs, setPrefs] = useState<UiPreferences>(() => loadUiPreferences())
+  const [prefs, setPrefs] = useState<UiPreferences>(() => {
+    const loaded = loadUiPreferences()
+    // The global theme (sidebar toggle) is authoritative on mount so a
+    // previously-set dark theme survives across views.
+    if (typeof document !== 'undefined') {
+      const globalTheme = getCurrentTheme()
+      if (globalTheme !== loaded.theme) {
+        return { ...loaded, theme: globalTheme }
+      }
+    }
+    return loaded
+  })
 
   useEffect(() => {
     applyUiPreferencesToDocument(prefs)
     saveUiPreferences(prefs)
   }, [prefs])
 
+  // If the user flips the theme from elsewhere (sidebar ThemeToggle), keep
+  // the local prefs in sync so the exam Settings radio reflects reality.
+  useEffect(() => {
+    return onThemeChange((nextTheme) => {
+      setPrefs((current) => (current.theme === nextTheme ? current : { ...current, theme: nextTheme }))
+    })
+  }, [])
+
   const update = useCallback((patch: Partial<UiPreferences>) => {
     setPrefs((current) => normalizeUiPreferences({ ...current, ...patch }))
   }, [])
 
   const reset = useCallback(() => {
-    setPrefs({ ...DEFAULT_UI_PREFS })
+    setPrefs({ ...DEFAULT_UI_PREFS, theme: getCurrentTheme() })
   }, [])
 
   return [prefs, update, reset] as const

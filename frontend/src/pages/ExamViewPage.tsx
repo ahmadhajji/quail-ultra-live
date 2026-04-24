@@ -1949,17 +1949,15 @@ export function ExamViewPage() {
                     />
                     <span>Light</span>
                   </label>
-                  <label className="exam-v2-settings-theme-option disabled" aria-disabled="true" title="Coming soon">
+                  <label className={`exam-v2-settings-theme-option ${uiPrefs.theme === 'dark' ? 'active' : ''}`}>
                     <input
                       type="radio"
                       name="exam-v2-theme"
                       value="dark"
-                      disabled
-                      checked={false}
-                      readOnly
+                      checked={uiPrefs.theme === 'dark'}
+                      onChange={() => updateUiPrefs({ theme: 'dark' })}
                     />
                     <span>Dark</span>
-                    <span className="exam-v2-settings-badge">Coming soon</span>
                   </label>
                 </div>
               </section>

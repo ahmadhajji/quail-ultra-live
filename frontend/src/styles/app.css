@@ -1,23 +1,41 @@
 :root {
+  /* ------------------------------------------------------------------------
+   * Light mode palette — unified blue + white. These tokens are shared by
+   * every page (home, library, admin, exam chrome). Menus and exam view must
+   * resolve to the same accent; never hard-code a blue in a component file.
+   * ---------------------------------------------------------------------- */
   --q-bg: #eef3f8;
-  --q-surface: #f8fbff;
+  --q-surface: #ffffff;
+  --q-surface-2: #f6f9fd;
   --q-surface-strong: #ffffff;
-  --q-border: #c7d3df;
+  --q-border: #c9d6e4;
+  --q-border-soft: #dce5f0;
   --q-border-strong: #9fb3c7;
-  --q-text: #243443;
-  --q-text-muted: #64768a;
-  --q-blue: #2a5e90;
-  --q-blue-strong: #1f466b;
-  --q-blue-soft: #ddeaf7;
+  --q-text: #1d2a3a;
+  --q-text-muted: #5b6b7d;
+  --q-blue: #3b6fd1;
+  --q-blue-strong: #2a55a8;
+  --q-blue-soft: #dde8f8;
+  --q-blue-ring: rgba(59, 111, 209, 0.28);
   --q-success: #2f8f57;
   --q-success-soft: #e3f4ea;
   --q-danger: #b54b48;
   --q-danger-soft: #f9e4e2;
   --q-amber: #d0a12b;
   --q-amber-soft: #fbf3d7;
-  --q-shadow: 0 18px 42px rgba(42, 63, 87, 0.08);
-  --q-radius: 16px;
-  --q-radius-sm: 10px;
+
+  /* Skeuomorphic / macOS-style depth tokens. Soft, not heavy. */
+  --q-shadow-sm: 0 1px 2px rgba(16, 30, 54, 0.06), 0 1px 1px rgba(16, 30, 54, 0.04);
+  --q-shadow-md: 0 4px 10px -4px rgba(16, 30, 54, 0.12), 0 2px 4px rgba(16, 30, 54, 0.06);
+  --q-shadow-lg: 0 18px 40px -16px rgba(16, 30, 54, 0.25), 0 2px 6px rgba(16, 30, 54, 0.08);
+  --q-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --q-inset-press: inset 0 1px 2px rgba(16, 30, 54, 0.12);
+
+  /* Legacy alias — keep existing styles working. */
+  --q-shadow: var(--q-shadow-md);
+  --q-radius: 14px;
+  --q-radius-sm: 8px;
+  --q-radius-lg: 18px;
   --q-font-sans: "Aptos", "Segoe UI", "Helvetica Neue", "Arial Nova", sans-serif;
   --q-font-serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
 
@@ -39,17 +57,35 @@
   --q-hl-red: #ffd6d6;
 }
 
-/* Dark theme placeholder. The Settings panel renders "Dark" disabled
-   ("Coming soon") but flipping [data-theme="dark"] manually will at least
-   not explode. Finishing dark later is CSS-only work. */
+/* Dark mode palette. Flipping [data-theme="dark"] on the <html> element
+ * rethemes both the menus and the exam view. Both the sidebar theme toggle
+ * and the in-exam Settings panel write here. */
 :root[data-theme="dark"] {
-  --q-bg: #111827;
-  --q-surface: #1f2937;
-  --q-surface-strong: #111827;
-  --q-border: #334155;
-  --q-border-strong: #475569;
-  --q-text: #e2e8f0;
-  --q-text-muted: #94a3b8;
+  --q-bg: #0b1220;
+  --q-surface: #111a2c;
+  --q-surface-2: #152038;
+  --q-surface-strong: #0e1728;
+  --q-border: #253352;
+  --q-border-soft: #1a2440;
+  --q-border-strong: #32426b;
+  --q-text: #e6edf7;
+  --q-text-muted: #93a3ba;
+  --q-blue: #6a93ec;
+  --q-blue-strong: #9bb6f2;
+  --q-blue-soft: #1a2a4a;
+  --q-blue-ring: rgba(106, 147, 236, 0.35);
+  --q-success: #34d399;
+  --q-success-soft: #0b3a2a;
+  --q-danger: #f87171;
+  --q-danger-soft: #3b1515;
+  --q-amber: #fbbf24;
+  --q-amber-soft: #3b2a07;
+  --q-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --q-inset-press: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+  --q-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45), 0 1px 1px rgba(0, 0, 0, 0.35);
+  --q-shadow-md: 0 4px 10px -4px rgba(0, 0, 0, 0.55), 0 2px 4px rgba(0, 0, 0, 0.4);
+  --q-shadow-lg: 0 20px 48px -18px rgba(0, 0, 0, 0.75), 0 2px 6px rgba(0, 0, 0, 0.45);
+  --q-shadow: var(--q-shadow-md);
 }
 
 /* Reading-area scaling — attached to the question body wrapper,
@@ -274,13 +310,13 @@ body.q-shell {
 }
 
 .q-mode-btn.active {
-  background: #eff6ff;
-  border-color: #3b82f6;
-  box-shadow: inset 0 0 0 1px #3b82f6;
+  background: var(--q-blue-soft);
+  border-color: var(--q-blue);
+  box-shadow: inset 0 0 0 1px var(--q-blue);
 }
 
 .q-mode-kicker {
-  color: #2563eb;
+  color: var(--q-blue);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -324,9 +360,9 @@ body.q-shell {
 
 .q-segmented .btn.btn-primary,
 .q-segmented .btn.active {
-  background: #eff6ff;
-  border-color: #3b82f6;
-  color: #1d4ed8;
+  background: var(--q-blue-soft);
+  border-color: var(--q-blue);
+  color: var(--q-blue-strong);
 }
 
 .q-segmented .btn-light {
@@ -403,18 +439,19 @@ body.q-shell {
 }
 
 .q-start-btn {
-  background: #2563eb;
-  border: none;
-  border-radius: 2px;
-  box-shadow: none;
+  background: linear-gradient(180deg, var(--q-blue) 0%, var(--q-blue-strong) 100%);
+  border: 1px solid var(--q-blue-strong);
+  border-radius: var(--q-radius-sm);
+  color: #ffffff;
   font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.04em;
   min-width: 200px;
   padding: 12px 24px;
   text-transform: none;
+  box-shadow: var(--q-shadow-sm), var(--q-inset-highlight);
 }
-.q-start-btn:hover { background: #1d4ed8; }
+.q-start-btn:hover { filter: brightness(1.05); }
 
 .q-side-summary {
   display: flex;
@@ -880,7 +917,7 @@ body.q-shell {
 
 .exam-question-list .list-group-item.active,
 .exam-question-list .list-group-item.active:hover {
-  background: #4d7ef0;
+  background: var(--q-blue);
   color: #ffffff;
 }
 
@@ -1115,8 +1152,8 @@ body.q-shell {
 }
 
 .exam-choice-selector.active {
-  border-color: #3b82f6;
-  background: radial-gradient(#3b82f6 0%, #3b82f6 40%, transparent 45%, transparent);
+  border-color: var(--q-blue);
+  background: radial-gradient(var(--q-blue) 0%, var(--q-blue) 40%, transparent 45%, transparent);
 }
 
 .exam-choice-selector.choice-correct {
@@ -1156,9 +1193,10 @@ body.q-shell {
 }
 
 .btn-submit-uw {
-  background: #2563eb;
-  border: none;
-  border-radius: 2px;
+  background: linear-gradient(180deg, var(--q-blue) 0%, var(--q-blue-strong) 100%);
+  border: 1px solid var(--q-blue-strong);
+  border-radius: var(--q-radius-sm);
+  box-shadow: var(--q-shadow-sm), var(--q-inset-highlight);
   color: #ffffff;
   font-size: 13px;
   font-weight: 600;
@@ -1166,11 +1204,13 @@ body.q-shell {
   cursor: pointer;
 }
 .btn-submit-uw:disabled {
-  background: #93c5fd;
+  background: var(--q-blue-soft);
+  color: var(--q-text-muted);
   cursor: not-allowed;
+  box-shadow: none;
 }
 .btn-submit-uw:hover:not(:disabled) {
-  background: #1d4ed8;
+  filter: brightness(1.05);
 }
 
 .exam-state-pill {
@@ -1823,7 +1863,9 @@ body.q-shell {
 }
 
 .q-sidebar-item.active {
-  background: rgba(96, 165, 250, 0.2);
+  /* Translucent blue so it reads on the dark sidebar chrome in both themes. */
+  background: var(--q-blue-ring);
+  box-shadow: var(--q-inset-highlight);
   color: #ffffff;
 }
 
@@ -2197,25 +2239,9 @@ body.q-shell {
  * Dark Mode
  * ============================================================ */
 
-[data-theme="dark"] {
-  --q-bg: #0f172a;
-  --q-surface: #1e293b;
-  --q-surface-strong: #1f2937;
-  --q-border: #334155;
-  --q-border-strong: #475569;
-  --q-text: #f1f5f9;
-  --q-text-muted: #94a3b8;
-  --q-blue: #60a5fa;
-  --q-blue-strong: #93c5fd;
-  --q-blue-soft: #1e3a5f;
-  --q-success: #34d399;
-  --q-success-soft: #064e3b;
-  --q-danger: #f87171;
-  --q-danger-soft: #7f1d1d;
-  --q-amber: #fbbf24;
-  --q-amber-soft: #78350f;
-  --q-shadow: 0 18px 42px rgba(0, 0, 0, 0.4);
-}
+/* The authoritative dark-mode palette lives at the top of this file
+ * (:root[data-theme="dark"]). This selector only carries component-specific
+ * overrides that reference those vars — keep color tokens out of here. */
 
 [data-theme="dark"] html,
 [data-theme="dark"] body {
@@ -2424,4 +2450,443 @@ body.q-shell {
   color: var(--q-amber);
   padding: 1px 4px;
   border-radius: 3px;
+}
+
+/* ============================================================
+ * Subtle skeuomorphism — macOS Sonoma-style depth
+ *
+ * These rules layer a gentle gradient + inset highlight + drop shadow onto
+ * common chrome (buttons, cards, inputs, sidebar items, admin tabs) so the
+ * app feels tactile without going full glossy Aqua. Shadows are kept soft
+ * (<= 0.12 light, <= 0.4 dark) and radii <= 18px.
+ * ============================================================ */
+
+/* Buttons — secondary / neutral. */
+.q-btn,
+.q-segmented .btn,
+.q-danger-btn.btn-outline-secondary,
+.q-mode-btn {
+  background: linear-gradient(180deg, var(--q-surface) 0%, var(--q-surface-2) 100%);
+  border: 1px solid var(--q-border);
+  border-radius: var(--q-radius-sm);
+  box-shadow: var(--q-shadow-sm), var(--q-inset-highlight);
+  transition: filter 120ms ease, box-shadow 120ms ease, transform 80ms ease;
+}
+
+.q-btn:hover,
+.q-segmented .btn:hover,
+.q-mode-btn:hover {
+  filter: brightness(1.02);
+}
+
+.q-btn:active,
+.q-segmented .btn:active,
+.q-mode-btn:active {
+  box-shadow: var(--q-inset-press);
+  transform: translateY(0.5px);
+}
+
+/* Primary action buttons — blue gradient. Shared across .btn-primary,
+ * Bootstrap .btn-primary, .q-start-btn, .btn-submit-uw. */
+.btn.btn-primary,
+.q-start-btn,
+.btn-submit-uw {
+  background: linear-gradient(180deg, var(--q-blue) 0%, var(--q-blue-strong) 100%);
+  border: 1px solid var(--q-blue-strong);
+  border-radius: var(--q-radius-sm);
+  box-shadow: var(--q-shadow-sm), var(--q-inset-highlight);
+  color: #ffffff;
+  transition: filter 120ms ease, box-shadow 120ms ease, transform 80ms ease;
+}
+
+.btn.btn-primary:hover:not(:disabled),
+.q-start-btn:hover:not(:disabled),
+.btn-submit-uw:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.btn.btn-primary:active:not(:disabled),
+.q-start-btn:active:not(:disabled),
+.btn-submit-uw:active:not(:disabled) {
+  background: linear-gradient(180deg, var(--q-blue-strong) 0%, var(--q-blue-strong) 100%);
+  box-shadow: var(--q-inset-press);
+  transform: translateY(0.5px);
+}
+
+.btn.btn-primary:disabled,
+.q-start-btn:disabled,
+.btn-submit-uw:disabled {
+  background: var(--q-blue-soft);
+  border-color: var(--q-border);
+  color: var(--q-text-muted);
+  box-shadow: none;
+  opacity: 0.75;
+}
+
+/* Cards / panels — soft lift, inset top highlight. */
+.q-panel,
+.card.q-panel,
+.q-stat-card,
+.q-library-card,
+.q-pack-card {
+  border-radius: var(--q-radius);
+  box-shadow: var(--q-shadow-sm), var(--q-inset-highlight);
+}
+
+.q-stat-card,
+.q-library-card {
+  background: linear-gradient(180deg, var(--q-surface-strong) 0%, var(--q-surface-2) 100%);
+}
+
+/* Inputs — slight inner shadow so they read as recessed. */
+.q-input,
+.q-textarea,
+input.form-control,
+textarea.form-control,
+select.form-control,
+.form-select {
+  border-radius: var(--q-radius-sm);
+  box-shadow: inset 0 1px 2px rgba(16, 30, 54, 0.05);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.q-input:focus,
+.q-textarea:focus,
+input.form-control:focus,
+textarea.form-control:focus,
+select.form-control:focus,
+.form-select:focus {
+  border-color: var(--q-blue);
+  box-shadow: inset 0 1px 2px rgba(16, 30, 54, 0.04), 0 0 0 3px var(--q-blue-ring);
+  outline: none;
+}
+
+[data-theme="dark"] .q-input,
+[data-theme="dark"] .q-textarea,
+[data-theme="dark"] input.form-control,
+[data-theme="dark"] textarea.form-control,
+[data-theme="dark"] select.form-control,
+[data-theme="dark"] .form-select {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .q-input:focus,
+[data-theme="dark"] .q-textarea:focus,
+[data-theme="dark"] input.form-control:focus {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3), 0 0 0 3px var(--q-blue-ring);
+}
+
+/* Sidebar item active — gentle gradient. */
+.q-sidebar-item.active {
+  background: linear-gradient(180deg, var(--q-blue-soft) 0%, rgba(59, 111, 209, 0.12) 100%);
+  box-shadow: var(--q-inset-highlight);
+}
+
+/* Admin tabs — small lift on active. */
+.q-admin-tab.active {
+  background: linear-gradient(180deg, var(--q-surface-strong) 0%, var(--q-surface-2) 100%);
+  box-shadow: var(--q-inset-highlight);
+}
+
+/* Appbar — bottom shadow for lift. */
+.q-appbar {
+  box-shadow: 0 1px 0 var(--q-border-soft), var(--q-inset-highlight);
+}
+
+/* ============================================================
+ * Liquid glass surface (@hashintel/refractive wrapper)
+ *
+ * The <GlassSurface> component sets `.q-glass` + `.q-glass--<variant>`. The
+ * refractive HOC handles backdrop-filter and SVG refraction; this CSS is the
+ * fallback tint + border + shadow, and the @supports block makes the
+ * surface fully opaque on browsers without backdrop-filter.
+ * ============================================================ */
+
+.q-glass {
+  background: color-mix(in oklab, var(--q-surface) 72%, transparent);
+  border: 1px solid var(--q-border-soft);
+  box-shadow: var(--q-shadow-md), var(--q-inset-highlight);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] .q-glass {
+  background: color-mix(in oklab, var(--q-surface) 60%, transparent);
+  border-color: var(--q-border-soft);
+  box-shadow: var(--q-shadow-lg), var(--q-inset-highlight);
+}
+
+.q-glass--overlay {
+  /* Floating windows — extra drop shadow handled by .floating-window already.
+   * Keep the glass radius in sync with the refraction.radius preset (14). */
+}
+
+.q-glass--panel {
+  /* Sidebar / appbar chrome. */
+}
+
+.q-glass--pill {
+  /* Toolbars, dropdown menus. */
+  backdrop-filter: saturate(1.1);
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .q-glass {
+    background: var(--q-surface);
+  }
+}
+
+/* The refractive HOC writes inline style.backdropFilter and style.borderRadius,
+ * so avoid fighting it with !important rules. Our color-mix() background sits
+ * behind the filter nicely. */
+
+/* ============================================================
+ * Exam v2 chrome — token realignment + dark mode coverage
+ *
+ * exam-v2.css owns layout; this block just reassigns colors to shared tokens
+ * and adds dark overrides for surfaces that are still hardcoded there.
+ * ============================================================ */
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-tool-sheet {
+  background: var(--q-surface);
+  border-left-color: var(--q-border);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-tool-close,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-tool-action {
+  background: var(--q-surface-2);
+  border-color: var(--q-border);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-note-input {
+  background: var(--q-surface-strong);
+  border-color: var(--q-border);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-settings-label,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-settings-value,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-tool-title,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-tool-copy,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-tool-empty-title,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-tool-empty-copy,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-settings-hint {
+  color: var(--q-text);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-tool-copy,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-tool-empty-copy,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-settings-value,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-settings-hint {
+  color: var(--q-text-muted);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-settings-btn {
+  background: var(--q-surface-2);
+  border-color: var(--q-border);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-settings-btn:hover:not(:disabled) {
+  background: var(--q-surface-strong);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-settings-theme-option {
+  background: var(--q-surface-2);
+  border-color: var(--q-border);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-settings-theme-option.active {
+  background: var(--q-blue-soft);
+  border-color: var(--q-blue);
+  color: var(--q-blue-strong);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-settings-switch-slider {
+  background: var(--q-border-strong);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-settings-switch input:checked + .exam-v2-settings-switch-slider {
+  background: var(--q-blue);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-shortcuts-platform {
+  background: var(--q-surface-2);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-shortcuts-platform:hover {
+  background: var(--q-surface-strong);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-shortcuts-platform.active {
+  background: var(--q-blue);
+  border-color: var(--q-blue-strong);
+  color: #ffffff;
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-shortcuts-card {
+  background: var(--q-surface-2);
+  border-color: var(--q-border);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-shortcuts-key {
+  background: var(--q-surface-strong);
+  border-color: var(--q-border-strong);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-shortcuts-action {
+  color: var(--q-text);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-shortcuts-plus,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-shortcuts-arrow {
+  color: var(--q-text-muted);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-calc-btn {
+  background: var(--q-surface-2);
+  border-color: var(--q-border);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-calc-btn-operator,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-calc-btn-equals {
+  background: var(--q-blue-soft);
+  border-color: var(--q-blue);
+  color: var(--q-blue-strong);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-calc-btn-utility {
+  background: var(--q-surface-strong);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-calc-display {
+  color: var(--q-text);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-calc-history {
+  color: var(--q-text-muted);
+}
+
+[data-theme="dark"] .floating-window {
+  background: var(--q-surface);
+  color: var(--q-text);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 18px 40px -12px rgba(0, 0, 0, 0.7),
+    0 32px 60px -16px rgba(0, 0, 0, 0.55);
+}
+
+[data-theme="dark"] .floating-window-body {
+  background: var(--q-surface);
+}
+
+[data-theme="dark"] .floating-window.exam-image-inspector .floating-window-body,
+[data-theme="dark"] .exam-image-inspector-viewport {
+  background: var(--q-bg);
+}
+
+[data-theme="dark"] .exam-image-inspector-toolbar {
+  background: var(--q-surface);
+  border-top-color: var(--q-border);
+}
+
+[data-theme="dark"] .exam-image-inspector-btn {
+  color: var(--q-text-muted);
+}
+
+[data-theme="dark"] .exam-image-inspector-btn:hover {
+  background: var(--q-surface-2);
+  border-color: var(--q-border);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] .exam-image-inspector-zoom {
+  color: var(--q-text-muted);
+}
+
+[data-theme="dark"] .exam-image-inspector-divider {
+  background: var(--q-border);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-sidebar {
+  background: var(--q-surface);
+  border-right-color: var(--q-border);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-question-list .list-group-item {
+  background: var(--q-surface);
+  border-bottom-color: var(--q-border-soft);
+  color: var(--q-text-muted);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-question-list .list-group-item:hover {
+  background: var(--q-surface-2);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-question-list .list-group-item.q-item-visited {
+  background: var(--q-surface-strong);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-question-list .list-group-item.active,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-question-list .list-group-item.active:hover {
+  background: var(--q-blue);
+  color: #ffffff;
+}
+
+[data-theme="dark"] .exam-topbar,
+[data-theme="dark"] .exam-footer {
+  background: var(--q-surface-strong);
+  border-bottom-color: var(--q-border);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] .exam-workspace,
+[data-theme="dark"] .exam-panel,
+[data-theme="dark"] .exam-app {
+  background: var(--q-bg);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-marker-menu {
+  background: var(--q-surface);
+  border-color: var(--q-border);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-marker-menu-item {
+  border-bottom-color: var(--q-border-soft);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-marker-menu-item:hover {
+  background: var(--q-surface-2);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-marker-menu-action {
+  background: var(--q-surface);
+  border-top-color: var(--q-border-soft);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-marker-menu-action:hover {
+  background: var(--q-surface-2);
+}
+
+[data-theme="dark"] .sync-status-pill {
+  background: color-mix(in oklab, var(--q-surface) 80%, transparent);
+  border-color: var(--q-border);
+  color: var(--q-text-muted);
+}
+
+[data-theme="dark"] .sync-status-pill-syncing,
+[data-theme="dark"] .sync-status-pill-pending {
+  background: color-mix(in oklab, var(--q-blue-soft) 80%, transparent);
+  color: var(--q-blue-strong);
 }
