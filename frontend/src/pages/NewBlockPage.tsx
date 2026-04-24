@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AppShell } from '../components/AppShell'
 import { LoadingScreen } from '../components/LoadingScreen'
-import { SyncStatusPill } from '../components/SyncStatusPill'
 import { startBlock } from '../lib/api'
 import { navigate } from '../lib/navigation'
 import { localStore } from '../lib/store'
@@ -328,7 +327,6 @@ export function NewBlockPage() {
       packId={packId}
       packName={packName}
       title={packName ? `${packName} — New Block` : 'New Block'}
-      rightSlot={<SyncStatusPill />}
     >
       <div className="flex-fill">
         <div className="q-page-grid">

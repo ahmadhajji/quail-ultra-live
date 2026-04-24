@@ -1720,6 +1720,9 @@ export function ExamViewPage() {
             <div className="footer-mode">
               <span className={`mode-label mode-${block.mode}`}>{modeLabel(block.mode).toUpperCase()}</span>
             </div>
+            <div className="footer-sync">
+              <SyncStatusPill />
+            </div>
           </div>
 
           <div className="footer-right">
@@ -1949,17 +1952,15 @@ export function ExamViewPage() {
                     />
                     <span>Light</span>
                   </label>
-                  <label className="exam-v2-settings-theme-option disabled" aria-disabled="true" title="Coming soon">
+                  <label className={`exam-v2-settings-theme-option ${uiPrefs.theme === 'dark' ? 'active' : ''}`}>
                     <input
                       type="radio"
                       name="exam-v2-theme"
                       value="dark"
-                      disabled
-                      checked={false}
-                      readOnly
+                      checked={uiPrefs.theme === 'dark'}
+                      onChange={() => updateUiPrefs({ theme: 'dark' })}
                     />
                     <span>Dark</span>
-                    <span className="exam-v2-settings-badge">Coming soon</span>
                   </label>
                 </div>
               </section>
@@ -2087,7 +2088,6 @@ export function ExamViewPage() {
         </div>
       ) : null}
       <ImageInspector open={Boolean(inspectorItem)} item={inspectorItem} onClose={() => setInspectorItem(null)} />
-      <SyncStatusPill />
     </>
   )
 }

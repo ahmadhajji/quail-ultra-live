@@ -65,16 +65,16 @@ body[data-exam-ui="v2"] .exam-explanation-body h1,
 body[data-exam-ui="v2"] .exam-explanation-body h2,
 body[data-exam-ui="v2"] .exam-explanation-body h3,
 body[data-exam-ui="v2"] .exam-explanation-body h4 {
-  color: #1f466b;
+  color: var(--q-blue-strong);
 }
 
 /* Soften the answer options group so it reads as a grouped card rather
  * than a harsh bordered box. */
 body[data-exam-ui="v2"] .exam-choices-container {
-  background: #ffffff;
-  border: 1px solid var(--qx-choices-border, #c3d5f4);
-  border-radius: 10px;
-  box-shadow: 0 1px 2px rgba(31, 70, 107, 0.04);
+  background: linear-gradient(180deg, var(--q-surface-strong) 0%, var(--q-surface-2) 100%);
+  border: 1px solid var(--qx-choices-border, var(--q-border-soft));
+  border-radius: var(--q-radius);
+  box-shadow: var(--q-shadow-sm), var(--q-inset-highlight);
   min-width: 0;
   padding: 18px 22px;
   width: 100%;
@@ -108,13 +108,13 @@ body[data-exam-ui="v2"] .exam-choice-selector {
 }
 
 body[data-exam-ui="v2"] .exam-choice-selector.active {
-  border-color: #4f7ae0;
-  background: radial-gradient(#4f7ae0 0%, #4f7ae0 40%, transparent 45%, transparent);
+  border-color: var(--q-blue);
+  background: radial-gradient(var(--q-blue) 0%, var(--q-blue) 40%, transparent 45%, transparent);
 }
 
 body[data-exam-ui="v2"] .exam-choice-selector:focus-visible,
 body[data-exam-ui="v2"] .exam-choice-content:focus-visible {
-  outline: 2px solid #4f7ae0;
+  outline: 2px solid var(--q-blue);
   outline-offset: 2px;
 }
 
@@ -330,9 +330,13 @@ body[data-exam-ui="v2"] .exam-v2-tool-scrim {
 }
 
 .floating-window {
-  background: #ffffff;
+  /* Semi-transparent tint lets @hashintel/refractive's backdrop-filter show
+   * the refracted content behind the window. Browsers without backdrop-filter
+   * hit the `@supports not` fallback in .q-glass and land on an opaque
+   * surface. */
+  background: color-mix(in oklab, var(--q-surface) 78%, transparent);
   border-radius: 14px;
-  color: #1e293b;
+  color: var(--q-text);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -345,9 +349,15 @@ body[data-exam-ui="v2"] .exam-v2-tool-scrim {
     0 32px 60px -16px rgba(15, 23, 42, 0.28);
 }
 
+@supports not (backdrop-filter: blur(1px)) {
+  .floating-window {
+    background: var(--q-surface);
+  }
+}
+
 .floating-window-header {
   align-items: center;
-  background: linear-gradient(180deg, #5a76d6 0%, #4860b0 100%);
+  background: linear-gradient(180deg, var(--q-blue) 0%, var(--q-blue-strong) 100%);
   border-bottom: 1px solid rgba(15, 23, 42, 0.16);
   color: #ffffff;
   cursor: grab;
@@ -447,12 +457,20 @@ body[data-exam-ui="v2"] .exam-v2-tool-scrim {
 }
 
 .floating-window-body {
-  background: #ffffff;
+  /* Slightly translucent so the outer refractive glass edges still
+   * telegraph the liquid-glass feel, but content stays legible. */
+  background: color-mix(in oklab, var(--q-surface) 94%, transparent);
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
   overflow: auto;
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .floating-window-body {
+    background: var(--q-surface);
+  }
 }
 
 body[data-exam-ui="v2"] .exam-v2-tool-sheet {
@@ -519,8 +537,8 @@ body[data-exam-ui="v2"] .exam-v2-note-input {
 }
 
 body[data-exam-ui="v2"] .exam-marker-menu {
-  background: #4d66b4;
-  border: 1px solid #3a4f93;
+  background: var(--q-blue-strong);
+  border: 1px solid var(--q-blue-strong);
   border-radius: 4px;
   box-shadow: 0 12px 30px rgba(15, 23, 42, 0.28);
   color: #ffffff;
@@ -576,7 +594,7 @@ body[data-exam-ui="v2"] .exam-marker-menu-label {
 }
 
 body[data-exam-ui="v2"] .exam-marker-menu-action {
-  background: #4d66b4;
+  background: var(--q-blue-strong);
   border: none;
   border-top: 1px solid rgba(255, 255, 255, 0.14);
   color: #ffffff;
@@ -744,15 +762,9 @@ body[data-exam-ui="v2"] .exam-v2-settings-theme-option {
 }
 
 body[data-exam-ui="v2"] .exam-v2-settings-theme-option.active {
-  background: #ddeaf7;
-  border-color: #2a5e90;
-  color: #1f466b;
-}
-
-body[data-exam-ui="v2"] .exam-v2-settings-theme-option.disabled {
-  color: #94a3b8;
-  cursor: not-allowed;
-  opacity: 0.7;
+  background: var(--q-blue-soft);
+  border-color: var(--q-blue);
+  color: var(--q-blue-strong);
 }
 
 body[data-exam-ui="v2"] .exam-v2-settings-theme-option input {
@@ -812,7 +824,7 @@ body[data-exam-ui="v2"] .exam-v2-settings-switch-slider::after {
 }
 
 body[data-exam-ui="v2"] .exam-v2-settings-switch input:checked + .exam-v2-settings-switch-slider {
-  background: #2a5e90;
+  background: var(--q-blue);
 }
 
 body[data-exam-ui="v2"] .exam-v2-settings-switch input:checked + .exam-v2-settings-switch-slider::after {
@@ -874,9 +886,9 @@ body[data-exam-ui="v2"] .exam-v2-calc-btn {
 
 body[data-exam-ui="v2"] .exam-v2-calc-btn-operator,
 body[data-exam-ui="v2"] .exam-v2-calc-btn-equals {
-  background: #eff6ff;
-  border-color: #93c5fd;
-  color: #1d4ed8;
+  background: var(--q-blue-soft);
+  border-color: var(--q-blue);
+  color: var(--q-blue-strong);
 }
 
 body[data-exam-ui="v2"] .exam-v2-calc-btn-utility {
@@ -960,8 +972,8 @@ body[data-exam-ui="v2"] .exam-shortcuts-platform:hover {
 }
 
 body[data-exam-ui="v2"] .exam-shortcuts-platform.active {
-  background: #5a74c8;
-  border-color: #29498d;
+  background: var(--q-blue);
+  border-color: var(--q-blue-strong);
   color: #ffffff;
 }
 
@@ -1168,8 +1180,8 @@ body[data-exam-ui="v2"] .exam-shortcuts-action {
 
 .sync-status-pill-syncing .sync-status-pill-dot,
 .sync-status-pill-pending .sync-status-pill-dot {
-  background: #4f7ae0;
-  box-shadow: 0 0 0 2px rgba(79, 122, 224, 0.25);
+  background: var(--q-blue);
+  box-shadow: 0 0 0 2px var(--q-blue-ring);
   animation: sync-status-pill-pulse 1200ms ease-in-out infinite;
 }
 
@@ -1201,6 +1213,59 @@ body[data-exam-ui="v2"] .exam-shortcuts-action {
   50% {
     opacity: 0.35;
   }
+}
+
+/* -------------------------------------------------------------------------
+ * Inline footer variant.
+ *
+ * When the pill lives inside the exam bottom bar (.exam-footer > .footer-sync)
+ * we ditch the fixed-position floating look and blend into the blue bar:
+ * transparent background, light text on blue, no shadow, tighter padding.
+ * This keeps the pill informational without competing with the timer or
+ * block controls next to it.
+ * ----------------------------------------------------------------------- */
+.footer-sync {
+  align-items: center;
+  display: flex;
+}
+
+.footer-sync .sync-status-pill {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: none;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  gap: 6px;
+  letter-spacing: 0.03em;
+  padding: 3px 9px 3px 8px;
+  position: static;
+  right: auto;
+  top: auto;
+  z-index: auto;
+}
+
+.footer-sync .sync-status-pill-synced {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  opacity: 0.85;
+}
+
+.footer-sync .sync-status-pill-syncing,
+.footer-sync .sync-status-pill-pending {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.footer-sync .sync-status-pill-offline {
+  background: rgba(255, 221, 170, 0.18);
+  color: #ffe1b3;
+}
+
+.footer-sync .sync-status-pill-error {
+  background: rgba(255, 180, 175, 0.2);
+  color: #ffd5d2;
 }
 
 /* -------------------------------------------------------------------------
@@ -1297,15 +1362,15 @@ body[data-exam-ui="v2"] .exam-shortcuts-action {
 }
 
 .exam-image-inspector-btn:focus-visible {
-  background: #eef2fb;
-  border-color: #4f7ae0;
-  color: #2f4b86;
+  background: var(--q-blue-soft);
+  border-color: var(--q-blue);
+  color: var(--q-blue-strong);
   outline: none;
 }
 
 .exam-image-inspector-btn.is-active {
-  background: #4f7ae0;
-  border-color: #3d65c8;
+  background: var(--q-blue);
+  border-color: var(--q-blue-strong);
   color: #ffffff;
 }
 
@@ -1371,7 +1436,7 @@ body[data-exam-ui="v2"] .exam-question-list .list-group-item.q-item-visited:hove
 
 body[data-exam-ui="v2"] .exam-question-list .list-group-item.active,
 body[data-exam-ui="v2"] .exam-question-list .list-group-item.active:hover {
-  background: #4f7ae0;
+  background: var(--q-blue);
   color: #ffffff;
 }
 
@@ -1387,12 +1452,8 @@ body[data-exam-ui="v2"] .exam-question-list .list-group-item.q-item-incorrect .q
   color: #d1433e;
 }
 
-@media (max-width: 900px) {
-  .sync-status-pill {
-    right: 10px;
-    top: 176px;
-  }
-}
+/* The old fixed-position max-width nudge was for when the pill floated at
+ * the top-right; it now lives in the footer so no override is needed. */
 
 /* ============================================================
  * Dark mode overrides for the exam v2 shell.
@@ -1436,6 +1497,33 @@ body[data-exam-ui="v2"] .exam-question-list .list-group-item.q-item-incorrect .q
 }
 
 [data-theme="dark"] body[data-exam-ui="v2"] .exam-choice-row:hover {
-  background: rgba(96, 165, 250, 0.08);
+  background: rgba(106, 147, 236, 0.10);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-choice-content,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-choice-label {
+  color: var(--q-text);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-choice-selector {
+  border-color: var(--q-border-strong);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-result-pill {
+  background: var(--q-blue-soft);
+  border-color: var(--q-blue);
+  color: var(--q-blue-strong);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-result-pill-incorrect {
+  background: var(--q-danger-soft);
+  border-color: var(--q-danger);
+  color: var(--q-danger);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-scroll .alert-warning {
+  background: var(--q-amber-soft);
+  border-color: var(--q-amber);
+  color: var(--q-amber);
 }
 
