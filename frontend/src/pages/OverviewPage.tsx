@@ -1,6 +1,5 @@
 import { AppShell } from '../components/AppShell'
 import { LoadingScreen } from '../components/LoadingScreen'
-import { SyncStatusPill } from '../components/SyncStatusPill'
 import { resetPack } from '../lib/api'
 import { normalizeProgress } from '../lib/progress'
 import { usePackPage } from '../lib/usePackPage'
@@ -67,7 +66,6 @@ export function OverviewPage() {
       packId={packId}
       packName={packName}
       title={packName ? `${packName} — Overview` : 'Overview'}
-      rightSlot={<SyncStatusPill />}
     >
       <div className="q-stat-grid">
         <div className="q-panel">

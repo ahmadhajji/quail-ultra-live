@@ -1720,6 +1720,9 @@ export function ExamViewPage() {
             <div className="footer-mode">
               <span className={`mode-label mode-${block.mode}`}>{modeLabel(block.mode).toUpperCase()}</span>
             </div>
+            <div className="footer-sync">
+              <SyncStatusPill />
+            </div>
           </div>
 
           <div className="footer-right">
@@ -2085,7 +2088,6 @@ export function ExamViewPage() {
         </div>
       ) : null}
       <ImageInspector open={Boolean(inspectorItem)} item={inspectorItem} onClose={() => setInspectorItem(null)} />
-      <SyncStatusPill />
     </>
   )
 }
