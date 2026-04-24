@@ -1,12 +1,12 @@
 import { z } from 'zod'
 import { upload as uploadBlobClient } from '@vercel/blob/client'
 import { unzipSync, zipSync } from 'fflate'
-import { adminUserSchema, adminUsersResponseSchema, appSettingsResponseSchema, authConfigSchema, authResponseSchema, importSessionSchema, inviteCreationResponseSchema, invitesResponseSchema, manifestResponseSchema, qbankInfoResponseSchema, qbankInfoSchema, revisionResponseSchema, sessionResponseSchema, startBlockResponseSchema, studyPackSchema, studyPacksResponseSchema } from './schemas'
+import { adminUserSchema, adminUsersResponseSchema, appSettingsResponseSchema, authConfigSchema, authResponseSchema, importSessionSchema, inviteCreationResponseSchema, invitesResponseSchema, libraryPackSchema, libraryPacksResponseSchema, manifestResponseSchema, packProgressSummarySchema, qbankInfoResponseSchema, qbankInfoSchema, revisionResponseSchema, sessionResponseSchema, startBlockResponseSchema, studyPackSchema, studyPacksResponseSchema } from './schemas'
 import { getCurrentBlockKey } from './navigation'
 import { ProgressSyncCoordinator } from './progress-sync'
 import { normalizeProgress } from './progress'
 import { STORE_PREFIX, WARM_PREFIX, localStore } from './store'
-import type { AdminUser, AppSettings, CachedPackEntry, DirtyProgressEntry, InviteCreationResult, InviteRecord, ProgressRecord, QbankInfo, StartBlockPreferences, StudyPackSummary, SyncMetadata, SyncProgressOptions, SyncProgressResult, User, UserRole, UserStatus } from '../types/domain'
+import type { AdminUser, AppSettings, CachedPackEntry, DirtyProgressEntry, InviteCreationResult, InviteRecord, LibraryPackSummary, PackProgressSummary, ProgressRecord, QbankInfo, StartBlockPreferences, StudyPackSummary, SyncMetadata, SyncProgressOptions, SyncProgressResult, User, UserRole, UserStatus } from '../types/domain'
 
 const DB_NAME = 'quail-ultra-live'
 const DB_VERSION = 1
@@ -869,6 +869,48 @@ export async function updateAppSettings(settings: AppSettings): Promise<AppSetti
   })
   authConfigCache = payload.settings
   return authConfigCache
+}
+
+// --- Library packs ---------------------------------------------------------
+
+export async function listLibraryPacks(): Promise<LibraryPackSummary[]> {
+  const payload = await request('/api/library', libraryPacksResponseSchema)
+  return payload.packs
+}
+
+export async function importLibraryPack(systemPackId: string): Promise<StudyPackSummary> {
+  const payload = await requestRaw(`/api/library/${encodeURIComponent(systemPackId)}/import`, {
+    method: 'POST'
+  })
+  return z.object({ pack: studyPackSchema }).parse(payload).pack
+}
+
+export async function promoteToLibrary(packId: string, name: string, description: string): Promise<LibraryPackSummary> {
+  const payload = await requestRaw(`/api/library/promote/${encodeURIComponent(packId)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, description })
+  })
+  return z.object({ pack: libraryPackSchema }).parse(payload).pack
+}
+
+export async function deleteLibraryPack(systemPackId: string): Promise<void> {
+  await requestRaw(`/api/library/${encodeURIComponent(systemPackId)}`, {
+    method: 'DELETE'
+  })
+}
+
+// --- Admin pack utilities --------------------------------------------------
+
+export async function resetAdminPack(packId: string): Promise<number> {
+  const payload = await request(`/api/admin/packs/${encodeURIComponent(packId)}/reset`, revisionResponseSchema, {
+    method: 'POST'
+  })
+  return payload.revision
+}
+
+export async function getAdminPackProgressSummary(packId: string): Promise<PackProgressSummary> {
+  return request(`/api/admin/packs/${encodeURIComponent(packId)}/progress-summary`, packProgressSummarySchema)
 }
 
 export function registerServiceWorker(): void {

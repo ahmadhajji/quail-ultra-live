@@ -1393,3 +1393,49 @@ body[data-exam-ui="v2"] .exam-question-list .list-group-item.q-item-incorrect .q
     top: 176px;
   }
 }
+
+/* ============================================================
+ * Dark mode overrides for the exam v2 shell.
+ * The exam renders question HTML supplied by the qbank, so
+ * we only override chrome colors — not inline text.
+ * ============================================================ */
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-shell {
+  --qx-panel-bg: #1e293b;
+  --qx-panel-border: #334155;
+  --qx-panel-heading: #e2e8f0;
+  --qx-workspace-bg: #0f172a;
+  --qx-question-surface: #1e293b;
+  --qx-question-border: #334155;
+  --qx-choices-border: #334155;
+  --qx-choices-ring: rgba(96, 165, 250, 0.28);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-question-body,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-explanation-body,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-question-body p,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-explanation-body p {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-explanation-body h1,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-explanation-body h2,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-explanation-body h3,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-explanation-body h4 {
+  color: #93c5fd;
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-choices-container {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-choice-row {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-choice-row:hover {
+  background: rgba(96, 165, 250, 0.08);
+}
+

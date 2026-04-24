@@ -227,4 +227,23 @@ export interface InviteRecord {
 export interface InviteCreationResult {
   invite: InviteRecord
   inviteUrl: string
+  emailSent?: boolean | undefined
+}
+
+export interface LibraryPackSummary {
+  id: string
+  name: string
+  description: string
+  questionCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PackProgressSummary {
+  totalBlocks: number
+  completedBlocks: number
+  totalQuestions: number
+  correctCount: number
+  unusedCount: number
+  incorrectCount: number
 }

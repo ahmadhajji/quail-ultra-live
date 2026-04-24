@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
+import { AppShell } from '../components/AppShell'
 import { LoadingScreen } from '../components/LoadingScreen'
-import { PackTopBar } from '../components/PackTopBar'
+import { SyncStatusPill } from '../components/SyncStatusPill'
 import { startBlock } from '../lib/api'
 import { navigate } from '../lib/navigation'
 import { localStore } from '../lib/store'
@@ -146,7 +147,7 @@ function countForSubtag(
 }
 
 export function NewBlockPage() {
-  const { loading, packId, qbankinfo } = usePackPage()
+  const { loading, user, packId, packName, qbankinfo } = usePackPage()
   const [mode] = useState<'tutor'>(getStoredMode())
   const [qpoolSetting, setQpoolSetting] = useState<PoolSetting>((localStore.getString('qpool-setting') as PoolSetting | undefined) ?? 'btn-qpool-unused')
   const [customIds, setCustomIds] = useState(localStore.getString('custom-ids-setting') ?? '')
@@ -308,9 +309,9 @@ export function NewBlockPage() {
 
   if (loading || !qbankinfo) {
     return (
-      <div className="container-fluid d-flex flex-column" style={{ height: '100%' }}>
+      <AppShell user={user} active="newblock" packId={packId} packName={packName} title="New Block">
         <LoadingScreen />
-      </div>
+      </AppShell>
     )
   }
 
@@ -321,16 +322,14 @@ export function NewBlockPage() {
   const isAllTags = tags.every((tag) => allSubtagsMap[tag] ?? true)
 
   return (
-    <div className="container-fluid d-flex flex-column" style={{ height: '100%' }}>
-      <PackTopBar
-        subtitle="Session Builder"
-        active="newblock"
-        onBack={() => navigate('index')}
-        onOverview={() => navigate('overview', { pack: packId })}
-        onNewBlock={() => navigate('newblock', { pack: packId })}
-        onPreviousBlocks={() => navigate('previousblocks', { pack: packId })}
-      />
-
+    <AppShell
+      user={user}
+      active="newblock"
+      packId={packId}
+      packName={packName}
+      title={packName ? `${packName} — New Block` : 'New Block'}
+      rightSlot={<SyncStatusPill />}
+    >
       <div className="flex-fill">
         <div className="q-page-grid">
           <div className="q-stack">
@@ -338,7 +337,6 @@ export function NewBlockPage() {
               <div className="q-panel-header">
                 <div>
                   <p className="q-panel-title">Study Mode</p>
-                  <p className="q-panel-subtitle">This build now uses tutor mode only. Timed and untimed sessions are deprecated because they were not reliable.</p>
                 </div>
                 <span className="q-badge">{tutorModeSummary[0]}</span>
               </div>
@@ -357,7 +355,6 @@ export function NewBlockPage() {
               <div className="q-panel-header">
                 <div>
                   <p className="q-panel-title">Question Pool</p>
-                  <p className="q-panel-subtitle">Build focused blocks from unseen, incorrect, flagged, full-bank, or custom ID lists.</p>
                 </div>
               </div>
               <div className="q-panel-body">
@@ -404,7 +401,6 @@ export function NewBlockPage() {
                 <div className="q-panel-header">
                   <div>
                     <p className="q-panel-title">Subjects and Filters</p>
-                    <p className="q-panel-subtitle">Keep all subtags enabled for broad coverage or narrow the block to a specific slice of the bank.</p>
                   </div>
                 </div>
                 <div className="q-panel-body">
@@ -516,7 +512,6 @@ export function NewBlockPage() {
               <div className="q-panel-header">
                 <div>
                   <p className="q-panel-title">Block Settings</p>
-                  <p className="q-panel-subtitle">Keep the test builder compact, but expose the control points that matter for compatibility with existing Quail Ultra banks.</p>
                 </div>
               </div>
               <div className="q-panel-body">
@@ -597,7 +592,6 @@ export function NewBlockPage() {
               <div className="q-panel-header">
                 <div>
                   <p className="q-panel-title">Session Snapshot</p>
-                  <p className="q-panel-subtitle">A compact summary of how the block will behave once it opens.</p>
                 </div>
               </div>
               <div className="q-panel-body">
@@ -628,7 +622,6 @@ export function NewBlockPage() {
               <div className="q-panel-header">
                 <div>
                   <p className="q-panel-title">Compatibility Notes</p>
-                  <p className="q-panel-subtitle">Quail Ultra remains BYO question bank, so this UI layer preserves the existing HTML and JSON bank format.</p>
                 </div>
               </div>
               <div className="q-panel-body">
@@ -639,6 +632,6 @@ export function NewBlockPage() {
           </div>
         </div>
       </div>
-    </div>
+    </AppShell>
   )
 }
