@@ -86,6 +86,16 @@
   --q-shadow-md: 0 4px 10px -4px rgba(0, 0, 0, 0.55), 0 2px 4px rgba(0, 0, 0, 0.4);
   --q-shadow-lg: 0 20px 48px -18px rgba(0, 0, 0, 0.75), 0 2px 6px rgba(0, 0, 0, 0.45);
   --q-shadow: var(--q-shadow-md);
+
+  /* Highlighter hues are swapped in dark mode so white text stays readable
+   * on them. Light mode uses pale pastels (dark text on light highlight);
+   * dark mode uses deeper, desaturated tints (white text on dark highlight).
+   * Any update here must keep roughly equal luminance distance from the body
+   * text color. */
+  --q-hl-yellow: #6a530a;
+  --q-hl-green: #14594c;
+  --q-hl-cyan: #1d4a6e;
+  --q-hl-red: #6b1a1a;
 }
 
 /* Reading-area scaling — attached to the question body wrapper,
@@ -2889,4 +2899,201 @@ select.form-control:focus,
 [data-theme="dark"] .sync-status-pill-pending {
   background: color-mix(in oklab, var(--q-blue-soft) 80%, transparent);
   color: var(--q-blue-strong);
+}
+
+/* ============================================================
+ * Dark-mode patch: table bodies, summary/metric rows, accordions.
+ *
+ * The base rules above ship with `#fff` / `#f8fafc` / `#f1f5f9` literal
+ * backgrounds which were invisible on the light theme but glow white on the
+ * dark theme. Tokenize them here so Admin/Previous-Blocks tables, Overview
+ * summary rows, Lab Values tables, and the qbank accordions all match the
+ * rest of the dark surface.
+ * ============================================================ */
+
+[data-theme="dark"] .q-table-wrap .table {
+  background: var(--q-surface);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] .q-table-wrap thead th {
+  background: var(--q-surface-2);
+  border-bottom-color: var(--q-border);
+  color: var(--q-text-muted);
+}
+
+[data-theme="dark"] .q-table-wrap td,
+[data-theme="dark"] .q-table-wrap th {
+  background: var(--q-surface);
+  border-color: var(--q-border-soft);
+  border-top-color: var(--q-border-soft);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] .q-table-wrap tbody tr:last-child td,
+[data-theme="dark"] .q-table-wrap tbody tr:last-child th {
+  border-bottom-color: var(--q-border-soft);
+}
+
+[data-theme="dark"] .q-table-wrap tbody tr.table-success {
+  background: var(--q-success-soft);
+}
+
+[data-theme="dark"] .q-table-wrap tbody tr.table-warning {
+  background: var(--q-amber-soft);
+}
+
+/* Summary rows (Overview page) and metric boxes. */
+[data-theme="dark"] .q-summary-item {
+  background: var(--q-surface-2);
+  border-color: var(--q-border-soft);
+}
+
+[data-theme="dark"] .q-summary-item strong {
+  color: var(--q-text);
+}
+
+[data-theme="dark"] .q-summary-item span {
+  color: var(--q-text-muted);
+}
+
+[data-theme="dark"] .q-metric-box {
+  background: var(--q-surface-2);
+  border-color: var(--q-border-soft);
+}
+
+[data-theme="dark"] .q-mode-btn {
+  background: var(--q-surface-2);
+  border-color: var(--q-border);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] .q-mode-title {
+  color: var(--q-text);
+}
+
+[data-theme="dark"] .q-mode-copy {
+  color: var(--q-text-muted);
+}
+
+[data-theme="dark"] .q-mode-btn.active {
+  background: var(--q-blue-soft);
+  border-color: var(--q-blue);
+  box-shadow: inset 0 0 0 1px var(--q-blue);
+}
+
+[data-theme="dark"] .q-count-pill {
+  background: var(--q-surface-2);
+  border-color: var(--q-border);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] .q-nested-panel {
+  background: var(--q-surface-2);
+  border-color: var(--q-border-soft);
+}
+
+/* Accordion (qbank question list / subject accordion inside NewBlock). */
+[data-theme="dark"] .q-accordion .card {
+  background: var(--q-surface-2);
+  border-color: var(--q-border-soft);
+}
+
+[data-theme="dark"] .q-accordion .card-header {
+  background: var(--q-surface-2);
+  border-bottom-color: var(--q-border-soft);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] .q-accordion .card-body {
+  background: var(--q-surface);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] .q-accordion-toggle {
+  color: var(--q-blue-strong);
+}
+
+[data-theme="dark"] .q-accordion-toggle:hover,
+[data-theme="dark"] .q-accordion-toggle:focus {
+  color: var(--q-blue);
+}
+
+/* Filter checkboxes / labels use default text colors from bootstrap; make
+ * sure the hardcoded #1e293b doesn't black-on-dark. */
+[data-theme="dark"] .q-filter-row,
+[data-theme="dark"] .q-inline-checkbox,
+[data-theme="dark"] .q-filter-label,
+[data-theme="dark"] .q-filter-title {
+  color: var(--q-text);
+}
+
+/* Bootstrap `.table` fallback used by Lab Values and legacy admin tables. */
+[data-theme="dark"] .table {
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--q-text);
+  --bs-table-border-color: var(--q-border-soft);
+  color: var(--q-text);
+}
+
+[data-theme="dark"] .table > :not(caption) > * > * {
+  background-color: var(--q-surface);
+  color: var(--q-text);
+  border-bottom-color: var(--q-border-soft);
+}
+
+[data-theme="dark"] .table thead th,
+[data-theme="dark"] .table thead td {
+  background-color: var(--q-surface-2);
+  color: var(--q-text-muted);
+  border-bottom-color: var(--q-border);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-labs-table .table,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-labs-table .table thead th,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-labs-table .table tbody td {
+  background: transparent;
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-labs-table {
+  background: var(--q-surface);
+  border: 1px solid var(--q-border-soft);
+  border-radius: var(--q-radius-sm);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-v2-labs-section {
+  color: var(--q-text);
+}
+
+/* q-appbar: the new top-app bar title/subtext in dark mode. */
+[data-theme="dark"] .q-appbar-title {
+  color: var(--q-text);
+}
+
+/* q-topbar (legacy) — only shows on pages that still render the legacy
+ * blue topbar (rare). Keep the token treatment consistent. */
+[data-theme="dark"] .q-topbar {
+  background: var(--q-surface-strong);
+  border-bottom-color: var(--q-border);
+}
+
+/* q-brand-title/subtitle on topbar should adapt. */
+[data-theme="dark"] .q-brand-title {
+  color: var(--q-text);
+}
+
+[data-theme="dark"] .q-brand-subtitle {
+  color: var(--q-text-muted);
+}
+
+/* Highlight swatches in the exam topbar highlighter toolbar. Light mode
+ * showed white-bordered circles on the blue bar; in dark mode they should
+ * match the new deeper palette. */
+[data-theme="dark"] .highlight-swatch {
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+[data-theme="dark"] .highlight-swatch.active {
+  border-color: var(--q-text);
+  box-shadow: 0 0 0 2px var(--q-blue-ring);
 }
