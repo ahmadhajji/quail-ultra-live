@@ -117,6 +117,12 @@ const progressSchema = z.object({
 })
 
 export const qbankInfoSchema = z.object({
+  format: z.enum(['legacy', 'native']).optional(),
+  nativeContent: z.object({
+    format: z.string(),
+    schemaVersion: z.number(),
+    manifestPath: z.string()
+  }).optional(),
   index: z.record(z.string(), z.record(z.string(), z.string())),
   tagnames: z.object({
     tagnames: z.record(z.string(), z.string())

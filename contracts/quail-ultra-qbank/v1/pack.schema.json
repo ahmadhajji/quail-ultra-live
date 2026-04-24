@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quail-ultra-live.local/contracts/quail-ultra-qbank/v1/pack.schema.json",
+  "title": "Quail Ultra Native QBank Pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schemaVersion",
+    "packId",
+    "title",
+    "createdAt",
+    "updatedAt",
+    "producer",
+    "revision",
+    "questionIndex",
+    "tagIndex",
+    "mediaIndex",
+    "validation"
+  ],
+  "properties": {
+    "format": { "const": "quail-ultra-qbank" },
+    "schemaVersion": { "const": 1 },
+    "packId": { "$ref": "https://quail-ultra-live.local/contracts/quail-ultra-qbank/v1/question.schema.json#/$defs/id" },
+    "title": { "type": "string", "minLength": 1 },
+    "rotation": { "type": "string" },
+    "description": { "type": "string" },
+    "createdAt": { "type": "string", "minLength": 1 },
+    "updatedAt": { "type": "string", "minLength": 1 },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "schemaChecksum"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string" },
+        "gitCommit": { "type": "string" },
+        "schemaChecksum": { "type": "string", "minLength": 1 }
+      }
+    },
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["number", "hash"],
+      "properties": {
+        "number": { "type": "integer", "minimum": 1 },
+        "hash": { "type": "string", "minLength": 1 },
+        "previousHash": { "type": "string" }
+      }
+    },
+    "questionIndex": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "path", "status", "tags", "contentHash", "answerSummary"],
+        "properties": {
+          "id": { "$ref": "https://quail-ultra-live.local/contracts/quail-ultra-qbank/v1/question.schema.json#/$defs/id" },
+          "path": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["draft", "ready", "blocked", "deprecated"] },
+          "titlePreview": { "type": "string" },
+          "tags": { "$ref": "https://quail-ultra-live.local/contracts/quail-ultra-qbank/v1/question.schema.json#/$defs/tags" },
+          "contentHash": { "type": "string", "minLength": 1 },
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "documentId": { "type": "string" },
+              "slideNumber": { "type": "integer", "minimum": 1 },
+              "questionIndex": { "type": "integer", "minimum": 1 }
+            }
+          },
+          "answerSummary": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["correctChoiceId", "choices"],
+            "properties": {
+              "correctChoiceId": { "$ref": "https://quail-ultra-live.local/contracts/quail-ultra-qbank/v1/question.schema.json#/$defs/id" },
+              "choices": {
+                "type": "array",
+                "minItems": 2,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["id", "label"],
+                  "properties": {
+                    "id": { "$ref": "https://quail-ultra-live.local/contracts/quail-ultra-qbank/v1/question.schema.json#/$defs/id" },
+                    "label": { "type": "string" },
+                    "displayOrder": { "type": "integer", "minimum": 1 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "tagIndex": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    "mediaIndex": {
+      "type": "array",
+      "items": { "$ref": "https://quail-ultra-live.local/contracts/quail-ultra-qbank/v1/question.schema.json#/$defs/mediaRef" }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "errors", "warnings", "blockedQuestionCount"],
+      "properties": {
+        "status": { "enum": ["passed", "warning", "failed"] },
+        "errors": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } },
+        "blockedQuestionCount": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

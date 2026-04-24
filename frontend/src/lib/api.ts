@@ -208,9 +208,11 @@ async function requestRaw(url: string, options?: RequestInit, timeoutMs?: number
 
 function normalizeQbankInfo(qbankinfo: z.infer<typeof qbankInfoSchema>): QbankInfo {
   const normalizedProgress = normalizeProgress(qbankinfo.progress, qbankinfo)
-  const { questionMeta, ...rest } = qbankinfo
+  const { format, nativeContent, questionMeta, ...rest } = qbankinfo
   const normalizedBase = {
     ...rest,
+    ...(format ? { format } : {}),
+    ...(nativeContent ? { nativeContent } : {}),
     progress: normalizedProgress,
     blockToOpen: qbankinfo.blockToOpen || getCurrentBlockKey()
   }

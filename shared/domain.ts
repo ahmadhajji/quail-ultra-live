@@ -118,6 +118,12 @@ export interface ProgressRecord {
 }
 
 export interface QbankInfo {
+  format?: 'legacy' | 'native'
+  nativeContent?: {
+    format: string
+    schemaVersion: number
+    manifestPath: string
+  }
   index: Record<string, Record<string, string>>
   tagnames: {
     tagnames: Record<string, string>

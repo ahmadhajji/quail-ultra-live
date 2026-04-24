@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fetchQuestionAssets, extractChoiceLabels, prefetchImagesFromHtml, prefetchQuestionAssets, rewriteAssetPaths, stripChoicesFromQuestionDisplay } from '../lib/qbank-html'
+import { fetchNativeQuestion, getNativeChoiceLabels, prefetchNativeQuestion, prefetchNativeQuestionMedia, type NativeQuestion } from '../lib/native-qbank'
 import { getHighlightDoc, getQuestionNote, setHighlightDocTarget, setQuestionNote } from '../lib/annotations'
 import { addToBucket, isInBucket, removeFromBucket } from '../lib/progress'
 import { syncProgress } from '../lib/api'
@@ -24,6 +25,7 @@ import { ExamShellV2 } from '../components/exam/ExamShellV2'
 import { FloatingWindow } from '../components/FloatingWindow'
 import { ImageInspector, type ImageInspectorItem } from '../components/ImageInspector'
 import { SyncStatusPill } from '../components/SyncStatusPill'
+import { NativeQuestionExplanation, NativeQuestionStem } from '../components/exam/NativeQuestionContent'
 import type { Mode, QbankInfo, SyncProgressOptions } from '../types/domain'
 
 function modeLabel(mode: Mode): string {
@@ -199,6 +201,7 @@ export function ExamViewPage() {
   const [selectedQnum, setSelectedQnum] = useState(0)
   const [questionHtml, setQuestionHtml] = useState('')
   const [explanationHtml, setExplanationHtml] = useState('')
+  const [nativeQuestion, setNativeQuestion] = useState<NativeQuestion | null>(null)
   const [choiceLabels, setChoiceLabels] = useState<Record<string, string>>({})
   const [sourceSlideOpen, setSourceSlideOpen] = useState(false)
   const [selectedMarker, setSelectedMarker] = useState<MarkerKey>('yellow')
@@ -258,6 +261,7 @@ export function ExamViewPage() {
   const currentAnswer = block?.answers[selectedQnum] ?? ''
   const currentQuestionFlagged = Boolean(qbankinfo && isInBucket(qbankinfo.progress, qbankinfo, currentQid, 'flagged'))
   const qbankPath = qbankinfo?.path ?? ''
+  const isNativePack = qbankinfo?.format === 'native'
   const explanationVisible = Boolean(block && currentState && (block.complete || (block.mode === 'tutor' && currentState.revealed)))
   const tutorReviewReady = Boolean(block && !block.complete && block.mode === 'tutor' && block.blockqlist.every((_, index) => block.questionStates[index]?.submitted))
   const showBottomNextButton = Boolean(block && (block.mode !== 'tutor' || block.complete || currentState?.submitted))
@@ -839,6 +843,33 @@ export function ExamViewPage() {
       return
     }
     let cancelled = false
+
+    setQuestionHtml('')
+    setExplanationHtml('')
+    setNativeQuestion(null)
+
+    if (isNativePack) {
+      void fetchNativeQuestion(qbankPath, currentQid)
+        .then((question) => {
+          if (cancelled) {
+            return
+          }
+          const contentHash = question.integrity?.contentHash ?? question.id
+          setNativeQuestion(question)
+          setChoiceLabels({ ...getNativeChoiceLabels(question), ...metadataChoiceLabels })
+          setQuestionHtml(`native:${question.id}:${contentHash}:stem`)
+          setExplanationHtml(`native:${question.id}:${contentHash}:explanation`)
+          prefetchNativeQuestionMedia(qbankPath, question)
+        })
+        .catch((error) => {
+          window.alert(error instanceof Error ? error.message : 'Unable to load native question content.')
+        })
+
+      return () => {
+        cancelled = true
+      }
+    }
+
     void fetchQuestionAssets(qbankPath, currentQid)
       .then(({ questionHtml, explanationHtml }) => {
         if (cancelled) {
@@ -862,7 +893,7 @@ export function ExamViewPage() {
     return () => {
       cancelled = true
     }
-  }, [currentQid, qbankPath, selectedQnum, syncedSelectedQnum])
+  }, [currentQid, isNativePack, qbankPath, selectedQnum, syncedSelectedQnum])
 
   // Build a stable, memoized list of neighbor qids to prefetch. Using a joined
   // key keeps the effect below from re-firing on every unrelated rerender
@@ -893,6 +924,19 @@ export function ExamViewPage() {
     let cancelled = false
     const qids = prefetchNeighborKey.split('|').filter(Boolean)
     for (const qid of qids) {
+      if (isNativePack) {
+        prefetchNativeQuestion(qbankPath, qid)
+        void fetchNativeQuestion(qbankPath, qid)
+          .then((question) => {
+            if (!cancelled) {
+              prefetchNativeQuestionMedia(qbankPath, question)
+            }
+          })
+          .catch(() => {
+            // Prefetch failures are non-fatal; the on-demand fetch will retry.
+          })
+        continue
+      }
       prefetchQuestionAssets(qbankPath, qid)
       // Also warm images once the HTML is in the cache. Because
       // `fetchQuestionAssets` memoizes by (basePath, qid) in production, this
@@ -913,7 +957,7 @@ export function ExamViewPage() {
     return () => {
       cancelled = true
     }
-  }, [prefetchNeighborKey, qbankPath])
+  }, [isNativePack, prefetchNeighborKey, qbankPath])
 
   useEffect(() => {
     if (!questionHtml) {
@@ -1563,7 +1607,13 @@ export function ExamViewPage() {
         <section className="exam-panel exam-panel-continuous">
           <div ref={scrollRef} id="continuousScroll" className="exam-scroll exam-scroll-continuous">
             <section className="exam-section">
-              <div ref={questionBodyRef} className="exam-question-body exam-reading-scale" dangerouslySetInnerHTML={{ __html: questionHtml }} />
+              {isNativePack ? (
+                <div ref={questionBodyRef} className="exam-question-body exam-reading-scale">
+                  {nativeQuestion ? <NativeQuestionStem question={nativeQuestion} basePath={qbankPath} /> : null}
+                </div>
+              ) : (
+                <div ref={questionBodyRef} className="exam-question-body exam-reading-scale" dangerouslySetInnerHTML={{ __html: questionHtml }} />
+              )}
               {showCaution ? (
                 <div className="alert alert-warning mt-3" role="alert">
                   {factCheck?.status && ['disputed', 'unresolved'].includes(factCheck.status) ? (
@@ -1705,7 +1755,13 @@ export function ExamViewPage() {
                   ) : null}
                 </div>
               ) : null}
-              <div ref={explanationBodyRef} className="exam-explanation-body exam-reading-scale" dangerouslySetInnerHTML={{ __html: explanationHtml }} />
+              {isNativePack ? (
+                <div ref={explanationBodyRef} className="exam-explanation-body exam-reading-scale">
+                  {nativeQuestion ? <NativeQuestionExplanation question={nativeQuestion} basePath={qbankPath} /> : null}
+                </div>
+              ) : (
+                <div ref={explanationBodyRef} className="exam-explanation-body exam-reading-scale" dangerouslySetInnerHTML={{ __html: explanationHtml }} />
+              )}
             </section>
           </div>
         </section>
