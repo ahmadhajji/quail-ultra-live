@@ -36,7 +36,7 @@ describe('shared progress helpers', () => {
       blockqlist: ['1', '2', '3'],
       answers: ['A', '', ''],
       notes: ['', 'Saved note', ''],
-      highlights: ['[]', '[]', '[["wrapper","text","0",0,4]]'],
+      highlights: ['[]', '[]', '{"v":1,"question":[{"id":"hl_1","start":0,"end":4,"color":"yellow"}],"explanation":[]}'],
       currentquesnum: 2
     }, {
       '1': { options: ['A', 'B'], correct: 'A' },
@@ -45,6 +45,17 @@ describe('shared progress helpers', () => {
     })
 
     expect(block.questionStates.map((state) => state.visited)).toEqual([true, true, true])
+  })
+
+  it('drops legacy highlight tuples when deriving visited state', () => {
+    const block = normalizeBlockRecord({
+      blockqlist: ['1'],
+      highlights: ['[["wrapper","text","0",0,4]]']
+    }, {
+      '1': { options: ['A', 'B'], correct: 'A' }
+    })
+
+    expect(block.questionStates[0]?.visited).toBe(false)
   })
 
   it('creates and deletes blocks without reusing ids', () => {

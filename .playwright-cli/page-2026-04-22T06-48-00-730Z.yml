@@ -1,0 +1,112 @@
+- generic [ref=e160]:
+  - generic [ref=e161]:
+    - generic [ref=e162]:
+      - button "‹" [ref=e163] [cursor=pointer]
+      - generic [ref=e164]:
+        - generic [ref=e165]: Q
+        - generic [ref=e166]:
+          - paragraph [ref=e167]: Quail Ultra
+          - paragraph [ref=e168]: Block History
+    - list [ref=e170]:
+      - listitem [ref=e171]:
+        - button "Overview" [ref=e172] [cursor=pointer]
+      - listitem [ref=e173]:
+        - button "New Block" [ref=e174] [cursor=pointer]
+      - listitem [ref=e175]:
+        - button "Previous Blocks" [ref=e176] [cursor=pointer]
+  - generic [ref=e177]:
+    - generic [ref=e179]:
+      - paragraph [ref=e180]: Previous Blocks
+      - paragraph [ref=e181]: Resume incomplete sessions or reopen completed blocks directly into the updated review interface.
+    - table [ref=e184]:
+      - rowgroup [ref=e185]:
+        - 'row "Block # Mode State % Correct Num Qs Q Pool Tags Start Time Open Delete" [ref=e186]':
+          - 'columnheader "Block #" [ref=e187]'
+          - columnheader "Mode" [ref=e188]
+          - columnheader "State" [ref=e189]
+          - columnheader "% Correct" [ref=e190]
+          - columnheader "Num Qs" [ref=e191]
+          - columnheader "Q Pool" [ref=e192]
+          - columnheader "Tags" [ref=e193]
+          - columnheader "Start Time" [ref=e194]
+          - columnheader "Open" [ref=e195]
+          - columnheader "Delete" [ref=e196]
+      - rowgroup [ref=e197]:
+        - row "5 Tutor Paused Session In Progress 3 Unused All Subtags 4/13/2026, 10:29:48 AM Resume Delete" [ref=e198]:
+          - cell "5" [ref=e199]
+          - cell "Tutor" [ref=e200]
+          - cell "Paused Session" [ref=e201]
+          - cell "In Progress" [ref=e202]:
+            - strong [ref=e203]:
+              - emphasis [ref=e204]: In Progress
+          - cell "3" [ref=e205]:
+            - button "3" [ref=e206] [cursor=pointer]
+          - cell "Unused" [ref=e207]
+          - cell "All Subtags" [ref=e208]
+          - cell "4/13/2026, 10:29:48 AM" [ref=e209]
+          - cell "Resume" [ref=e210]:
+            - button "Resume" [ref=e211] [cursor=pointer]
+          - cell "Delete" [ref=e212]:
+            - button "Delete" [ref=e213] [cursor=pointer]
+        - row "4 Tutor Paused Session In Progress 3 Unused All Subtags 4/13/2026, 10:21:01 AM Resume Delete" [ref=e214]:
+          - cell "4" [ref=e215]
+          - cell "Tutor" [ref=e216]
+          - cell "Paused Session" [ref=e217]
+          - cell "In Progress" [ref=e218]:
+            - strong [ref=e219]:
+              - emphasis [ref=e220]: In Progress
+          - cell "3" [ref=e221]:
+            - button "3" [ref=e222] [cursor=pointer]
+          - cell "Unused" [ref=e223]
+          - cell "All Subtags" [ref=e224]
+          - cell "4/13/2026, 10:21:01 AM" [ref=e225]
+          - cell "Resume" [ref=e226]:
+            - button "Resume" [ref=e227] [cursor=pointer]
+          - cell "Delete" [ref=e228]:
+            - button "Delete" [ref=e229] [cursor=pointer]
+        - row "3 Tutor Paused Session In Progress 3 Unused All Subtags 4/13/2026, 10:20:44 AM Resume Delete" [ref=e230]:
+          - cell "3" [ref=e231]
+          - cell "Tutor" [ref=e232]
+          - cell "Paused Session" [ref=e233]
+          - cell "In Progress" [ref=e234]:
+            - strong [ref=e235]:
+              - emphasis [ref=e236]: In Progress
+          - cell "3" [ref=e237]:
+            - button "3" [ref=e238] [cursor=pointer]
+          - cell "Unused" [ref=e239]
+          - cell "All Subtags" [ref=e240]
+          - cell "4/13/2026, 10:20:44 AM" [ref=e241]
+          - cell "Resume" [ref=e242]:
+            - button "Resume" [ref=e243] [cursor=pointer]
+          - cell "Delete" [ref=e244]:
+            - button "Delete" [ref=e245] [cursor=pointer]
+        - row "2 Tutor Completed Review 40.0% 10 Unused All Subtags 4/13/2026, 10:08:14 AM Review Delete" [ref=e246]:
+          - cell "2" [ref=e247]
+          - cell "Tutor" [ref=e248]
+          - cell "Completed Review" [ref=e249]
+          - cell "40.0%" [ref=e250]
+          - cell "10" [ref=e251]:
+            - button "10" [ref=e252] [cursor=pointer]
+          - cell "Unused" [ref=e253]
+          - cell "All Subtags" [ref=e254]
+          - cell "4/13/2026, 10:08:14 AM" [ref=e255]
+          - cell "Review" [ref=e256]:
+            - button "Review" [ref=e257] [cursor=pointer]
+          - cell "Delete" [ref=e258]:
+            - button "Delete" [ref=e259] [cursor=pointer]
+        - row "1 Tutor Paused Session In Progress 10 Unused All Subtags 4/13/2026, 12:51:51 AM Resume Delete" [ref=e260]:
+          - cell "1" [ref=e261]
+          - cell "Tutor" [ref=e262]
+          - cell "Paused Session" [ref=e263]
+          - cell "In Progress" [ref=e264]:
+            - strong [ref=e265]:
+              - emphasis [ref=e266]: In Progress
+          - cell "10" [ref=e267]:
+            - button "10" [ref=e268] [cursor=pointer]
+          - cell "Unused" [ref=e269]
+          - cell "All Subtags" [ref=e270]
+          - cell "4/13/2026, 12:51:51 AM" [ref=e271]
+          - cell "Resume" [ref=e272]:
+            - button "Resume" [ref=e273] [cursor=pointer]
+          - cell "Delete" [ref=e274]:
+            - button "Delete" [ref=e275] [cursor=pointer]

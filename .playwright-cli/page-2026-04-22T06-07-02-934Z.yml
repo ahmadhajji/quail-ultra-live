@@ -1,0 +1,95 @@
+- generic [ref=e2]:
+  - generic [ref=e253]:
+    - banner [ref=e254]:
+      - generic [ref=e255]:
+        - button [ref=e256] [cursor=pointer]:
+          - img [ref=e257]
+        - generic [ref=e259]:
+          - generic [ref=e260]: Item 1 of 1
+          - generic [ref=e261]: "Question Id: 1"
+        - button "Flag" [ref=e262] [cursor=pointer]:
+          - img [ref=e263]
+          - text: Flag
+      - generic [ref=e265]:
+        - button "Previous" [disabled]:
+          - img
+          - text: Previous
+        - button "Finish" [ref=e266] [cursor=pointer]:
+          - img [ref=e267]
+          - text: Finish
+      - generic [ref=e269]:
+        - button "Notes" [ref=e270] [cursor=pointer]
+        - generic [ref=e271]:
+          - button [ref=e272] [cursor=pointer]
+          - button [ref=e273] [cursor=pointer]
+          - button [ref=e274] [cursor=pointer]
+          - button [ref=e275] [cursor=pointer]
+        - button "Lab Values" [ref=e276] [cursor=pointer]
+        - button "Calculator" [expanded] [ref=e277] [cursor=pointer]
+    - generic [ref=e278]:
+      - complementary [ref=e279]:
+        - list [ref=e281]:
+          - listitem [ref=e282] [cursor=pointer]:
+            - generic [ref=e283]: "1"
+      - main [ref=e284]:
+        - generic [ref=e286]:
+          - paragraph [ref=e799]: What is 2 + 2?
+          - generic [ref=e290]:
+            - generic [ref=e292]:
+              - generic [ref=e293]:
+                - button "Select answer A" [ref=e294] [cursor=pointer]
+                - button "A 4B. 5" [ref=e295] [cursor=pointer]:
+                  - generic [ref=e296]: A
+                  - generic [ref=e297]: 4B. 5
+              - generic [ref=e298]:
+                - button "Select answer B" [ref=e299] [cursor=pointer]
+                - button "B Choice B" [ref=e300] [cursor=pointer]:
+                  - generic [ref=e301]: B
+                  - generic [ref=e302]: Choice B
+            - generic [ref=e303]:
+              - button "Submit Answer" [disabled]
+    - contentinfo [ref=e304]:
+      - generic [ref=e305]:
+        - generic [ref=e306]:
+          - generic [ref=e307]: Time Used
+          - generic [ref=e308]: 0:00:59
+        - generic [ref=e309]: TUTOR
+      - generic [ref=e310]:
+        - button "Suspend" [ref=e311] [cursor=pointer]:
+          - img [ref=e312]
+          - generic [ref=e315]: Suspend
+        - button "End Block" [ref=e316] [cursor=pointer]:
+          - img [ref=e317]
+          - generic [ref=e319]: End Block
+  - button "Close tool panel" [ref=e322] [cursor=pointer]
+  - complementary "Calculator Panel" [ref=e769]:
+    - generic [ref=e324]:
+      - generic [ref=e325]:
+        - paragraph [ref=e326]: Calculator
+        - paragraph [ref=e327]: A native in-block calculator so you can keep the exam workspace on one screen.
+      - button "Close" [ref=e328] [cursor=pointer]
+    - generic [ref=e770]:
+      - generic [ref=e771]:
+        - paragraph [ref=e772]: Current Result
+        - textbox "Calculator Display" [ref=e773]: "42"
+        - paragraph [ref=e774]: 7 x 6 =
+      - group "Calculator keypad" [ref=e775]:
+        - button "AC" [ref=e776] [cursor=pointer]
+        - button "+/-" [ref=e777] [cursor=pointer]
+        - button "%" [ref=e778] [cursor=pointer]
+        - button / [ref=e779] [cursor=pointer]
+        - button "7" [ref=e780] [cursor=pointer]
+        - button "8" [ref=e781] [cursor=pointer]
+        - button "9" [ref=e782] [cursor=pointer]
+        - button "x" [ref=e783] [cursor=pointer]
+        - button "4" [ref=e784] [cursor=pointer]
+        - button "5" [ref=e785] [cursor=pointer]
+        - button "6" [ref=e786] [cursor=pointer]
+        - button "-" [ref=e787] [cursor=pointer]
+        - button "1" [ref=e788] [cursor=pointer]
+        - button "2" [ref=e789] [cursor=pointer]
+        - button "3" [ref=e790] [cursor=pointer]
+        - button "+" [ref=e791] [cursor=pointer]
+        - button "0" [ref=e792] [cursor=pointer]
+        - button "." [ref=e793] [cursor=pointer]
+        - button "=" [active] [ref=e794] [cursor=pointer]

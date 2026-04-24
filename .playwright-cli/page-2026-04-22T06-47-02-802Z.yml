@@ -1,0 +1,21 @@
+- generic [ref=e3]:
+  - generic [ref=e6]:
+    - generic [ref=e7]: Q
+    - generic [ref=e8]:
+      - paragraph [ref=e9]: Quail Ultra Live
+      - paragraph [ref=e10]: Account-backed Study Packs
+  - generic [ref=e12]:
+    - generic [ref=e14]:
+      - paragraph [ref=e15]: Account Access
+      - paragraph [ref=e16]: Sign in to your account, or create one if this is your first time using the web fork.
+    - generic [ref=e17]:
+      - generic [ref=e18]:
+        - generic [ref=e19]:
+          - generic [ref=e20]: Username
+          - textbox "Username" [ref=e21]
+        - generic [ref=e22]:
+          - generic [ref=e23]: Password
+          - textbox "Password" [ref=e24]
+      - button "Sign In" [ref=e26] [cursor=pointer]
+      - paragraph [ref=e27]: Account creation is invite-only. Open the invite URL from the admin panel to register.
+      - paragraph [ref=e28]

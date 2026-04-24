@@ -1,0 +1,53 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]: Q
+      - generic [ref=e8]:
+        - paragraph [ref=e9]: Quail Ultra Live
+        - paragraph [ref=e10]: Account-backed Study Packs
+    - generic [ref=e29]:
+      - generic [ref=e30]: Signed in as codextest
+      - button "Sign Out" [ref=e31] [cursor=pointer]
+  - generic [ref=e12]:
+    - generic [ref=e14]:
+      - paragraph [ref=e15]: Study Packs
+      - paragraph [ref=e16]: Import your qbank folder or zip once, reopen it from any device, and export a compatible archive whenever you want.
+    - generic [ref=e17]:
+      - generic [ref=e19]:
+        - generic [ref=e20]: Study Pack Name
+        - textbox "Kaplan Step 1 Pack" [ref=e32]
+        - paragraph [ref=e33]: Leave blank to reuse the uploaded folder or zip name.
+      - generic [ref=e25]:
+        - generic [ref=e34]:
+          - generic [ref=e35]: Import Folder
+          - paragraph [ref=e36]:
+            - text: Choose an existing Quail/Quail Ultra folder containing your qbank files and optional
+            - code [ref=e37]: progress.json
+            - text: .
+          - generic [ref=e38]:
+            - button "Choose File"
+            - button "Choose Folder" [ref=e39] [cursor=pointer]
+            - generic [ref=e40]: No folder selected yet.
+          - button "Upload Folder" [ref=e41] [cursor=pointer]
+        - generic [ref=e42]:
+          - generic [ref=e43]: Import Zip
+          - paragraph [ref=e44]: Upload a zip export of an existing Study Pack when you want to restore or move it.
+          - generic [ref=e45]:
+            - button "Choose File"
+            - button "Choose Zip" [ref=e46] [cursor=pointer]
+            - generic [ref=e47]: No zip selected yet.
+          - button "Upload Zip" [ref=e48] [cursor=pointer]
+      - paragraph [ref=e27]
+      - generic [ref=e49]:
+        - generic [ref=e51]:
+          - paragraph [ref=e52]: Available Study Packs
+          - paragraph [ref=e53]: Open a pack to use the same overview, block builder, and exam flow as the desktop app.
+        - generic [ref=e56]:
+          - generic [ref=e57]:
+            - generic [ref=e58]: Test Pack
+            - generic [ref=e59]: "Questions: 1 · Revision: 0"
+            - generic [ref=e60]: "Updated: 3/22/2026, 11:53:20 PM"
+          - generic [ref=e61]:
+            - button "Open" [ref=e62] [cursor=pointer]
+            - button "Export Zip" [ref=e63] [cursor=pointer]
+            - button "Delete" [ref=e64] [cursor=pointer]
