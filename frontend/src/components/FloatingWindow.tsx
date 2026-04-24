@@ -1,4 +1,15 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ComponentType, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { refractive } from '@hashintel/refractive'
+
+/**
+ * @hashintel/refractive builds its SVG displacement map with `new ImageData()`.
+ * jsdom doesn't expose ImageData, so in tests we fall back to a plain div and
+ * the window still renders (no refraction, but visually tolerable via the
+ * `.q-glass` CSS fallback). */
+const supportsRefractive = typeof globalThis !== 'undefined' && typeof (globalThis as { ImageData?: unknown }).ImageData === 'function'
+// Loose any-typed shell so the conditional (div vs refractive.div) type-checks —
+// we pass `refraction` only in the refractive branch at runtime.
+const FloatingWindowShell = (supportsRefractive ? refractive.div : 'div') as unknown as ComponentType<Record<string, unknown>>
 
 export interface FloatingWindowProps {
   /** Controls visibility. */
@@ -231,9 +242,10 @@ export function FloatingWindow(props: FloatingWindowProps) {
           }}
         />
       ) : null}
-      <div
+      <FloatingWindowShell
         ref={windowRef}
-        className={`floating-window ${className ?? ''}`.trim()}
+        {...(supportsRefractive ? { refraction: { radius: 14, blur: 14, bezelWidth: 10 } } : {})}
+        className={`floating-window q-glass q-glass--overlay ${className ?? ''}`.trim()}
         role={role}
         aria-modal={role === 'dialog' ? 'true' : undefined}
         aria-labelledby={titleId}
@@ -270,7 +282,7 @@ export function FloatingWindow(props: FloatingWindowProps) {
         <div className="floating-window-body">
           {children}
         </div>
-      </div>
+      </FloatingWindowShell>
     </>
   )
 }
