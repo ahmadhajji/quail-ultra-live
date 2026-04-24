@@ -1,4 +1,4 @@
-export type AppRouteName = 'study-packs' | 'overview' | 'newblock' | 'previousblocks' | 'examview' | 'admin'
+export type AppRouteName = 'study-packs' | 'overview' | 'newblock' | 'previousblocks' | 'examview' | 'admin' | 'library'
 
 export function routePathFor(pageName: AppRouteName): string {
   if (pageName === 'study-packs') {

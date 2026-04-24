@@ -105,3 +105,13 @@ export function getS3SecretAccessKey(): string {
 export function shouldUseS3PathStyle(): boolean {
   return String(process.env.S3_FORCE_PATH_STYLE || 'true').trim().toLowerCase() !== 'false'
 }
+
+export function getResendApiKey(): string | null {
+  const value = String(process.env.RESEND_API_KEY || '').trim()
+  return value || null
+}
+
+export function getResendFromAddress(): string {
+  const value = String(process.env.RESEND_FROM_EMAIL || '').trim()
+  return value || 'Quail Ultra <onboarding@resend.dev>'
+}

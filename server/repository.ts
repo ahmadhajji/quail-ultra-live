@@ -81,6 +81,7 @@ export interface AppRepository {
     revision: number
     createdAt: string
     updatedAt: string
+    progressOverridePath?: string
   }): Promise<void>
   updatePack(packId: string, input: {
     revision: number
@@ -94,6 +95,18 @@ export interface AppRepository {
   getImportSession(sessionId: string): Promise<any | null>
   updateImportSession(sessionId: string, input: Partial<ImportSessionInput>): Promise<void>
   deleteImportSession(sessionId: string): Promise<void>
+  listSystemPacks(): Promise<any[]>
+  getSystemPackById(systemPackId: string): Promise<any | null>
+  createSystemPack(input: {
+    id: string
+    name: string
+    description: string
+    questionCount: number
+    workspacePath: string
+    createdAt: string
+    updatedAt: string
+  }): Promise<void>
+  deleteSystemPack(systemPackId: string): Promise<void>
 }
 
 abstract class BaseRepository implements AppRepository {
@@ -124,6 +137,10 @@ abstract class BaseRepository implements AppRepository {
   abstract getImportSession(sessionId: string): Promise<any | null>
   abstract updateImportSession(sessionId: string, input: Partial<ImportSessionInput>): Promise<void>
   abstract deleteImportSession(sessionId: string): Promise<void>
+  abstract listSystemPacks(): Promise<any[]>
+  abstract getSystemPackById(systemPackId: string): Promise<any | null>
+  abstract createSystemPack(input: any): Promise<void>
+  abstract deleteSystemPack(systemPackId: string): Promise<void>
 
   async countUsers(): Promise<number> {
     return (await this.listUsers()).length
@@ -198,7 +215,24 @@ class LocalRepository extends BaseRepository {
         updated_at TEXT NOT NULL,
         FOREIGN KEY(user_id) REFERENCES users(id)
       );
+      CREATE TABLE IF NOT EXISTS system_packs (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        question_count INTEGER NOT NULL DEFAULT 0,
+        workspace_path TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
     `)
+    // Lazily add progress_override_path to study_packs for existing installs.
+    // The plan specifies: user-uploaded packs keep progress in their workspace,
+    // library packs override the progress directory so progress is per-user.
+    const columnInfo = this.db.prepare("PRAGMA table_info('study_packs')").all()
+    const hasOverride = columnInfo.some((column: any) => column.name === 'progress_override_path')
+    if (!hasOverride) {
+      this.db.exec("ALTER TABLE study_packs ADD COLUMN progress_override_path TEXT NOT NULL DEFAULT ''")
+    }
     this.ensureSetting('registration_mode', DEFAULT_REGISTRATION_MODE)
     this.seedExplicitLocalAdmin()
   }
@@ -313,34 +347,34 @@ class LocalRepository extends BaseRepository {
 
   async listPacksForUser(userId: string) {
     return this.db.prepare(
-      'SELECT id, user_id, name, workspace_path, question_count, revision, last_client_instance_id, last_client_mutation_seq, last_client_updated_at, created_at, updated_at FROM study_packs WHERE user_id = ? ORDER BY updated_at DESC'
+      'SELECT id, user_id, name, workspace_path, progress_override_path, question_count, revision, last_client_instance_id, last_client_mutation_seq, last_client_updated_at, created_at, updated_at FROM study_packs WHERE user_id = ? ORDER BY updated_at DESC'
     ).all(userId)
   }
 
   async listAllPacks() {
     return this.db.prepare(
-      'SELECT id, user_id, name, workspace_path, question_count, revision, last_client_instance_id, last_client_mutation_seq, last_client_updated_at, created_at, updated_at FROM study_packs ORDER BY created_at ASC'
+      'SELECT id, user_id, name, workspace_path, progress_override_path, question_count, revision, last_client_instance_id, last_client_mutation_seq, last_client_updated_at, created_at, updated_at FROM study_packs ORDER BY created_at ASC'
     ).all()
   }
 
   async getPackById(packId: string) {
     return this.db.prepare(
-      'SELECT id, user_id, name, workspace_path, question_count, revision, last_client_instance_id, last_client_mutation_seq, last_client_updated_at, created_at, updated_at FROM study_packs WHERE id = ?'
+      'SELECT id, user_id, name, workspace_path, progress_override_path, question_count, revision, last_client_instance_id, last_client_mutation_seq, last_client_updated_at, created_at, updated_at FROM study_packs WHERE id = ?'
     ).get(packId) || null
   }
 
   async getPackForUser(userId: string, packId: string) {
     return this.db.prepare(
-      'SELECT id, user_id, name, workspace_path, question_count, revision, last_client_instance_id, last_client_mutation_seq, last_client_updated_at, created_at, updated_at FROM study_packs WHERE id = ? AND user_id = ?'
+      'SELECT id, user_id, name, workspace_path, progress_override_path, question_count, revision, last_client_instance_id, last_client_mutation_seq, last_client_updated_at, created_at, updated_at FROM study_packs WHERE id = ? AND user_id = ?'
     ).get(packId, userId) || null
   }
 
   async createPack(input: any) {
     this.db.prepare(`
       INSERT INTO study_packs (
-        id, user_id, name, workspace_path, question_count, revision, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(input.id, input.userId, input.name, input.workspacePath, input.questionCount, input.revision, input.createdAt, input.updatedAt)
+        id, user_id, name, workspace_path, progress_override_path, question_count, revision, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(input.id, input.userId, input.name, input.workspacePath, input.progressOverridePath || '', input.questionCount, input.revision, input.createdAt, input.updatedAt)
   }
 
   async updatePack(packId: string, input: any) {
@@ -413,6 +447,29 @@ class LocalRepository extends BaseRepository {
   async deleteImportSession(sessionId: string) {
     this.db.prepare('DELETE FROM import_sessions WHERE id = ?').run(sessionId)
   }
+
+  async listSystemPacks() {
+    return this.db.prepare(
+      'SELECT id, name, description, question_count, workspace_path, created_at, updated_at FROM system_packs ORDER BY created_at DESC'
+    ).all()
+  }
+
+  async getSystemPackById(systemPackId: string) {
+    return this.db.prepare(
+      'SELECT id, name, description, question_count, workspace_path, created_at, updated_at FROM system_packs WHERE id = ?'
+    ).get(systemPackId) || null
+  }
+
+  async createSystemPack(input: any) {
+    this.db.prepare(`
+      INSERT INTO system_packs (id, name, description, question_count, workspace_path, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(input.id, input.name, input.description || '', input.questionCount, input.workspacePath, input.createdAt, input.updatedAt)
+  }
+
+  async deleteSystemPack(systemPackId: string) {
+    this.db.prepare('DELETE FROM system_packs WHERE id = ?').run(systemPackId)
+  }
 }
 
 class CloudRepository extends BaseRepository {
@@ -483,6 +540,21 @@ class CloudRepository extends BaseRepository {
         created_at TIMESTAMPTZ NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL
       )
+    `)
+    await this.sql.query(`
+      CREATE TABLE IF NOT EXISTS system_packs (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        question_count INTEGER NOT NULL DEFAULT 0,
+        workspace_path TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL
+      )
+    `)
+    // Lazily add progress_override_path for library packs.
+    await this.sql.query(`
+      ALTER TABLE study_packs ADD COLUMN IF NOT EXISTS progress_override_path TEXT NOT NULL DEFAULT ''
     `)
     const existing = await this.sql.query('SELECT key FROM app_settings WHERE key = $1', ['registration_mode'])
     if (!existing[0]) {
@@ -579,20 +651,20 @@ class CloudRepository extends BaseRepository {
 
   async listPacksForUser(userId: string) {
     return this.sql.query(
-      'SELECT id, user_id, name, workspace_path, question_count, revision, last_client_instance_id, last_client_mutation_seq, last_client_updated_at, created_at, updated_at FROM study_packs WHERE user_id = $1 ORDER BY updated_at DESC',
+      'SELECT id, user_id, name, workspace_path, progress_override_path, question_count, revision, last_client_instance_id, last_client_mutation_seq, last_client_updated_at, created_at, updated_at FROM study_packs WHERE user_id = $1 ORDER BY updated_at DESC',
       [userId]
     )
   }
 
   async listAllPacks() {
     return this.sql.query(
-      'SELECT id, user_id, name, workspace_path, question_count, revision, last_client_instance_id, last_client_mutation_seq, last_client_updated_at, created_at, updated_at FROM study_packs ORDER BY created_at ASC'
+      'SELECT id, user_id, name, workspace_path, progress_override_path, question_count, revision, last_client_instance_id, last_client_mutation_seq, last_client_updated_at, created_at, updated_at FROM study_packs ORDER BY created_at ASC'
     )
   }
 
   async getPackById(packId: string) {
     const rows = await this.sql.query(
-      'SELECT id, user_id, name, workspace_path, question_count, revision, last_client_instance_id, last_client_mutation_seq, last_client_updated_at, created_at, updated_at FROM study_packs WHERE id = $1',
+      'SELECT id, user_id, name, workspace_path, progress_override_path, question_count, revision, last_client_instance_id, last_client_mutation_seq, last_client_updated_at, created_at, updated_at FROM study_packs WHERE id = $1',
       [packId]
     )
     return rows[0] || null
@@ -600,7 +672,7 @@ class CloudRepository extends BaseRepository {
 
   async getPackForUser(userId: string, packId: string) {
     const rows = await this.sql.query(
-      'SELECT id, user_id, name, workspace_path, question_count, revision, last_client_instance_id, last_client_mutation_seq, last_client_updated_at, created_at, updated_at FROM study_packs WHERE id = $1 AND user_id = $2',
+      'SELECT id, user_id, name, workspace_path, progress_override_path, question_count, revision, last_client_instance_id, last_client_mutation_seq, last_client_updated_at, created_at, updated_at FROM study_packs WHERE id = $1 AND user_id = $2',
       [packId, userId]
     )
     return rows[0] || null
@@ -609,9 +681,9 @@ class CloudRepository extends BaseRepository {
   async createPack(input: any) {
     await this.sql.query(`
       INSERT INTO study_packs (
-        id, user_id, name, workspace_path, question_count, revision, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    `, [input.id, input.userId, input.name, input.workspacePath, input.questionCount, input.revision, input.createdAt, input.updatedAt])
+        id, user_id, name, workspace_path, progress_override_path, question_count, revision, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `, [input.id, input.userId, input.name, input.workspacePath, input.progressOverridePath || '', input.questionCount, input.revision, input.createdAt, input.updatedAt])
   }
 
   async updatePack(packId: string, input: any) {
@@ -684,6 +756,31 @@ class CloudRepository extends BaseRepository {
 
   async deleteImportSession(sessionId: string) {
     await this.sql.query('DELETE FROM import_sessions WHERE id = $1', [sessionId])
+  }
+
+  async listSystemPacks() {
+    return this.sql.query(
+      'SELECT id, name, description, question_count, workspace_path, created_at, updated_at FROM system_packs ORDER BY created_at DESC'
+    )
+  }
+
+  async getSystemPackById(systemPackId: string) {
+    const rows = await this.sql.query(
+      'SELECT id, name, description, question_count, workspace_path, created_at, updated_at FROM system_packs WHERE id = $1',
+      [systemPackId]
+    )
+    return rows[0] || null
+  }
+
+  async createSystemPack(input: any) {
+    await this.sql.query(`
+      INSERT INTO system_packs (id, name, description, question_count, workspace_path, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [input.id, input.name, input.description || '', input.questionCount, input.workspacePath, input.createdAt, input.updatedAt])
+  }
+
+  async deleteSystemPack(systemPackId: string) {
+    await this.sql.query('DELETE FROM system_packs WHERE id = $1', [systemPackId])
   }
 }
 

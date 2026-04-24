@@ -1,6 +1,6 @@
 export type PageParams = Record<string, string | undefined>
 
-export type PageName = 'index' | 'overview' | 'newblock' | 'previousblocks' | 'examview' | 'admin'
+export type PageName = 'index' | 'overview' | 'newblock' | 'previousblocks' | 'examview' | 'admin' | 'library'
 
 type NavigateOptions = {
   replace?: boolean

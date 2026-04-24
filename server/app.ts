@@ -21,7 +21,8 @@ import {
 } from './config'
 import { buildPasswordHash, comparePassword, createInviteToken, createRepository, hashInviteToken } from './repository'
 import { createPresignedUpload } from './s3'
-import { createWorkspaceStore } from './workspace-store'
+import { copyBlobPrefix, createWorkspaceStore } from './workspace-store'
+import { isEmailConfigured, sendInviteEmail } from './email'
 import { legacyPageRedirectTarget, routePathFor } from './routes'
 import { deleteBlock, normalizeProgress, startBlock } from '../shared/progress'
 
@@ -234,7 +235,13 @@ export async function createApp() {
       return
     }
     await repository.deletePack(row.id)
-    await workspaceStore.deleteWorkspace(row.workspace_path)
+    // Library user-packs share a system workspace — we must only remove the
+    // per-user progress directory, never the shared workspace.
+    if (row.progress_override_path) {
+      await workspaceStore.deleteWorkspace(row.progress_override_path)
+    } else {
+      await workspaceStore.deleteWorkspace(row.workspace_path)
+    }
   }
 
   async function loadPackForUser(userId: string, packId: string, blockToOpen: string) {
@@ -251,7 +258,8 @@ export async function createApp() {
 
   async function persistPackProgress(packRow: any, qbankinfo: any, nextRevision: number, syncMetadata?: any) {
     normalizeProgress(qbankinfo.progress, qbankinfo)
-    await workspaceStore.savePackProgress(packRow.workspace_path, qbankinfo.progress)
+    const progressPath = packRow.progress_override_path || packRow.workspace_path
+    await workspaceStore.savePackProgress(progressPath, qbankinfo.progress)
     const updatedAt = nowIso()
     await repository.updatePack(packRow.id, {
       revision: nextRevision,
@@ -527,6 +535,67 @@ export async function createApp() {
     res.json({ ok: true })
   }))
 
+  app.post('/api/admin/packs/:packId/reset', requireAuth, requireAdmin, asyncRoute(async function resetAdminPack(req: any, res: any) {
+    const row = await repository.getPackById(String(req.params.packId || ''))
+    if (!row) {
+      return jsonError(res, 404, 'Study pack not found')
+    }
+    const loaded = await workspaceStore.loadPack(row, '')
+    loaded.qbankinfo.progress = {
+      blockhist: {},
+      tagbuckets: {}
+    }
+    normalizeProgress(loaded.qbankinfo.progress, loaded.qbankinfo)
+    const nextRevision = await persistPackProgress(row, loaded.qbankinfo, Number(row.revision || 0) + 1)
+    res.json({ revision: nextRevision })
+  }))
+
+  app.get('/api/admin/packs/:packId/progress-summary', requireAuth, requireAdmin, asyncRoute(async function getAdminPackProgress(req: any, res: any) {
+    const row = await repository.getPackById(String(req.params.packId || ''))
+    if (!row) {
+      return jsonError(res, 404, 'Study pack not found')
+    }
+    const loaded = await workspaceStore.loadPack(row, '')
+    const progress = loaded.qbankinfo.progress
+    const blockhist = progress.blockhist || {}
+    const blockKeys = Object.keys(blockhist)
+    let completedBlocks = 0
+    let correctCount = 0
+    for (const key of blockKeys) {
+      const block = blockhist[key]
+      if (!block) continue
+      if (block.complete) {
+        completedBlocks += 1
+        correctCount += Number(block.numcorrect || 0)
+      }
+    }
+    const primaryTag = loaded.qbankinfo.tagnames.tagnames['0'] ?? ''
+    let totalQuestions = 0
+    let unusedCount = 0
+    const primaryBuckets = progress.tagbuckets?.[primaryTag] ?? {}
+    for (const subtag of Object.keys(primaryBuckets)) {
+      const bucket = primaryBuckets[subtag]
+      if (!bucket) continue
+      totalQuestions += bucket.all?.length || 0
+      unusedCount += bucket.unused?.length || 0
+    }
+    // "Incorrect" in the plan = currently-incorrect questions (the bucket).
+    let incorrectCount = 0
+    for (const subtag of Object.keys(primaryBuckets)) {
+      const bucket = primaryBuckets[subtag]
+      if (!bucket) continue
+      incorrectCount += bucket.incorrects?.length || 0
+    }
+    res.json({
+      totalBlocks: blockKeys.length,
+      completedBlocks,
+      totalQuestions,
+      correctCount,
+      unusedCount,
+      incorrectCount
+    })
+  }))
+
   app.get('/api/admin/invites', requireAuth, requireAdmin, asyncRoute(async function listAdminInvites(_req: any, res: any) {
     const rows = await repository.listInvites()
     res.json({ invites: rows.map(inviteSummary) })
@@ -558,9 +627,19 @@ export async function createApp() {
     const inviteUrl = new URL('/', getPublicOrigin(req))
     inviteUrl.searchParams.set('invite', rawToken)
     inviteUrl.searchParams.set('email', email)
+    const inviteUrlString = inviteUrl.toString()
+    // Fire-and-forget: we return the response immediately so invite creation
+    // never blocks on email delivery. Errors are logged, not surfaced.
+    const emailConfigured = isEmailConfigured()
+    if (emailConfigured) {
+      void sendInviteEmail(email, inviteUrlString).catch((error) => {
+        console.warn('Failed to send invite email:', error)
+      })
+    }
     res.status(201).json({
       invite: inviteSummary(created),
-      inviteUrl: inviteUrl.toString()
+      inviteUrl: inviteUrlString,
+      emailSent: emailConfigured
     })
   }))
 
@@ -576,6 +655,132 @@ export async function createApp() {
       await repository.revokeInvite(invite.id, nowIso())
     }
     res.json({ ok: true })
+  }))
+
+  // --- Library (system packs) ------------------------------------------------
+  //
+  // Library packs are admin-curated study packs shared across all users. Each
+  // user that "activates" a library pack gets their own per-user progress while
+  // reading the shared workspace. See workspace-store `progress_override_path`.
+
+  function systemPackSummary(row: any) {
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description || '',
+      questionCount: Number(row.question_count || 0),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }
+  }
+
+  app.get('/api/library', requireAuth, asyncRoute(async function listLibrary(_req: any, res: any) {
+    const rows = await repository.listSystemPacks()
+    res.json({ packs: rows.map(systemPackSummary) })
+  }))
+
+  // Admins promote one of their own finalized study packs to the library.
+  // This is the pragmatic alternative to a dedicated upload-and-finalize flow:
+  // admins already use the standard import flow, and "Promote to Library"
+  // reuses the resulting workspace as the shared library workspace.
+  app.post('/api/library/promote/:packId', requireAuth, requireAdmin, asyncRoute(async function promoteLibrary(req: any, res: any) {
+    const row = await repository.getPackById(String(req.params.packId || ''))
+    if (!row) {
+      return jsonError(res, 404, 'Study pack not found')
+    }
+    if (row.progress_override_path) {
+      return jsonError(res, 400, 'Cannot promote an imported library pack.')
+    }
+    const name = String(req.body?.name || row.name || '').trim() || row.name
+    const description = String(req.body?.description || '').trim()
+    const systemPackId = crypto.randomUUID()
+    const timestamp = nowIso()
+    // Move the pack's workspace to a dedicated system-pack location so the
+    // shared workspace is decoupled from the admin's personal account.
+    let systemWorkspacePath = row.workspace_path
+    if (storageBackend === 'local') {
+      const finalRoot = path.join(ROOT_DIR, 'data', 'system-packs', systemPackId)
+      await fsp.mkdir(finalRoot, { recursive: true })
+      systemWorkspacePath = path.join(finalRoot, 'workspace')
+      await fsp.cp(row.workspace_path, systemWorkspacePath, { recursive: true })
+    } else if (storageBackend === 'cloud') {
+      systemWorkspacePath = `system-packs/${systemPackId}/workspace`
+      await copyBlobPrefix(row.workspace_path, systemWorkspacePath)
+    } else {
+      // railway: leave in place; the prefix move is expensive and the admin's
+      // pack can stay as the shared workspace. Keep original path.
+      systemWorkspacePath = row.workspace_path
+    }
+    await repository.createSystemPack({
+      id: systemPackId,
+      name,
+      description,
+      questionCount: Number(row.question_count || 0),
+      workspacePath: systemWorkspacePath,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    })
+    // For local/cloud we've copied the workspace; delete the admin's original
+    // study_pack row and its workspace. For railway we keep the row — admin
+    // keeps their personal copy as well.
+    if (storageBackend !== 'railway') {
+      await deletePackRow(row)
+    }
+    res.status(201).json({ pack: systemPackSummary(await repository.getSystemPackById(systemPackId)) })
+  }))
+
+  app.delete('/api/library/:id', requireAuth, requireAdmin, asyncRoute(async function deleteLibraryPack(req: any, res: any) {
+    const systemPack = await repository.getSystemPackById(String(req.params.id || ''))
+    if (!systemPack) {
+      return jsonError(res, 404, 'Library pack not found')
+    }
+    // Remove any user packs that reference this system pack.
+    const userPacks = await repository.listAllPacks()
+    for (const userPack of userPacks) {
+      if (userPack.workspace_path === systemPack.workspace_path) {
+        await deletePackRow(userPack)
+      }
+    }
+    await repository.deleteSystemPack(systemPack.id)
+    if (storageBackend !== 'railway') {
+      await workspaceStore.deleteWorkspace(systemPack.workspace_path)
+    }
+    res.json({ ok: true })
+  }))
+
+  app.post('/api/library/:id/import', requireAuth, asyncRoute(async function importLibraryPack(req: any, res: any) {
+    const systemPack = await repository.getSystemPackById(String(req.params.id || ''))
+    if (!systemPack) {
+      return jsonError(res, 404, 'Library pack not found')
+    }
+    // Prevent duplicate imports per user (same shared workspace).
+    const existingPacks = await repository.listPacksForUser(req.user.id)
+    const duplicate = existingPacks.find((p: any) => p.workspace_path === systemPack.workspace_path)
+    if (duplicate) {
+      return res.status(200).json({ pack: packSummary(duplicate) })
+    }
+    const userPackId = crypto.randomUUID()
+    const timestamp = nowIso()
+    let progressOverridePath: string
+    if (storageBackend === 'local') {
+      progressOverridePath = path.join(ROOT_DIR, 'data', 'study-packs', userPackId, 'progress')
+    } else {
+      progressOverridePath = `study-packs/${userPackId}/progress`
+    }
+    await workspaceStore.initProgressOverride(systemPack.workspace_path, progressOverridePath)
+    await repository.createPack({
+      id: userPackId,
+      userId: req.user.id,
+      name: systemPack.name,
+      workspacePath: systemPack.workspace_path,
+      progressOverridePath,
+      questionCount: Number(systemPack.question_count || 0),
+      revision: 0,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    })
+    const created = await repository.getPackById(userPackId)
+    res.status(201).json({ pack: packSummary(created) })
   }))
 
   app.get('/api/study-packs', requireAuth, asyncRoute(async function listPacks(req: any, res: any) {
@@ -910,11 +1115,11 @@ export async function createApp() {
     res.sendFile(path.join(DIST_DIR, 'index.html'))
   })
 
-  app.get('/:page(overview|newblock|previousblocks|examview|admin)', function spaPages(_req: any, res: any) {
+  app.get('/:page(overview|newblock|previousblocks|examview|admin|library)', function spaPages(_req: any, res: any) {
     res.sendFile(path.join(DIST_DIR, 'index.html'))
   })
 
-  app.get('/:page(overview|newblock|previousblocks|examview|admin).html', function htmlPages(req: any, res: any) {
+  app.get('/:page(overview|newblock|previousblocks|examview|admin|library).html', function htmlPages(req: any, res: any) {
     redirectToSpaPath(req, res, legacyPageRedirectTarget(req.params.page))
   })
 

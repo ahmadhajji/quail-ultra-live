@@ -1,17 +1,18 @@
 import { useMemo, useState } from 'react'
+import { AppShell } from '../components/AppShell'
 import { LoadingScreen } from '../components/LoadingScreen'
-import { PackTopBar } from '../components/PackTopBar'
+import { SyncStatusPill } from '../components/SyncStatusPill'
 import { deleteBlock } from '../lib/api'
 import { navigate } from '../lib/navigation'
 import { usePackPage } from '../lib/usePackPage'
 import type { BlockRecord } from '../types/domain'
 
-function modeLabel(mode: BlockRecord['mode']): string {
+function modeLabel(_mode: BlockRecord['mode']): string {
   return 'Tutor'
 }
 
 export function PreviousBlocksPage() {
-  const { loading, packId, qbankinfo, setQbankinfo } = usePackPage()
+  const { loading, user, packId, packName, qbankinfo, setQbankinfo } = usePackPage()
   const [modalBlockKey, setModalBlockKey] = useState<string>('')
 
   const blockEntries = useMemo(() => {
@@ -23,30 +24,27 @@ export function PreviousBlocksPage() {
 
   if (loading || !qbankinfo) {
     return (
-      <div className="container-fluid d-flex flex-column" style={{ height: '100%' }}>
+      <AppShell user={user} active="previousblocks" packId={packId} packName={packName} title="Previous Blocks">
         <LoadingScreen />
-      </div>
+      </AppShell>
     )
   }
 
   const modalBlock = modalBlockKey ? qbankinfo.progress.blockhist[modalBlockKey] : undefined
 
   return (
-    <div className="container-fluid d-flex flex-column" style={{ height: '100%' }}>
-      <PackTopBar
-        subtitle="Block History"
-        active="previousblocks"
-        onBack={() => navigate('index')}
-        onOverview={() => navigate('overview', { pack: packId })}
-        onNewBlock={() => navigate('newblock', { pack: packId })}
-        onPreviousBlocks={() => navigate('previousblocks', { pack: packId })}
-      />
-
+    <AppShell
+      user={user}
+      active="previousblocks"
+      packId={packId}
+      packName={packName}
+      title={packName ? `${packName} — Previous Blocks` : 'Previous Blocks'}
+      rightSlot={<SyncStatusPill />}
+    >
       <div className="q-panel" style={{ margin: '0 8px 24px' }}>
         <div className="q-panel-header">
           <div>
             <p className="q-panel-title">Previous Blocks</p>
-            <p className="q-panel-subtitle">Resume incomplete sessions or reopen completed blocks directly into the updated review interface.</p>
           </div>
         </div>
         <div className="q-panel-body q-table-wrap">
@@ -131,6 +129,6 @@ export function PreviousBlocksPage() {
           </div>
         </div>
       ) : null}
-    </div>
+    </AppShell>
   )
 }

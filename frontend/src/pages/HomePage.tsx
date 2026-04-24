@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { beginFolderImport, cancelFolderImport, completeFolderImport, deleteStudyPack, exportStudyPackZip, getAuthConfig, getSession, importStudyPack, listStudyPacks, login, logout, register, uploadFolderImportBatch, uploadFolderImportDirect, uploadFolderImportPresigned, uploadZipImportDirect, uploadZipImportPresigned } from '../lib/api'
+import { AppShell } from '../components/AppShell'
 import { Brand } from '../components/Brand'
 import { navigate } from '../lib/navigation'
 import type { AppSettings, StudyPackSummary, User } from '../types/domain'
@@ -214,43 +215,20 @@ export function HomePage() {
     }
   }
 
-  return (
-    <div className="container-fluid d-flex flex-column" style={{ minHeight: '100vh' }}>
-      <div className="row q-topbar">
-        <div className="col-lg-6 d-flex align-items-center">
-          <Brand title="Quail Ultra Live" subtitle="Account-backed Study Packs" />
+  // Unauthenticated: render a minimal centered auth screen (no sidebar).
+  if (!user) {
+    return (
+      <div className="container-fluid d-flex flex-column" style={{ minHeight: '100vh' }}>
+        <div className="row q-topbar">
+          <div className="col-12 d-flex align-items-center">
+            <Brand title="Quail Ultra Live" />
+          </div>
         </div>
-        <div className="col-lg-6 d-flex justify-content-lg-end justify-content-start mt-3 mt-lg-0 align-items-center">
-          <span className="q-helper-copy mr-3">{user ? `Signed in as ${user.username}` : ''}</span>
-          {user ? (
-            <>
-              {user.role === 'admin' ? (
-                <button className="btn btn-outline-light btn-sm mr-2" type="button" onClick={() => navigate('admin')}>
-                  Admin
-                </button>
-              ) : null}
-              <button
-                className="btn btn-outline-light btn-sm"
-                type="button"
-                onClick={async () => {
-                  await logout()
-                  await refreshSessionView()
-                }}
-              >
-                Sign Out
-              </button>
-            </>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="q-live-grid">
-        {!user ? (
+        <div className="q-live-grid">
           <section className="q-panel q-live-panel q-live-panel-auth">
             <div className="q-panel-header">
               <div>
                 <p className="q-panel-title">Account Access</p>
-                <p className="q-panel-subtitle">Sign in to your account, or create one if this is your first time using the web fork.</p>
               </div>
             </div>
             <div className="q-panel-body">
@@ -307,12 +285,23 @@ export function HomePage() {
               <p className="q-error-copy mt-3 mb-0">{authError}</p>
             </div>
           </section>
-        ) : (
-          <section className="q-panel q-live-panel q-live-panel-packs">
+        </div>
+      </div>
+    )
+  }
+
+  async function handleSignOut() {
+    await logout()
+    await refreshSessionView()
+  }
+
+  return (
+    <AppShell user={user} active="home" title="Home" onSignOut={handleSignOut}>
+      <div className="q-live-grid">
+        <section className="q-panel q-live-panel q-live-panel-packs">
             <div className="q-panel-header">
               <div>
                 <p className="q-panel-title">Study Packs</p>
-                <p className="q-panel-subtitle">Import your qbank folder or zip once, reopen it from any device, and export a compatible archive whenever you want.</p>
               </div>
             </div>
             <div className="q-panel-body">
@@ -373,7 +362,6 @@ export function HomePage() {
                 <div className="q-panel-header">
                   <div>
                     <p className="q-panel-title">Available Study Packs</p>
-                    <p className="q-panel-subtitle">Open a pack to use the same overview, block builder, and exam flow as the desktop app.</p>
                   </div>
                 </div>
                 <div className="q-panel-body">
@@ -434,8 +422,7 @@ export function HomePage() {
               </div>
             </div>
           </section>
-        )}
       </div>
-    </div>
+    </AppShell>
   )
 }

@@ -1,7 +1,7 @@
-import { PackTopBar } from '../components/PackTopBar'
+import { AppShell } from '../components/AppShell'
 import { LoadingScreen } from '../components/LoadingScreen'
+import { SyncStatusPill } from '../components/SyncStatusPill'
 import { resetPack } from '../lib/api'
-import { navigate } from '../lib/navigation'
 import { normalizeProgress } from '../lib/progress'
 import { usePackPage } from '../lib/usePackPage'
 
@@ -17,13 +17,13 @@ function formatDuration(seconds: number): string {
 }
 
 export function OverviewPage() {
-  const { loading, packId, qbankinfo, setQbankinfo } = usePackPage()
+  const { loading, user, packId, packName, qbankinfo, setQbankinfo } = usePackPage()
 
   if (loading || !qbankinfo) {
     return (
-      <div className="container-fluid d-flex flex-column" style={{ height: '100%' }}>
+      <AppShell user={user} active="overview" packId={packId} packName={packName} title="Overview">
         <LoadingScreen />
-      </div>
+      </AppShell>
     )
   }
 
@@ -61,19 +61,17 @@ export function OverviewPage() {
   const numSeen = numAll - numUnused
 
   return (
-    <div className="container-fluid d-flex flex-column" style={{ height: '100%' }}>
-      <PackTopBar
-        subtitle="Overview"
-        active="overview"
-        onBack={() => navigate('index')}
-        onOverview={() => navigate('overview', { pack: packId })}
-        onNewBlock={() => navigate('newblock', { pack: packId })}
-        onPreviousBlocks={() => navigate('previousblocks', { pack: packId })}
-      />
-
+    <AppShell
+      user={user}
+      active="overview"
+      packId={packId}
+      packName={packName}
+      title={packName ? `${packName} — Overview` : 'Overview'}
+      rightSlot={<SyncStatusPill />}
+    >
       <div className="q-stat-grid">
         <div className="q-panel">
-          <div className="q-panel-header"><div><p className="q-panel-title">Performance</p><p className="q-panel-subtitle">Completed blocks only.</p></div></div>
+          <div className="q-panel-header"><div><p className="q-panel-title">Performance</p></div></div>
           <div className="q-panel-body q-table-wrap"><div className="table-responsive"><table className="table mb-0"><tbody>
             <tr><td>Correct Answers</td><td>{numCorrect} ({formatPercent(numCorrect, totalAnswered)})</td></tr>
             <tr><td>Incorrect Answers</td><td>{numIncorrect} ({formatPercent(numIncorrect, totalAnswered)})</td></tr>
@@ -81,7 +79,7 @@ export function OverviewPage() {
           </tbody></table></div></div>
         </div>
         <div className="q-panel">
-          <div className="q-panel-header"><div><p className="q-panel-title">Coverage</p><p className="q-panel-subtitle">Complete and paused blocks.</p></div></div>
+          <div className="q-panel-header"><div><p className="q-panel-title">Coverage</p></div></div>
           <div className="q-panel-body q-table-wrap"><div className="table-responsive"><table className="table mb-0"><tbody>
             <tr><td>Questions Seen</td><td>{numSeen}/{numAll} ({formatPercent(numSeen, numAll)})</td></tr>
             <tr><td>Questions Flagged</td><td>{numFlagged}/{numSeen || 0} ({formatPercent(numFlagged, numSeen)})</td></tr>
@@ -89,7 +87,7 @@ export function OverviewPage() {
           </tbody></table></div></div>
         </div>
         <div className="q-panel">
-          <div className="q-panel-header"><div><p className="q-panel-title">Blocks</p><p className="q-panel-subtitle">Mode counts and session states.</p></div></div>
+          <div className="q-panel-header"><div><p className="q-panel-title">Blocks</p></div></div>
           <div className="q-panel-body q-table-wrap"><div className="table-responsive"><table className="table mb-0"><tbody>
             <tr><td>Completed</td><td>{completeBlocks}</td></tr>
             <tr><td>Paused</td><td>{pausedBlocks}</td></tr>
@@ -97,7 +95,7 @@ export function OverviewPage() {
           </tbody></table></div></div>
         </div>
         <div className="q-panel">
-          <div className="q-panel-header"><div><p className="q-panel-title">Time</p><p className="q-panel-subtitle">Completed blocks only.</p></div></div>
+          <div className="q-panel-header"><div><p className="q-panel-title">Time</p></div></div>
           <div className="q-panel-body q-table-wrap"><div className="table-responsive"><table className="table mb-0"><tbody>
             <tr><td>Average Time Per Question</td><td>{avgTime.toFixed(1)} sec</td></tr>
             <tr><td>Total Time</td><td>{formatDuration(totalTime)}</td></tr>
@@ -109,7 +107,6 @@ export function OverviewPage() {
         <div className="q-panel-header">
           <div>
             <p className="q-panel-title">Actions</p>
-            <p className="q-panel-subtitle">Reset progress for the currently loaded question bank if you need a clean slate.</p>
           </div>
         </div>
         <div className="q-panel-body">
@@ -138,6 +135,6 @@ export function OverviewPage() {
           </button>
         </div>
       </div>
-    </div>
+    </AppShell>
   )
 }

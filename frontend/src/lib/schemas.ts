@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { AdminUser, AppSettings, InviteCreationResult, InviteRecord, QbankInfo, StudyPackSummary, User } from '../types/domain'
+import type { AdminUser, AppSettings, InviteCreationResult, InviteRecord, LibraryPackSummary, PackProgressSummary, QbankInfo, StudyPackSummary, User } from '../types/domain'
 
 const userSchema = z.object({
   id: z.string(),
@@ -202,7 +202,30 @@ export const invitesResponseSchema = z.object({
 
 export const inviteCreationResponseSchema = z.object({
   invite: inviteSchema,
-  inviteUrl: z.string()
+  inviteUrl: z.string(),
+  emailSent: z.boolean().optional()
 }).transform((value): InviteCreationResult => value)
 
 export const packsParser = (value: unknown): StudyPackSummary[] => studyPacksResponseSchema.parse(value).packs
+
+export const libraryPackSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().default(''),
+  questionCount: z.number(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+}).transform((value): LibraryPackSummary => value)
+
+export const libraryPacksResponseSchema = z.object({
+  packs: z.array(libraryPackSchema)
+})
+
+export const packProgressSummarySchema = z.object({
+  totalBlocks: z.number(),
+  completedBlocks: z.number(),
+  totalQuestions: z.number(),
+  correctCount: z.number(),
+  unusedCount: z.number(),
+  incorrectCount: z.number()
+}).transform((value): PackProgressSummary => value)

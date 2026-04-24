@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 import { copy, del, get, list, put } from '@vercel/blob'
-import { normalizeProgress } from '../shared/progress'
+import { createTagBuckets, normalizeProgress } from '../shared/progress'
 import { findWorkspaceRoot, listWorkspaceManifest, loadWorkspaceData, safeResolveWorkspaceFile, saveProgress, withPackPath } from '../shared/qbank'
 import { PACKS_DIR, getBlobToken, getStorageBackend } from './config'
 import {
@@ -169,13 +169,25 @@ async function removeBlobPrefix(prefix: string) {
 abstract class BaseWorkspaceStore {
   abstract backend: 'local' | 'cloud'
   abstract loadPack(packRow: any, blockToOpen: string): Promise<LoadedPack>
-  abstract savePackProgress(workspacePath: string, progress: any): Promise<void>
+  /**
+   * Write a pack's progress.json to the given location. `progressPath` is
+   * either the pack's workspace path (regular user packs) or its
+   * progress_override_path (library packs — shared workspace + per-user
+   * progress). Callers resolve the correct path from the pack row.
+   */
+  abstract savePackProgress(progressPath: string, progress: any): Promise<void>
   abstract listManifest(workspacePath: string): Promise<string[]>
   abstract getPackFile(workspacePath: string, relativePath: string): Promise<PackFileResult>
   abstract deleteWorkspace(workspacePath: string): Promise<void>
   abstract finalizeImportedWorkspace(sessionRow: any, packId: string): Promise<{ workspacePath: string, questionCount: number, packName: string }>
   abstract importWorkspaceFromLocalDirectory(directory: string, targetPrefixOrPath: string): Promise<{ questionCount: number, packName: string }>
   abstract cancelImportWorkspace(sessionRow: any): Promise<void>
+  /**
+   * Ensure a progress_override directory exists and contains a seed
+   * progress.json derived from the shared workspace. Used when a user
+   * activates a library pack for the first time.
+   */
+  abstract initProgressOverride(workspacePath: string, progressPath: string): Promise<void>
 }
 
 class LocalWorkspaceStore extends BaseWorkspaceStore {
@@ -183,11 +195,42 @@ class LocalWorkspaceStore extends BaseWorkspaceStore {
 
   async loadPack(packRow: any, blockToOpen: string) {
     const qbankinfo = await loadWorkspaceData(packRow.workspace_path)
+    const override = packRow.progress_override_path
+    if (override) {
+      // Library packs: overlay per-user progress from the override directory.
+      // If the override file doesn't exist yet, seed it with a clean progress
+      // record so the user starts fresh without affecting the shared workspace.
+      await fsp.mkdir(override, { recursive: true })
+      const progressFile = path.join(override, 'progress.json')
+      try {
+        const existing = JSON.parse(await fsp.readFile(progressFile, 'utf8'))
+        qbankinfo.progress = existing
+      } catch {
+        qbankinfo.progress = {
+          blockhist: {},
+          tagbuckets: createTagBuckets(qbankinfo.index, qbankinfo.tagnames)
+        }
+        await fsp.writeFile(progressFile, JSON.stringify(qbankinfo.progress, null, 2))
+      }
+      normalizeProgress(qbankinfo.progress, qbankinfo)
+    }
     return { qbankinfo: withPackPath(qbankinfo, packRow.id, packRow.revision, blockToOpen) }
   }
 
-  async savePackProgress(workspacePath: string, progress: any) {
-    await saveProgress(workspacePath, progress)
+  async savePackProgress(progressPath: string, progress: any) {
+    await saveProgress(progressPath, progress)
+  }
+
+  async initProgressOverride(workspacePath: string, progressPath: string) {
+    await fsp.mkdir(progressPath, { recursive: true })
+    // Seed the override directory with a clean progress record derived from
+    // the shared workspace's index/tagnames.
+    const qbankinfo = await loadWorkspaceData(workspacePath)
+    const progress = {
+      blockhist: {},
+      tagbuckets: createTagBuckets(qbankinfo.index, qbankinfo.tagnames)
+    }
+    await fsp.writeFile(path.join(progressPath, 'progress.json'), JSON.stringify(progress, null, 2))
   }
 
   async listManifest(workspacePath: string) {
@@ -264,13 +307,26 @@ class BlobWorkspaceStore extends BaseWorkspaceStore {
 
   async loadPack(packRow: any, blockToOpen: string) {
     const workspacePath = packRow.workspace_path
+    const override = packRow.progress_override_path
     const index = await this.readBlobJson(`${workspacePath}/index.json`)
     const tagnames = await this.readBlobJson(`${workspacePath}/tagnames.json`)
     const choices = await this.readBlobJson(`${workspacePath}/choices.json`)
     const groups = await this.readBlobJson(`${workspacePath}/groups.json`)
     const panes = await this.readBlobJson(`${workspacePath}/panes.json`)
     const questionMeta = await this.readBlobJson(`${workspacePath}/question-meta.json`)
-    const progress = await this.readBlobJson(`${workspacePath}/progress.json`)
+    // Library packs read progress from the per-user override path;
+    // regular packs read from the workspace.
+    const progressSource = override || workspacePath
+    let progress = await this.readBlobJson(`${progressSource}/progress.json`)
+    if (!progress && override) {
+      // Seed a clean per-user progress record the first time a user opens
+      // a library pack.
+      progress = {
+        blockhist: {},
+        tagbuckets: createTagBuckets(index, tagnames)
+      }
+      await this.writeBlobJson(`${override}/progress.json`, progress)
+    }
     if (!index || !tagnames || !choices || !groups || !panes || !progress) {
       throw new Error('Study Pack is missing required qbank metadata in blob storage.')
     }
@@ -290,8 +346,21 @@ class BlobWorkspaceStore extends BaseWorkspaceStore {
     return { qbankinfo }
   }
 
-  async savePackProgress(workspacePath: string, progress: any) {
-    await this.writeBlobJson(`${workspacePath}/progress.json`, progress)
+  async savePackProgress(progressPath: string, progress: any) {
+    await this.writeBlobJson(`${progressPath}/progress.json`, progress)
+  }
+
+  async initProgressOverride(workspacePath: string, progressPath: string) {
+    const index = await this.readBlobJson(`${workspacePath}/index.json`)
+    const tagnames = await this.readBlobJson(`${workspacePath}/tagnames.json`)
+    if (!index || !tagnames) {
+      throw new Error('System pack is missing metadata for progress override.')
+    }
+    const progress = {
+      blockhist: {},
+      tagbuckets: createTagBuckets(index, tagnames)
+    }
+    await this.writeBlobJson(`${progressPath}/progress.json`, progress)
   }
 
   async listManifest(workspacePath: string) {
@@ -399,13 +468,22 @@ class RailwayWorkspaceStore extends BaseWorkspaceStore {
 
   async loadPack(packRow: any, blockToOpen: string) {
     const workspacePath = packRow.workspace_path
+    const override = packRow.progress_override_path
     const index = await readS3Json(`${workspacePath}/index.json`)
     const tagnames = await readS3Json(`${workspacePath}/tagnames.json`)
     const choices = await readS3Json(`${workspacePath}/choices.json`)
     const groups = await readS3Json(`${workspacePath}/groups.json`)
     const panes = await readS3Json(`${workspacePath}/panes.json`)
     const questionMeta = await readS3Json(`${workspacePath}/question-meta.json`)
-    const progress = await readS3Json(`${workspacePath}/progress.json`)
+    const progressSource = override || workspacePath
+    let progress = await readS3Json(`${progressSource}/progress.json`)
+    if (!progress && override) {
+      progress = {
+        blockhist: {},
+        tagbuckets: createTagBuckets(index, tagnames)
+      }
+      await writeS3Json(`${override}/progress.json`, progress)
+    }
     if (!index || !tagnames || !choices || !groups || !panes || !progress) {
       throw new Error('Study Pack is missing required qbank metadata in Railway bucket storage.')
     }
@@ -425,8 +503,21 @@ class RailwayWorkspaceStore extends BaseWorkspaceStore {
     return { qbankinfo }
   }
 
-  async savePackProgress(workspacePath: string, progress: any) {
-    await writeS3Json(`${workspacePath}/progress.json`, progress)
+  async savePackProgress(progressPath: string, progress: any) {
+    await writeS3Json(`${progressPath}/progress.json`, progress)
+  }
+
+  async initProgressOverride(workspacePath: string, progressPath: string) {
+    const index = await readS3Json(`${workspacePath}/index.json`)
+    const tagnames = await readS3Json(`${workspacePath}/tagnames.json`)
+    if (!index || !tagnames) {
+      throw new Error('System pack is missing metadata for progress override.')
+    }
+    const progress = {
+      blockhist: {},
+      tagbuckets: createTagBuckets(index, tagnames)
+    }
+    await writeS3Json(`${progressPath}/progress.json`, progress)
   }
 
   async listManifest(workspacePath: string) {
