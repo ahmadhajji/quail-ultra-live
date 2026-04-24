@@ -193,8 +193,7 @@ class LocalRepository extends BaseRepository {
         used_by TEXT NOT NULL DEFAULT '',
         used_at TEXT NOT NULL DEFAULT '',
         revoked_at TEXT NOT NULL DEFAULT '',
-        FOREIGN KEY(created_by) REFERENCES users(id),
-        FOREIGN KEY(used_by) REFERENCES users(id)
+        FOREIGN KEY(created_by) REFERENCES users(id)
       );
       CREATE TABLE IF NOT EXISTS app_settings (
         key TEXT PRIMARY KEY,
@@ -233,8 +232,52 @@ class LocalRepository extends BaseRepository {
     if (!hasOverride) {
       this.db.exec("ALTER TABLE study_packs ADD COLUMN progress_override_path TEXT NOT NULL DEFAULT ''")
     }
+    this.migrateInviteTableIfNeeded()
     this.ensureSetting('registration_mode', DEFAULT_REGISTRATION_MODE)
     this.seedExplicitLocalAdmin()
+  }
+
+  migrateInviteTableIfNeeded() {
+    const foreignKeys = this.db.prepare("PRAGMA foreign_key_list('invites')").all()
+    const usedByHasForeignKey = foreignKeys.some((constraint: any) => constraint.from === 'used_by')
+    if (!usedByHasForeignKey) {
+      return
+    }
+    this.db.exec('PRAGMA foreign_keys = OFF')
+    try {
+      this.db.exec(`
+        BEGIN;
+        CREATE TABLE invites__new (
+          id TEXT PRIMARY KEY,
+          email TEXT NOT NULL,
+          token_hash TEXT NOT NULL UNIQUE,
+          role TEXT NOT NULL DEFAULT 'user',
+          created_by TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          expires_at TEXT NOT NULL,
+          used_by TEXT NOT NULL DEFAULT '',
+          used_at TEXT NOT NULL DEFAULT '',
+          revoked_at TEXT NOT NULL DEFAULT '',
+          FOREIGN KEY(created_by) REFERENCES users(id)
+        );
+        INSERT INTO invites__new (id, email, token_hash, role, created_by, created_at, updated_at, expires_at, used_by, used_at, revoked_at)
+        SELECT id, email, token_hash, role, created_by, created_at, updated_at, expires_at, COALESCE(used_by, ''), COALESCE(used_at, ''), COALESCE(revoked_at, '')
+        FROM invites;
+        DROP TABLE invites;
+        ALTER TABLE invites__new RENAME TO invites;
+        COMMIT;
+      `)
+    } catch (error) {
+      try {
+        this.db.exec('ROLLBACK')
+      } catch {
+        // Ignore rollback failures and surface the original migration error.
+      }
+      throw error
+    } finally {
+      this.db.exec('PRAGMA foreign_keys = ON')
+    }
   }
 
   ensureSetting(key: string, value: string) {
@@ -325,7 +368,7 @@ class LocalRepository extends BaseRepository {
         used_by_user.username AS used_by_username
       FROM invites
       LEFT JOIN users AS created_by_user ON created_by_user.id = invites.created_by
-      LEFT JOIN users AS used_by_user ON used_by_user.id = invites.used_by
+      LEFT JOIN users AS used_by_user ON used_by_user.id = NULLIF(invites.used_by, '')
       ORDER BY invites.created_at DESC
     `).all()
   }
