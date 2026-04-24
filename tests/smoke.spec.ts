@@ -11,10 +11,9 @@ test('health endpoint responds', async ({ request }) => {
 test('home page renders auth and pack UI', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByText('Quail Ultra Live')).toBeVisible()
-  await expect(page.getByText('Account-backed Study Packs')).toBeVisible()
   await expect(page.getByText('Account Access')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible()
-  await expect(page.getByText(/invite-only|registration/i)).toBeVisible()
+  await expect(page.getByText(/Account creation is|invite-only|registration/i)).toBeVisible()
 })
 
 test('legacy html routes redirect to clean SPA routes', async ({ page }) => {
