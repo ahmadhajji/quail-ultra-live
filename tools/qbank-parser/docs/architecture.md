@@ -20,7 +20,7 @@ This document describes the current runtime architecture after incremental refac
 - `storage/`: filesystem persistence boundary (`RunRepository`).
 - `parsers/`: PPTX + Google Slides API ingestion.
 - `review/`: terminal review workflow.
-- `export/`: CSV/JSON/markdown/PDF/Quail export surfaces.
+- `export/`: CSV/JSON/markdown/Quail export surfaces.
 
 ## Pipeline Sequence
 1. Input ingestion from local PPTX or Google Slides share link (auto-exported to PPTX).

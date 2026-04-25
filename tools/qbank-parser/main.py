@@ -392,7 +392,7 @@ Examples:
     )
     parser.add_argument(
         "--openai-reasoning-effort",
-        choices=["low", "medium", "high"],
+        choices=["none", "low", "medium", "high", "xhigh"],
         default=OPENAI_REASONING_EFFORT,
         help="OpenAI reasoning effort for formatter provider=openai",
     )

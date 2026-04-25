@@ -45,8 +45,13 @@ def _env_candidate_paths(base_dir: Path, source_dir: Path) -> list[Path]:
 # directory with no .env; fall back to the repo-root .env in that case.
 SOURCE_ENV_PATH = Path(__file__).parent.resolve() / ".env"
 BASE_ENV_PATH = BASE_DIR / ".env"
+_QBANK_BASE_DIR_ENV = os.getenv("QBANK_BASE_DIR", "")
 for env_path in _env_candidate_paths(BASE_DIR, Path(__file__).parent.resolve()):
     load_dotenv(env_path, override=True)
+if _QBANK_BASE_DIR_ENV:
+    os.environ["QBANK_BASE_DIR"] = _QBANK_BASE_DIR_ENV
+else:
+    os.environ.pop("QBANK_BASE_DIR", None)
 
 # API Keys
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
@@ -67,7 +72,7 @@ GOOGLE_SLIDES_ID = os.getenv("GOOGLE_SLIDES_ID", "")
 GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_CREDENTIALS_PATH", str(BASE_DIR / "credentials.json"))
 
 # OpenAI extraction model (OpenAI-only extraction path)
-OPENAI_EXTRACTION_MODEL = os.getenv("OPENAI_EXTRACTION_MODEL", "gpt-4.1-mini").strip() or "gpt-4.1-mini"
+OPENAI_EXTRACTION_MODEL = os.getenv("OPENAI_EXTRACTION_MODEL", "gpt-5.4-mini").strip() or "gpt-5.4-mini"
 
 
 def _as_bool(value: str, default: bool = False) -> bool:
@@ -87,11 +92,20 @@ def _as_int(value: str, default: int) -> int:
 
 # Formatter provider defaults
 FORMATTER_PROVIDER = os.getenv("FORMATTER_PROVIDER", "openai").strip().lower() or "openai"
-OPENAI_FORMATTER_MODEL = os.getenv("OPENAI_FORMATTER_MODEL", "gpt-5.4").strip() or "gpt-5.4"
+OPENAI_FORMATTER_MODEL = os.getenv("OPENAI_FORMATTER_MODEL", "gpt-5.4-mini").strip() or "gpt-5.4-mini"
 OPENAI_REASONING_EFFORT = os.getenv("OPENAI_REASONING_EFFORT", "high").strip().lower() or "high"
-OPENAI_WEB_SEARCH = _as_bool(os.getenv("OPENAI_WEB_SEARCH", "true"), default=True)
+OPENAI_WEB_SEARCH = _as_bool(os.getenv("OPENAI_WEB_SEARCH", "false"), default=False)
 OPENAI_TARGET_RPM = _as_int(os.getenv("OPENAI_TARGET_RPM", "450"), default=450)
 OPENAI_MAX_INFLIGHT = _as_int(os.getenv("OPENAI_MAX_INFLIGHT", "120"), default=120)
+OPENAI_FACT_CHECK_MODEL = os.getenv("OPENAI_FACT_CHECK_MODEL", "gpt-5.4").strip() or "gpt-5.4"
+OPENAI_FACT_CHECK_REASONING_EFFORT = (
+    os.getenv("OPENAI_FACT_CHECK_REASONING_EFFORT", "high").strip().lower() or "high"
+)
+OPENAI_ESCALATION_MODEL = os.getenv("OPENAI_ESCALATION_MODEL", "gpt-5.5").strip() or "gpt-5.5"
+OPENAI_ESCALATION_REASONING_EFFORT = (
+    os.getenv("OPENAI_ESCALATION_REASONING_EFFORT", "xhigh").strip().lower() or "xhigh"
+)
+OPENAI_ESCALATION_CONFIDENCE_THRESHOLD = _as_int(os.getenv("OPENAI_ESCALATION_CONFIDENCE_THRESHOLD", "70"), default=70)
 
 # Processing settings
 MAX_RETRIES = 3
@@ -143,6 +157,11 @@ def print_config_status():
     table.add_row("Formatter Provider", FORMATTER_PROVIDER)
     table.add_row("Extraction Model", OPENAI_EXTRACTION_MODEL)
     table.add_row("Formatter Model", OPENAI_FORMATTER_MODEL)
+    table.add_row("Risk Fact-check Model", f"{OPENAI_FACT_CHECK_MODEL} ({OPENAI_FACT_CHECK_REASONING_EFFORT}, web search by risk)")
+    table.add_row(
+        "Escalation Model",
+        f"{OPENAI_ESCALATION_MODEL} ({OPENAI_ESCALATION_REASONING_EFFORT}, confidence < {OPENAI_ESCALATION_CONFIDENCE_THRESHOLD})",
+    )
     table.add_row("Web Search", "✅ Enabled" if OPENAI_WEB_SEARCH else "⚪ Disabled")
     
     # Google Slides ID

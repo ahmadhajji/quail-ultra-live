@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Any
 from pathlib import Path
 
+from stats.pricing import estimate_openai_cost
+
 
 @dataclass
 class AICallStats:
@@ -20,10 +22,13 @@ class AICallStats:
     model: str
     method: str  # "text", "vision", or "classification"
     slide_number: int
+    stage: str = "extraction"
     prompt_tokens: int = 0
+    cached_input_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
     thinking_tokens: int = 0  # Tokens used in thinking mode
+    web_search_calls: int = 0
     usage_available: bool = False
     latency_ms: float = 0.0
     success: bool = True
@@ -35,10 +40,13 @@ class AICallStats:
             "model": self.model,
             "method": self.method,
             "slide_number": self.slide_number,
+            "stage": self.stage,
             "prompt_tokens": self.prompt_tokens,
+            "cached_input_tokens": self.cached_input_tokens,
             "completion_tokens": self.completion_tokens,
             "total_tokens": self.total_tokens,
             "thinking_tokens": self.thinking_tokens,
+            "web_search_calls": self.web_search_calls,
             "usage_available": self.usage_available,
             "latency_ms": round(self.latency_ms, 2),
             "success": self.success,
@@ -136,9 +144,7 @@ class StatsCollector:
         self.end_time: Optional[datetime] = None
         self.source_file: str = ""
         
-        # Cost calculation (Gemini Flash pricing as of 2024)
-        self.input_cost_per_million = 0.10  # $0.10 per 1M input tokens
-        self.output_cost_per_million = 0.40  # $0.40 per 1M output tokens
+        # Pricing lives in stats.pricing and is model-specific.
     
     def start(self, source_file: str = ""):
         """Start the stats collection session."""
@@ -152,7 +158,9 @@ class StatsCollector:
                        slide_number: int,
                        latency_ms: float,
                        success: bool = True,
-                       error: str = ""):
+                       error: str = "",
+                       stage: str = "extraction",
+                       web_search_calls: int = 0):
         """
         Record statistics from an AI API call.
         
@@ -173,9 +181,11 @@ class StatsCollector:
             model=model,
             method=method,
             slide_number=slide_number,
+            stage=stage,
             latency_ms=latency_ms,
             success=success,
-            error=error
+            error=error,
+            web_search_calls=max(0, int(web_search_calls)),
         )
         
         # Extract token counts from response if available.
@@ -185,6 +195,9 @@ class StatsCollector:
             stats.prompt_tokens = int(openai_usage.get("input_tokens", openai_usage.get("prompt_tokens", 0)) or 0)
             stats.completion_tokens = int(openai_usage.get("output_tokens", openai_usage.get("completion_tokens", 0)) or 0)
             stats.total_tokens = int(openai_usage.get("total_tokens", stats.prompt_tokens + stats.completion_tokens) or 0)
+            input_details = openai_usage.get("input_tokens_details", {}) or openai_usage.get("prompt_tokens_details", {})
+            if isinstance(input_details, dict):
+                stats.cached_input_tokens = int(input_details.get("cached_tokens", 0) or 0)
             details = openai_usage.get("output_tokens_details", {}) or openai_usage.get("completion_tokens_details", {})
             if isinstance(details, dict):
                 stats.thinking_tokens = int(details.get("reasoning_tokens", details.get("thinking_tokens", 0)) or 0)
@@ -285,9 +298,11 @@ class StatsCollector:
         
         # Calculate AI aggregate stats
         total_prompt_tokens = sum(c.prompt_tokens for c in self.ai_calls)
+        total_cached_input_tokens = sum(c.cached_input_tokens for c in self.ai_calls)
         total_completion_tokens = sum(c.completion_tokens for c in self.ai_calls)
         total_tokens = sum(c.total_tokens for c in self.ai_calls)
         total_thinking_tokens = sum(c.thinking_tokens for c in self.ai_calls)
+        total_web_search_calls = sum(c.web_search_calls for c in self.ai_calls)
         
         successful_calls = [c for c in self.ai_calls if c.success]
         failed_calls = [c for c in self.ai_calls if not c.success]
@@ -299,10 +314,53 @@ class StatsCollector:
         
         total_latency = sum(c.latency_ms for c in self.ai_calls)
         
-        # Calculate estimated cost
-        input_cost = (total_prompt_tokens / 1_000_000) * self.input_cost_per_million
-        output_cost = (total_completion_tokens / 1_000_000) * self.output_cost_per_million
-        total_cost = input_cost + output_cost
+        def summarize_calls(calls: list[AICallStats]) -> dict:
+            input_tokens = sum(c.prompt_tokens for c in calls)
+            cached_tokens = sum(c.cached_input_tokens for c in calls)
+            output_tokens = sum(c.completion_tokens for c in calls)
+            search_calls = sum(c.web_search_calls for c in calls)
+            by_model: dict[str, dict] = {}
+            input_cost = cached_cost = output_cost = search_cost = total_cost = 0.0
+            unknown_models: set[str] = set()
+            for model in sorted({c.model for c in calls}):
+                model_calls = [c for c in calls if c.model == model]
+                estimate = estimate_openai_cost(
+                    model=model,
+                    input_tokens=sum(c.prompt_tokens for c in model_calls),
+                    cached_input_tokens=sum(c.cached_input_tokens for c in model_calls),
+                    output_tokens=sum(c.completion_tokens for c in model_calls),
+                    web_search_calls=sum(c.web_search_calls for c in model_calls),
+                )
+                by_model[model] = estimate
+                input_cost += float(estimate["input_cost_usd"])
+                cached_cost += float(estimate["cached_input_cost_usd"])
+                output_cost += float(estimate["output_cost_usd"])
+                search_cost += float(estimate["web_search_cost_usd"])
+                total_cost += float(estimate["total_cost_usd"])
+                if estimate["pricing_status"] != "known":
+                    unknown_models.add(model)
+            usage_status = "known" if not calls or all(c.usage_available for c in calls) else "partial"
+            if unknown_models:
+                usage_status = "partial"
+            return {
+                "input_tokens": input_tokens,
+                "cached_input_tokens": cached_tokens,
+                "output_tokens": output_tokens,
+                "web_search_calls": search_calls,
+                "input_cost_usd": round(input_cost, 6),
+                "cached_input_cost_usd": round(cached_cost, 6),
+                "output_cost_usd": round(output_cost, 6),
+                "web_search_cost_usd": round(search_cost, 6),
+                "total_cost_usd": round(total_cost, 6),
+                "usage_status": usage_status,
+                "by_model": by_model,
+            }
+
+        cost_by_stage = {
+            stage: summarize_calls([c for c in self.ai_calls if c.stage == stage])
+            for stage in sorted({c.stage for c in self.ai_calls} | {"extraction", "fact_check", "format", "native_export"})
+        }
+        total_cost_summary = summarize_calls(self.ai_calls)
         
         # Build summary
         duration_seconds = 0
@@ -327,9 +385,11 @@ class StatsCollector:
                 "calls_with_usage": len(calls_with_usage),
                 "usage_status": "known" if calls_with_usage or not self.ai_calls else "unknown",
                 "total_prompt_tokens": total_prompt_tokens,
+                "total_cached_input_tokens": total_cached_input_tokens,
                 "total_completion_tokens": total_completion_tokens,
                 "total_tokens": total_tokens,
                 "total_thinking_tokens": total_thinking_tokens,
+                "total_web_search_calls": total_web_search_calls,
                 "avg_latency_ms": round(avg_latency, 2),
                 "total_latency_ms": round(total_latency, 2),
                 "calls_by_method": {
@@ -339,11 +399,9 @@ class StatsCollector:
                 }
             },
             "cost_estimate": {
-                "input_cost_usd": round(input_cost, 6),
-                "output_cost_usd": round(output_cost, 6),
-                "total_cost_usd": round(total_cost, 6),
-                "usage_status": "known" if calls_with_usage or not self.ai_calls else "unknown",
-                "pricing_note": f"Based on ${self.input_cost_per_million}/1M input, ${self.output_cost_per_million}/1M output tokens"
+                **total_cost_summary,
+                "by_stage": cost_by_stage,
+                "pricing_note": "OpenAI model-specific pricing, including cached input and web-search tool calls when detected."
             },
             "ai_calls": [c.to_dict() for c in self.ai_calls]
         }

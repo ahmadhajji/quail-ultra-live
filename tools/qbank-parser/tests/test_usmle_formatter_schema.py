@@ -20,7 +20,7 @@ def test_formatter_uses_rotation_prompt_and_rotation_topic_tags(monkeypatch):
     }"""
 
     class FakeAdapter:
-        def generate_content(self, prompt):
+        def generate_content(self, prompt, **_kwargs):
             captured_prompt["value"] = prompt
             return response_json, []
 

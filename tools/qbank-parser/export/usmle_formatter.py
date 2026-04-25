@@ -23,7 +23,14 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from ai.rotation_prompts import normalize_rotation_name
-from config import OUTPUT_DIR
+from config import (
+    OPENAI_ESCALATION_CONFIDENCE_THRESHOLD,
+    OPENAI_ESCALATION_MODEL,
+    OPENAI_ESCALATION_REASONING_EFFORT,
+    OPENAI_FACT_CHECK_MODEL,
+    OPENAI_FACT_CHECK_REASONING_EFFORT,
+    OUTPUT_DIR,
+)
 from domain.models import ExtractedQuestion, USMLEQuestion
 from formatting.cache_store import build_progress_snapshot, prepare_cache_state, save_checkpoint
 from formatting.choice_randomization import randomize_authored_choices
@@ -146,7 +153,7 @@ class USMLEFormatter:
         self.request_timeout_seconds = max(10, int(request_timeout_seconds))
         self.http_retry_attempts = max(1, int(http_retry_attempts))
         self.transport = transport if transport in {"rest", "sdk"} else "rest"
-        self.reasoning_effort = reasoning_effort if reasoning_effort in {"low", "medium", "high"} else "high"
+        self.reasoning_effort = reasoning_effort if reasoning_effort in {"none", "low", "medium", "high", "xhigh"} else "high"
         self.web_search_enabled = bool(web_search_enabled)
         self.target_rpm = max(1, int(target_rpm))
         self.max_inflight = max(1, int(max_inflight))
@@ -281,8 +288,13 @@ class USMLEFormatter:
         self.openai_formatter_adapter = adapter
         return adapter
 
-    def _generate_content_openai(self, prompt: str) -> tuple[str, list[str]]:
-        return self._get_openai_formatter_adapter().generate_content(prompt)
+    def _generate_content_openai(self, prompt: str, *, slide_number: int = 0) -> tuple[str, list[str]]:
+        return self._get_openai_formatter_adapter().generate_content(
+            prompt,
+            stage="format",
+            method="format",
+            slide_number=slide_number,
+        )
 
     @staticmethod
     def _validate_formatted_question(result: USMLEQuestion) -> list[str]:
@@ -350,7 +362,10 @@ class USMLEFormatter:
 
         for attempt in range(max(1, retries)):
             try:
-                response_text, grounding_sources = self._generate_content_openai(prompt)
+                response_text, grounding_sources = self._generate_content_openai(
+                    prompt,
+                    slide_number=question.slide_number,
+                )
 
                 result.raw_response = response_text
                 result.grounding_sources = grounding_sources
@@ -638,13 +653,23 @@ def apply_fact_check_and_randomization(
     model_name: str,
     reasoning_effort: str,
     web_search_enabled: bool,
+    fact_check_model_name: str = OPENAI_FACT_CHECK_MODEL,
+    fact_check_reasoning_effort: str = OPENAI_FACT_CHECK_REASONING_EFFORT,
+    escalation_model_name: str = OPENAI_ESCALATION_MODEL,
+    escalation_reasoning_effort: str = OPENAI_ESCALATION_REASONING_EFFORT,
+    escalation_confidence_threshold: int = OPENAI_ESCALATION_CONFIDENCE_THRESHOLD,
 ) -> list[ExtractedQuestion]:
     """Run fact-check before formatting so auto-rekeys feed the formatter."""
     service = FactCheckService(
         api_key=api_key,
-        model_name=model_name,
-        reasoning_effort=reasoning_effort,
-        web_search_enabled=web_search_enabled,
+        model_name=fact_check_model_name,
+        reasoning_effort=fact_check_reasoning_effort,
+        web_search_enabled=True,
+        routine_model_name=model_name,
+        routine_reasoning_effort=reasoning_effort,
+        escalation_model_name=escalation_model_name,
+        escalation_reasoning_effort=escalation_reasoning_effort,
+        escalation_confidence_threshold=escalation_confidence_threshold,
         cache_path=OUTPUT_DIR / "usmle_fact_check_cache.json",
     )
     return service.apply(questions)

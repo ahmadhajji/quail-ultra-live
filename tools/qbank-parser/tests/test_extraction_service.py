@@ -215,3 +215,43 @@ def test_service_google_comments_attached_to_results(tmp_path):
     assert ok is True
     assert captured["presentation_id"] == "explicit-id"
     assert export_sink["questions"][0]["comments"] == [{"author": "Reviewer", "content": "Important clue"}]
+
+
+def test_service_filters_unmapped_and_caps_comments_before_ai(tmp_path):
+    deck = tmp_path / "deck.pptx"
+    deck.write_bytes(b"deck")
+    slide_comments = [SimpleNamespace(author="Reviewer", content=f"Important clue {idx}") for idx in range(30)]
+    unmapped = SimpleNamespace(author="Reviewer", content="Deck-level old comment")
+    out_of_scope = SimpleNamespace(author="Reviewer", content="Other slide comment")
+
+    def fetch_comments(_presentation_id: str):
+        return [*slide_comments, unmapped, out_of_scope]
+
+    def get_comments_by_slide(_comments):
+        return {1: slide_comments, 0: [unmapped], 99: [out_of_scope]}
+
+    deps, export_sink = _build_deps(
+        tmp_path,
+        parse_pptx=lambda *_args, **_kwargs: _make_slides(1),
+        fetch_comments=fetch_comments,
+        get_comments_by_slide=get_comments_by_slide,
+    )
+
+    service = ExtractionService(deps)
+    ok = service.run_parse_presentation(
+        str(deck),
+        use_ai=True,
+        use_google_api=True,
+        google_slides_id="explicit-id",
+        generate_stats=False,
+        ai_workers=1,
+        checkpoint_every=1,
+    )
+
+    assert ok is True
+    attached = export_sink["questions"][0]["comments"]
+    assert len(attached) == 25
+    assert attached[0] == {"author": "Reviewer", "content": "Important clue 0"}
+    assert attached[-1] == {"author": "Reviewer", "content": "Important clue 24"}
+    assert all(item["content"] != "Deck-level old comment" for item in attached)
+    assert all(item["content"] != "Other slide comment" for item in attached)

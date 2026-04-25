@@ -68,7 +68,6 @@ class FilesystemAdapter:
                 self.output_dir / "usmle_formatter_progress.json",
                 self.output_dir / "usmle_formatted_questions.json",
                 self.output_dir / "usmle_formatted_questions.md",
-                self.output_dir / "usmle_formatted_questions.pdf",
             ]:
                 if path.exists():
                     actions.append(self._action("format", "move", path, "Archive previous formatter artifact"))
@@ -76,7 +75,6 @@ class FilesystemAdapter:
         for path, detail in [
             (self.output_dir / "usmle_formatted_questions.json", "Formatted JSON"),
             (self.output_dir / "usmle_formatted_questions.md", "Formatted Markdown"),
-            (self.output_dir / "usmle_formatted_questions.pdf", "Formatted PDF"),
             (self.output_dir / "usmle_formatter_cache.json", "Formatter cache"),
             (self.output_dir / "usmle_formatter_progress.json", "Formatter progress"),
             (self.output_dir / "usmle_failed_questions.json", "Formatting failures output"),

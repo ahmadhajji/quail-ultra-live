@@ -189,7 +189,7 @@ class TestStatsCollector:
         for i in range(3):
             stats = AICallStats(
                 timestamp=datetime.now(),
-                model="gemini-3-flash-preview",
+                model="gpt-5.4-mini",
                 method="text" if i < 2 else "vision",
                 slide_number=i + 1,
                 prompt_tokens=100,

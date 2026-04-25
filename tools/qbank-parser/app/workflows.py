@@ -1,6 +1,5 @@
 """Workflow orchestration functions shared by CLI and UI entrypoints."""
 
-import asyncio
 import json
 import os
 import shutil
@@ -31,6 +30,8 @@ from config import (
     OPENAI_WEB_SEARCH,
     OPENAI_TARGET_RPM,
     OPENAI_MAX_INFLIGHT,
+    OPENAI_FACT_CHECK_MODEL,
+    OPENAI_FACT_CHECK_REASONING_EFFORT,
     GOOGLE_SLIDES_ID,
     OUTPUT_DIR,
     validate_config,
@@ -377,7 +378,6 @@ def archive_formatter_state(active_provider: str) -> Path | None:
         OUTPUT_DIR / "usmle_formatter_progress.json",
         OUTPUT_DIR / "usmle_formatted_questions.json",
         OUTPUT_DIR / "usmle_formatted_questions.md",
-        OUTPUT_DIR / "usmle_formatted_questions.pdf",
     ]
     existing = [p for p in candidates if p.exists()]
     if not existing:
@@ -454,6 +454,33 @@ def _formatter_partial_checkpoint(
     )
 
 
+def _finalize_format_stats(source_label: str) -> None:
+    if not STATS_AVAILABLE:
+        return
+    stats_collector = get_stats_collector()
+    if not stats_collector:
+        return
+    try:
+        summary = stats_collector.finalize()
+        report_gen = StatsReportGenerator()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        report_path = OUTPUT_DIR / f"stats_report_format_{timestamp}.html"
+        report_gen.generate_html(summary, report_path)
+        json_path = OUTPUT_DIR / f"stats_report_format_{timestamp}.json"
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(summary, f, indent=2)
+        console.print(f"\n[bold magenta]📊 Format Cost Report:[/bold magenta] {json_path}")
+        console.print(f"   • AI calls: {summary['ai_summary']['total_calls']}")
+        console.print(f"   • Web search calls: {summary['ai_summary']['total_web_search_calls']}")
+        console.print(f"   • Estimated cost: ${summary['cost_estimate']['total_cost_usd']:.4f}")
+        if update_cumulative_stats:
+            update_cumulative_stats(summary)
+    except Exception as e:
+        console.print(f"[yellow]⚠️ Could not generate format stats report for {source_label}: {e}[/yellow]")
+    finally:
+        reset_stats_collector()
+
+
 def format_questions_to_usmle_outputs(
     questions: list[ExtractedQuestion],
     source_file: Path | None = None,
@@ -464,8 +491,8 @@ def format_questions_to_usmle_outputs(
     openai_target_rpm: int = OPENAI_TARGET_RPM,
     openai_max_inflight: int = OPENAI_MAX_INFLIGHT,
     archive_current_format_state: bool = False,
-) -> tuple[Path, Path, Path | None]:
-    """Format extracted questions and export JSON/Markdown/PDF outputs."""
+) -> tuple[Path, Path, None]:
+    """Format extracted questions and export JSON/Markdown outputs."""
     provider = (formatter_provider or "openai").strip().lower()
     if provider != "openai":
         raise RuntimeError("Gemini formatter is deprecated in this workspace. Use --formatter-provider openai.")
@@ -498,7 +525,10 @@ def format_questions_to_usmle_outputs(
     formatter_cache_path = OUTPUT_DIR / "usmle_formatter_cache.json"
     formatter_progress_path = OUTPUT_DIR / "usmle_formatter_progress.json"
     source_label = str(source_file.resolve()) if source_file else "in-memory"
-    valid_questions = [q for q in questions if q.is_approved_for_formatting()]
+    if STATS_AVAILABLE and not get_stats_collector():
+        stats_collector = init_stats_collector(enabled=True)
+        stats_collector.start(source_label)
+    valid_questions = [q for q in questions if q.is_exportable_for_formatting()]
     if not valid_questions:
         raise RuntimeError("No approved questions available for formatting")
     _, preview_results, _, _ = formatter._prepare_cache_state(
@@ -587,7 +617,7 @@ def format_questions_to_usmle_outputs(
         if q.error
     ]
     failed_count = len(failed_questions)
-    console.print(f"\n  ✅ Formatted {success_count}/{len(valid_questions)} approved questions")
+    console.print(f"\n  ✅ Formatted {success_count}/{len(valid_questions)} exportable questions")
 
     json_path = export_usmle_questions(
         usmle_questions,
@@ -604,20 +634,9 @@ def format_questions_to_usmle_outputs(
         provider_used=provider,
     )
 
-    pdf_path = OUTPUT_DIR / "usmle_formatted_questions.pdf"
-    pdf_generated = False
-    try:
-        from md_to_pdf import convert_md_to_pdf
-
-        asyncio.run(convert_md_to_pdf(str(md_path), str(pdf_path)))
-        pdf_generated = True
-    except Exception as e:
-        console.print(f"[yellow]⚠️ PDF generation failed: {e}[/yellow]")
-
     console.print(f"\n[green]JSON saved to:[/green] {json_path}")
     console.print(f"[green]Markdown saved to:[/green] {md_path}")
-    if pdf_generated:
-        console.print(f"[green]PDF saved to:[/green] {pdf_path}")
+    _finalize_format_stats(source_label)
 
     failed_path = OUTPUT_DIR / "usmle_failed_questions.json"
     if failed_count:
@@ -673,8 +692,6 @@ def format_questions_to_usmle_outputs(
         ),
     )
 
-    if pdf_generated:
-        return json_path, md_path, pdf_path
     return json_path, md_path, None
 
 
@@ -708,15 +725,15 @@ def format_usmle(
     # Load questions
     questions = load_from_json(source_file)
 
-    # Filter to approved ones if we have review data
+    # Filter to non-rejected items if we have review data
     if reviewed_json.exists():
         with open(reviewed_json) as f:
             data = json.load(f)
 
-        approved_question_keys = set()
+        included_question_keys = set()
         for q in data.get("questions", []):
-            if q.get("review_status") in ("approved", "edited", "rekeyed"):
-                approved_question_keys.add(
+            if q.get("review_status") not in ("rejected", "skipped", "quit"):
+                included_question_keys.add(
                     question_key(
                         slide_number=q.get("slide_number", 0),
                         question_index=q.get("question_index", 1),
@@ -727,38 +744,66 @@ def format_usmle(
         questions = [
             q
             for q in questions
-            if question_key(q.slide_number, q.question_index, q.question_id) in approved_question_keys
+            if question_key(q.slide_number, q.question_index, q.question_id) in included_question_keys
         ]
 
-    # Filter to approved questions only
-    questions = [q for q in questions if q.is_approved_for_formatting()]
+    questions = [q for q in questions if q.is_exportable_for_formatting()]
 
     if not questions:
-        console.print("[yellow]No approved questions to format.[/yellow]")
+        console.print("[yellow]No exportable questions to format.[/yellow]")
         return False
 
-    console.print(f"\n[bold]Formatting {len(questions)} approved questions as USMLE vignettes...[/bold]\n")
+    console.print(f"\n[bold]Formatting {len(questions)} exportable questions as USMLE vignettes...[/bold]\n")
     try:
+        if STATS_AVAILABLE:
+            stats_collector = init_stats_collector(enabled=True)
+            stats_collector.start(str(source_file))
         reviewed_or_extracted_questions = load_from_json(source_file)
         keyed_questions = {
             question_key(q.slide_number, q.question_index, q.question_id): q for q in reviewed_or_extracted_questions
         }
-        questions = apply_fact_check_and_randomization(
-            questions,
+        fact_check_candidates = [
+            q
+            for q in reviewed_or_extracted_questions
+            if q.classification not in {"rejected", "error"} and q.review_status not in {"rejected", "skipped", "quit"}
+        ]
+        checked_questions = apply_fact_check_and_randomization(
+            fact_check_candidates,
             api_key=OPENAI_API_KEY,
             model_name=openai_model,
             reasoning_effort=openai_reasoning_effort,
             web_search_enabled=openai_web_search,
         )
-        for question_item in questions:
+        for question_item in checked_questions:
             keyed_questions[
                 question_key(question_item.slide_number, question_item.question_index, question_item.question_id)
             ] = question_item
         export_to_json(list(keyed_questions.values()), source_file)
-        questions = [q for q in questions if q.is_approved_for_formatting()]
+        questions = [q for q in checked_questions if q.is_exportable_for_formatting()]
         if not questions:
-            console.print("[yellow]Fact-check moved all approved questions back to review.[/yellow]")
+            console.print("[yellow]No exportable questions remained after fact-check.[/yellow]")
             return False
+        selected_question_slides = len(
+            {q.slide_number for q in reviewed_or_extracted_questions if q.classification != "error"}
+        )
+        error_count = sum(1 for q in reviewed_or_extracted_questions if q.classification == "error")
+        disputed_count = sum(
+            1 for q in checked_questions if isinstance(q.fact_check, dict) and q.fact_check.get("status") == "disputed"
+        )
+        unresolved_count = sum(
+            1
+            for q in checked_questions
+            if isinstance(q.fact_check, dict) and q.fact_check.get("status") == "unresolved"
+        )
+        console.print(
+            "[dim]Format yield:[/dim] "
+            f"{len(questions)} exportable / {selected_question_slides} question slides; "
+            f"{error_count} errors, {disputed_count} disputed, {unresolved_count} unresolved"
+        )
+        if selected_question_slides and len(questions) < selected_question_slides * 0.85:
+            console.print(
+                "[yellow]⚠️ Exportable question yield is below 85% of detected question slides; inspect exclusions before a full run.[/yellow]"
+            )
         format_questions_to_usmle_outputs(
             questions,
             source_file=source_file,
@@ -907,13 +952,13 @@ def run_two_sequential(
     merged_questions.sort(key=question_sort_key)
     export_to_json(merged_questions, OUTPUT_DIR / "extracted_questions.json")
     export_to_csv(merged_questions, OUTPUT_DIR / "extracted_questions.csv")
-    valid_questions = [q for q in merged_questions if q.is_approved_for_formatting()]
+    valid_questions = [q for q in merged_questions if q.is_exportable_for_formatting()]
 
     if not valid_questions:
-        console.print("[yellow]No approved questions to format after merge.[/yellow]")
+        console.print("[yellow]No exportable questions to format after merge.[/yellow]")
         return False
 
-    console.print(f"\n[bold]Formatting merged set ({len(valid_questions)} approved questions)...[/bold]")
+    console.print(f"\n[bold]Formatting merged set ({len(valid_questions)} exportable questions)...[/bold]")
     try:
         json_path, _, _ = format_questions_to_usmle_outputs(
             valid_questions,

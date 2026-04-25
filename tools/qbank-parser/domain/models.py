@@ -187,6 +187,14 @@ class ExtractedQuestion:
     def is_approved_for_formatting(self) -> bool:
         return self.review_status in {"approved", "edited", "rekeyed"} and self.classification == "accepted"
 
+    def is_exportable_for_formatting(self) -> bool:
+        """Question can be formatted/exported even when carrying review-risk metadata."""
+        return self.classification in {"accepted", "needs_review"} and self.review_status not in {
+            "rejected",
+            "skipped",
+            "quit",
+        }
+
     def is_blocking_export(self) -> bool:
         return self.classification in {"needs_review", "rejected", "error"} or self.review_status in {
             "pending",

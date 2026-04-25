@@ -507,6 +507,44 @@ class OpenAIExtractionAdapter:
             )
         return text_results
 
+    def _salvage_from_context(
+        self,
+        slide_number: int,
+        slide_text: str,
+        speaker_notes: str,
+        highlighted: str,
+        comments: str,
+        images: list[str],
+    ) -> list[ExtractedQuestion]:
+        if len(strip_bat_markers(f"{slide_text}\n{speaker_notes}\n{comments}").strip()) < 80:
+            return []
+        salvage_instruction = (
+            "\n\nSALVAGE MODE: The first pass did not detect a complete question. "
+            "If the slide contains an educational objective, answer discussion, or enough clues to reconstruct "
+            "a conservative board-style question, extract it and mark it for review using flags. "
+            "Do not invent missing answer choices; use only choices visible or strongly implied by the slide/comments."
+        )
+        try:
+            results = self.extract_from_text(
+                slide_number=slide_number,
+                slide_text=f"{slide_text}{salvage_instruction}",
+                speaker_notes=speaker_notes,
+                highlighted=highlighted,
+                comments=comments,
+                images=images,
+            )
+        except Exception:
+            return []
+        recovered: list[ExtractedQuestion] = []
+        for result in results:
+            if result.classification in {"accepted", "needs_review"} and result.question_stem:
+                result.classification = "needs_review"
+                result.review_status = "pending"
+                if "Recovered by salvage pass; verify before trusting." not in result.warnings:
+                    result.warnings.append("Recovered by salvage pass; verify before trusting.")
+                recovered.append(result)
+        return recovered
+
     def process_slide(
         self,
         slide_number: int,
@@ -541,4 +579,15 @@ class OpenAIExtractionAdapter:
             comments=comments,
             context_image_paths=[slide_image_path] if slide_image_path else [],
         )
-        return self._merge_text_and_visual_results(text_results, visual_results)
+        merged = self._merge_text_and_visual_results(text_results, visual_results)
+        if any(result.classification in {"accepted", "needs_review"} for result in merged):
+            return merged
+        salvage_results = self._salvage_from_context(
+            slide_number=slide_number,
+            slide_text=slide_text,
+            speaker_notes=speaker_notes,
+            highlighted=highlighted,
+            comments=comments,
+            images=images,
+        )
+        return salvage_results or merged

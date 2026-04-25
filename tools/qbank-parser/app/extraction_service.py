@@ -20,12 +20,46 @@ from storage.run_state import EXTRACT_PARTIAL_FILENAME, RUN_STATE_FILENAME, RunS
 from utils.image_renderer import pptx_to_images
 from utils.question_hardening import audit_same_slide_conflicts, compute_dedupe_fingerprint
 
+MAX_COMMENTS_PER_SLIDE_FOR_AI = 25
+
 
 def _log(console: Any, message: str) -> None:
     if console:
         console.print(message)
     else:
         print(message)
+
+
+def _filter_comments_for_selected_slides(
+    comments_by_slide: dict[int, list[Any]],
+    selected_slide_numbers: set[int],
+) -> tuple[dict[int, list[Any]], dict[str, int]]:
+    """Keep only selected, slide-anchored comments and cap prompt volume."""
+    filtered: dict[int, list[Any]] = {}
+    stats = {
+        "mapped_comments": 0,
+        "unmapped_comments_ignored": 0,
+        "out_of_scope_comments_ignored": 0,
+        "over_cap_comments_ignored": 0,
+        "comments_sent_to_ai": 0,
+    }
+
+    for slide_number, slide_comments in comments_by_slide.items():
+        current_comments = list(slide_comments or [])
+        if slide_number == 0:
+            stats["unmapped_comments_ignored"] += len(current_comments)
+            continue
+        if slide_number not in selected_slide_numbers:
+            stats["out_of_scope_comments_ignored"] += len(current_comments)
+            continue
+        stats["mapped_comments"] += len(current_comments)
+        kept = current_comments[:MAX_COMMENTS_PER_SLIDE_FOR_AI]
+        stats["over_cap_comments_ignored"] += max(0, len(current_comments) - len(kept))
+        if kept:
+            filtered[slide_number] = kept
+            stats["comments_sent_to_ai"] += len(kept)
+
+    return filtered, stats
 
 
 @dataclass
@@ -254,9 +288,24 @@ class ExtractionService:
             try:
                 comments = self.deps.fetch_comments(active_google_slides_id)
                 comments_by_slide = self.deps.get_comments_by_slide(comments)
-                _log(console, f"  ✅ Fetched {len(comments)} comments")
+                comments_by_slide, comment_prompt_stats = _filter_comments_for_selected_slides(
+                    comments_by_slide,
+                    {slide.slide_number for slide in slides},
+                )
+                _log(console, f"  ✅ Fetched {len(comments)} raw comments")
+                _log(
+                    console,
+                    "  [dim]Comment prompt filter:[/dim] "
+                    f"{comment_prompt_stats['comments_sent_to_ai']} sent to AI, "
+                    f"{comment_prompt_stats['unmapped_comments_ignored']} unanchored ignored, "
+                    f"{comment_prompt_stats['out_of_scope_comments_ignored']} out-of-scope ignored, "
+                    f"{comment_prompt_stats['over_cap_comments_ignored']} over per-slide cap ignored",
+                )
                 if stats_collector:
-                    stats_collector.record_comment_stats(comments, comments_by_slide)
+                    stats_collector.record_comment_stats(
+                        [comment for slide_comments in comments_by_slide.values() for comment in slide_comments],
+                        comments_by_slide,
+                    )
             except Exception as e:
                 _log(console, f"  [yellow]⚠️ Could not fetch comments: {e}[/yellow]")
         elif use_google_api:

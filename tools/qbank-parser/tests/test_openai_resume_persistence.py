@@ -165,4 +165,4 @@ def test_openai_formatter_failure_writes_partial_and_run_state(monkeypatch, tmp_
     run_state = json.loads(run_state_path.read_text(encoding="utf-8"))
     assert run_state["status"] == "failed"
     assert run_state["completed_items"] == 1
-    assert run_state["search_enabled"] is True
+    assert run_state["search_enabled"] is False

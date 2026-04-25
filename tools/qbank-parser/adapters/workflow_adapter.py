@@ -78,7 +78,6 @@ class WorkflowAdapter:
         artifacts = [
             ArtifactRef(stage="format", kind="json", path=str((OUTPUT_DIR / "usmle_formatted_questions.json").resolve()), exists=(OUTPUT_DIR / "usmle_formatted_questions.json").exists()),
             ArtifactRef(stage="format", kind="markdown", path=str((OUTPUT_DIR / "usmle_formatted_questions.md").resolve()), exists=(OUTPUT_DIR / "usmle_formatted_questions.md").exists()),
-            ArtifactRef(stage="format", kind="pdf", path=str((OUTPUT_DIR / "usmle_formatted_questions.pdf").resolve()), exists=(OUTPUT_DIR / "usmle_formatted_questions.pdf").exists()),
             ArtifactRef(stage="format", kind="partial_json", path=str((OUTPUT_DIR / "usmle_formatted_questions.partial.json").resolve()), exists=(OUTPUT_DIR / "usmle_formatted_questions.partial.json").exists()),
             ArtifactRef(stage="format", kind="run_state", path=str((OUTPUT_DIR / "run_state.json").resolve()), exists=(OUTPUT_DIR / "run_state.json").exists()),
         ]

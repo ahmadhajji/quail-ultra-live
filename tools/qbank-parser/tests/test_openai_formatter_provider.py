@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from export.usmle_formatter import ModelAccessError, ProviderRateLimitError, USMLEFormatter
 from providers.formatter.openai_adapter import OpenAIFormatterAdapter
+from stats.collector import init_stats_collector, reset_stats_collector
 
 
 def _minimal_json_response() -> str:
@@ -58,6 +59,52 @@ def test_openai_request_contains_model_reasoning_and_web_search():
     assert captured["text"]["format"]["strict"] is True
 
 
+def test_openai_adapter_records_usage_and_web_search_cost():
+    reset_stats_collector()
+    collector = init_stats_collector()
+    collector.start("format-test")
+
+    class FakeResponse:
+        output_text = _minimal_json_response()
+
+        def model_dump(self):
+            return {
+                "usage": {
+                    "input_tokens": 1000,
+                    "output_tokens": 200,
+                    "total_tokens": 1200,
+                    "input_tokens_details": {"cached_tokens": 100},
+                    "output_tokens_details": {"reasoning_tokens": 25},
+                },
+                "output": [{"type": "web_search_call"}, {"content": [{"type": "output_text", "text": self.output_text}]}],
+            }
+
+    class FakeResponses:
+        def create(self, **_kwargs):
+            return FakeResponse()
+
+    class FakeOpenAIClient:
+        responses = FakeResponses()
+
+    adapter = OpenAIFormatterAdapter(
+        client=FakeOpenAIClient(),
+        model_name="gpt-5.4",
+        reasoning_effort="high",
+        web_search_enabled=True,
+        response_schema={"type": "object"},
+        model_access_error_factory=lambda message: RuntimeError(message),
+        rate_limit_error_factory=lambda message, retry_after: RuntimeError(message),
+    )
+
+    adapter.generate_content("prompt", stage="fact_check", method="fact_check", slide_number=9)
+    summary = collector.finalize()
+
+    assert summary["ai_summary"]["total_cached_input_tokens"] == 100
+    assert summary["ai_summary"]["total_web_search_calls"] == 1
+    assert summary["cost_estimate"]["by_stage"]["fact_check"]["total_cost_usd"] > 0
+    reset_stats_collector()
+
+
 def test_openai_adapter_request_payload_snapshot():
     adapter = OpenAIFormatterAdapter(
         client=object(),
@@ -74,6 +121,7 @@ def test_openai_adapter_request_payload_snapshot():
     assert payload == {
         "model": "gpt-5.2",
         "input": "prompt text",
+        "timeout": 180,
         "reasoning": {"effort": "high"},
         "tools": [{"type": "web_search"}],
         "text": {

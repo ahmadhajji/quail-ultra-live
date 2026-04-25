@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
+import time
 from typing import Callable
+
+try:
+    from stats.collector import get_stats_collector
+except Exception:  # pragma: no cover
+
+    def get_stats_collector():  # type: ignore
+        return None
 
 
 class OpenAIFormatterAdapter:
@@ -85,11 +93,22 @@ class OpenAIFormatterAdapter:
             for item in value:
                 OpenAIFormatterAdapter._extract_urls(item, urls)
 
+    @staticmethod
+    def _count_web_search_calls(value) -> int:
+        if isinstance(value, dict):
+            current_type = str(value.get("type", "") or "").lower()
+            count = 1 if "web_search" in current_type else 0
+            return count + sum(OpenAIFormatterAdapter._count_web_search_calls(v) for v in value.values())
+        if isinstance(value, list):
+            return sum(OpenAIFormatterAdapter._count_web_search_calls(item) for item in value)
+        return 0
+
     def build_request_payload(self, prompt: str) -> dict:
         tools = [{"type": "web_search"}] if self.web_search_enabled else []
         return {
             "model": self.model_name,
             "input": prompt,
+            "timeout": 180,
             "reasoning": {"effort": self.reasoning_effort},
             "tools": tools,
             "text": {
@@ -102,12 +121,29 @@ class OpenAIFormatterAdapter:
             },
         }
 
-    def generate_content(self, prompt: str) -> tuple[str, list[str]]:
+    def generate_content(
+        self, prompt: str, *, stage: str = "format", method: str = "format", slide_number: int = 0
+    ) -> tuple[str, list[str]]:
         payload = self.build_request_payload(prompt)
 
         try:
+            started = time.time()
             response = self.client.responses.create(**payload)
+            latency_ms = (time.time() - started) * 1000.0
         except Exception as e:  # pragma: no cover - live API behavior
+            stats = get_stats_collector()
+            if stats:
+                stats.record_ai_call(
+                    response=None,
+                    model=self.model_name,
+                    method=method,
+                    slide_number=slide_number,
+                    latency_ms=0,
+                    success=False,
+                    error=str(e),
+                    stage=stage,
+                    web_search_calls=1 if self.web_search_enabled else 0,
+                )
             message = str(e)
             status_code = getattr(e, "status_code", None)
             if status_code is None:
@@ -132,10 +168,27 @@ class OpenAIFormatterAdapter:
 
             raise RuntimeError(message) from e
 
+        response_dump = response.model_dump() if hasattr(response, "model_dump") else {}
+        detected_web_search_calls = self._count_web_search_calls(response_dump)
+        if self.web_search_enabled and detected_web_search_calls == 0:
+            detected_web_search_calls = 1
+        stats = get_stats_collector()
+        if stats:
+            stats.record_ai_call(
+                response=response,
+                model=self.model_name,
+                method=method,
+                slide_number=slide_number,
+                latency_ms=latency_ms,
+                success=True,
+                stage=stage,
+                web_search_calls=detected_web_search_calls,
+            )
+
         if hasattr(response, "output_text") and response.output_text:
             response_text = response.output_text
         else:
-            response_dict = response.model_dump() if hasattr(response, "model_dump") else {}
+            response_dict = response_dump
             text_chunks: list[str] = []
             for output_item in response_dict.get("output", []):
                 for content_item in output_item.get("content", []):
@@ -148,7 +201,6 @@ class OpenAIFormatterAdapter:
             raise RuntimeError("OpenAI returned empty output_text")
 
         sources: set[str] = set()
-        response_dump = response.model_dump() if hasattr(response, "model_dump") else {}
         self._extract_urls(response_dump, sources)
 
         return response_text, sorted(sources)

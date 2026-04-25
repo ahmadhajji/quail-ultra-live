@@ -6,7 +6,7 @@ QBank Parser extracts questions from Google Slides `.pptx` exports, reviews them
 - Parse slides and extract text, notes, highlighted answers, and embedded images.
 - Run OpenAI-powered extraction with resumable progress and configurable parallel workers.
 - Review extracted questions interactively (`confirm`, `edit`, `skip`).
-- Format confirmed questions into USMLE-style output (`json`, `md`, optional `pdf`).
+- Format confirmed questions into USMLE-style output (`json`, `md`).
 - Export formatted output into Quail qbank folder structure.
 - Run a two-input sequential pipeline from Google Slides URLs/IDs.
 
@@ -27,10 +27,7 @@ source venv/bin/activate
 # 3) Install dependencies
 pip install -r requirements.txt -r requirements-dev.txt
 
-# 4) (Optional, only needed for PDF generation)
-playwright install chromium
-
-# 5) Configure environment
+# 4) Configure environment
 cp .env.example .env
 # then edit .env and set OPENAI_API_KEY
 ```
@@ -57,7 +54,7 @@ python main.py --google-slides-link "https://docs.google.com/presentation/d/<FIL
 # Review questions interactively
 python main.py --review
 
-# Format to USMLE style (JSON + Markdown, PDF attempted)
+# Format to USMLE style (JSON + Markdown)
 python main.py --format-usmle --formatter-provider openai
 
 # Export formatted JSON to Quail qbank folder
@@ -180,7 +177,6 @@ By default, output is written under `output/`.
 ### Formatting Stage
 - `output/usmle_formatted_questions.json`
 - `output/usmle_formatted_questions.md`
-- `output/usmle_formatted_questions.pdf` (if Playwright + Chromium available)
 - `output/usmle_formatter_cache.json`
 - `output/usmle_formatter_progress.json`
 - `output/usmle_failed_questions.json` (only when formatting failures occur)
