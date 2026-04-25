@@ -7,7 +7,7 @@
     "build": "npm run build:frontend && npm run build:worker && npm run build:server",
     "build:frontend": "vite build --config frontend/vite.config.ts",
     "build:worker": "tsc --project tsconfig.worker.json",
-    "build:server": "tsc --project tsconfig.server.json && rm -rf build/contracts && cp -R contracts build/contracts",
+    "build:server": "tsc --project tsconfig.server.json && rm -rf build/shared/native-contracts && cp -R shared/native-contracts build/shared/native-contracts",
     "start": "npm run build && node build/server/index.js",
     "start:railway": "node build/server/index.js",
     "start:server": "tsx server/index.ts",

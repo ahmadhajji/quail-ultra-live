@@ -4,8 +4,8 @@ const fsp = require('fs/promises')
 const path = require('path')
 const Ajv2020Module = require('ajv/dist/2020.js')
 const Ajv2020 = Ajv2020Module.default || Ajv2020Module
-const packSchema = require('../contracts/quail-ultra-qbank/v1/pack.schema.json')
-const questionSchema = require('../contracts/quail-ultra-qbank/v1/question.schema.json')
+const packSchema = require('./native-contracts/quail-ultra-qbank/v1/pack.schema.json')
+const questionSchema = require('./native-contracts/quail-ultra-qbank/v1/question.schema.json')
 let progressHelpers
 try {
   progressHelpers = require('./progress')
