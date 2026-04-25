@@ -203,7 +203,7 @@ export function ExamViewPage() {
   const [explanationHtml, setExplanationHtml] = useState('')
   const [nativeQuestion, setNativeQuestion] = useState<NativeQuestion | null>(null)
   const [choiceLabels, setChoiceLabels] = useState<Record<string, string>>({})
-  const [sourceSlideOpen, setSourceSlideOpen] = useState(false)
+  const [qidDropdownOpen, setQidDropdownOpen] = useState(false)
   const [selectedMarker, setSelectedMarker] = useState<MarkerKey>('yellow')
   const [noteText, setNoteText] = useState('')
   const [activeTool, setActiveTool] = useState<ExamToolKey | null>(null)
@@ -1438,7 +1438,23 @@ export function ExamViewPage() {
             </button>
             <div className="exam-question-context">
               <span className="context-item">Item {selectedQnum + 1} of {numQuestions}</span>
-              <span className="context-id">Question Id: {currentQid}</span>
+              <div className="context-id-wrap">
+                <button
+                  type="button"
+                  className="context-id-btn"
+                  aria-haspopup="true"
+                  aria-expanded={qidDropdownOpen}
+                  onClick={() => setQidDropdownOpen((v) => !v)}
+                  onBlur={(e) => { if (!e.currentTarget.parentElement?.contains(e.relatedTarget as Node)) setQidDropdownOpen(false) }}
+                >
+                  Question Id
+                </button>
+                {qidDropdownOpen ? (
+                  <div className="context-id-dropdown" role="tooltip">
+                    <span className="context-id-value">{currentQid}</span>
+                  </div>
+                ) : null}
+              </div>
             </div>
             <button
               id="btn-flagged"
@@ -1633,13 +1649,6 @@ export function ExamViewPage() {
             </section>
 
             <section className="exam-section exam-answer-section">
-              {sourceSlideAsset && explanationVisible ? (
-                <div className="mb-3">
-                  <button className="btn btn-outline-secondary btn-sm" type="button" onClick={() => setSourceSlideOpen(true)}>
-                    Source Slide
-                  </button>
-                </div>
-              ) : null}
               <div className="exam-choices-container exam-reading-scale">
                 <div className="exam-choice-list">
                   {displayChoices.map((choice) => {
@@ -1738,7 +1747,7 @@ export function ExamViewPage() {
                   </p>
                 )}
                 {sourceSlideAsset && explanationVisible ? (
-                  <button className="btn btn-outline-secondary btn-sm exam-explanation-source-btn" type="button" onClick={() => setSourceSlideOpen(true)}>
+                  <button className="btn btn-outline-secondary btn-sm exam-explanation-source-btn" type="button" onClick={() => setInspectorItem({ src: sourceSlideAsset, alt: 'Source Slide' })}>
                     Source Slide
                   </button>
                 ) : null}
@@ -2128,17 +2137,6 @@ export function ExamViewPage() {
           </button>
         </div>
       ) : null}
-      <FloatingWindow
-        open={sourceSlideOpen && Boolean(sourceSlideAsset)}
-        onClose={() => setSourceSlideOpen(false)}
-        title="Source Slide"
-        titleId="exam-source-slide-title"
-        className="exam-source-slide-window"
-        showScrim
-        closeOnScrimClick
-      >
-        <img src={sourceSlideAsset} alt="Source slide" style={{ maxWidth: '100%', maxHeight: '70vh', display: 'block' }} />
-      </FloatingWindow>
       <ImageInspector open={Boolean(inspectorItem)} item={inspectorItem} onClose={() => setInspectorItem(null)} />
     </>
   )
