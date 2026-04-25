@@ -762,6 +762,10 @@ body.q-shell {
   font-size: 11px;
   font-weight: 600;
   line-height: 1.1;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .exam-topbar-action span,

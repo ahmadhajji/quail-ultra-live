@@ -86,6 +86,7 @@ export function NativeQuestionExplanation({ question, basePath }: { question: Na
 
   return (
     <>
+      <h4>Explanation</h4>
       <NativeContentBlocks
         blocks={question.explanation.correct}
         basePath={basePath}

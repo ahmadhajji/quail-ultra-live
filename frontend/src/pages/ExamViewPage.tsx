@@ -1633,7 +1633,7 @@ export function ExamViewPage() {
             </section>
 
             <section className="exam-section exam-answer-section">
-              {sourceSlideAsset ? (
+              {sourceSlideAsset && explanationVisible ? (
                 <div className="mb-3">
                   <button className="btn btn-outline-secondary btn-sm" type="button" onClick={() => setSourceSlideOpen(true)}>
                     Source Slide
@@ -1737,7 +1737,7 @@ export function ExamViewPage() {
                     {block.mode === 'tutor' ? 'Submit the current question to reveal the explanation.' : 'Explanation hidden until you end the block and enter review mode.'}
                   </p>
                 )}
-                {sourceSlideAsset ? (
+                {sourceSlideAsset && explanationVisible ? (
                   <button className="btn btn-outline-secondary btn-sm exam-explanation-source-btn" type="button" onClick={() => setSourceSlideOpen(true)}>
                     Source Slide
                   </button>
@@ -2128,23 +2128,17 @@ export function ExamViewPage() {
           </button>
         </div>
       ) : null}
-      {sourceSlideOpen && sourceSlideAsset ? (
-        <div className="modal d-block" tabIndex={-1} role="dialog" aria-modal="true">
-          <div className="modal-dialog modal-xl modal-dialog-centered" role="document">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Source Slide</h5>
-                <button type="button" className="close" aria-label="Close source slide" onClick={() => setSourceSlideOpen(false)}>
-                  <span aria-hidden="true">&times;</span>
-                </button>
-              </div>
-              <div className="modal-body text-center">
-                <img src={sourceSlideAsset} alt="Source slide" style={{ maxWidth: '100%', maxHeight: '75vh' }} />
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <FloatingWindow
+        open={sourceSlideOpen && Boolean(sourceSlideAsset)}
+        onClose={() => setSourceSlideOpen(false)}
+        title="Source Slide"
+        titleId="exam-source-slide-title"
+        className="exam-source-slide-window"
+        showScrim
+        closeOnScrimClick
+      >
+        <img src={sourceSlideAsset} alt="Source slide" style={{ maxWidth: '100%', maxHeight: '70vh', display: 'block' }} />
+      </FloatingWindow>
       <ImageInspector open={Boolean(inspectorItem)} item={inspectorItem} onClose={() => setInspectorItem(null)} />
     </>
   )

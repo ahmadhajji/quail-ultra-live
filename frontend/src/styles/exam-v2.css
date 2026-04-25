@@ -1275,6 +1275,16 @@ body[data-exam-ui="v2"] .exam-shortcuts-action {
  * actions. Matches the target UI from the reference screenshots.
  * ----------------------------------------------------------------------- */
 
+.floating-window.exam-source-slide-window {
+  max-height: min(880px, calc(100vh - 96px));
+  width: min(960px, calc(100vw - 48px));
+}
+
+.floating-window.exam-source-slide-window .floating-window-body {
+  padding: 12px;
+  text-align: center;
+}
+
 .floating-window.exam-image-inspector {
   max-height: min(880px, calc(100vh - 96px));
   width: min(960px, calc(100vw - 48px));
