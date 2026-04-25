@@ -1,0 +1,147 @@
+{
+  "format": "quail-ultra-qbank",
+  "schemaVersion": 1,
+  "packId": "pediatrics-sample",
+  "title": "Pediatrics Sample Native Pack",
+  "rotation": "Pediatrics",
+  "description": "Tiny hand-authored fixture for native Quail Ultra QBank validation.",
+  "createdAt": "2026-04-24T00:00:00Z",
+  "updatedAt": "2026-04-24T00:00:00Z",
+  "producer": {
+    "name": "qbank-parser",
+    "version": "fixture",
+    "gitCommit": "fixture",
+    "schemaChecksum": "fixture-v1"
+  },
+  "revision": {
+    "number": 1,
+    "hash": "fixture-native-pack-v1"
+  },
+  "questionIndex": [
+    {
+      "id": "peds.sample.s001.q01",
+      "path": "questions/peds.sample.s001.q01.json",
+      "status": "ready",
+      "titlePreview": "A 6-year-old has fever, cough, and focal crackles.",
+      "tags": {
+        "rotation": "Pediatrics",
+        "subject": "Pulmonology",
+        "system": "Respiratory",
+        "topic": "Pneumonia",
+        "custom": ["fixture"]
+      },
+      "contentHash": "fixture-q01-content",
+      "source": {
+        "documentId": "peds-sample",
+        "slideNumber": 1,
+        "questionIndex": 1
+      },
+      "answerSummary": {
+        "correctChoiceId": "B",
+        "choices": [
+          { "id": "A", "label": "A", "displayOrder": 1 },
+          { "id": "B", "label": "B", "displayOrder": 2 },
+          { "id": "C", "label": "C", "displayOrder": 3 },
+          { "id": "D", "label": "D", "displayOrder": 4 }
+        ]
+      }
+    },
+    {
+      "id": "peds.sample.s002.q01",
+      "path": "questions/peds.sample.s002.q01.json",
+      "status": "ready",
+      "titlePreview": "A neonate has jaundice at 18 hours of life.",
+      "tags": {
+        "rotation": "Pediatrics",
+        "subject": "Neonatology",
+        "system": "Hematology",
+        "topic": "Neonatal jaundice",
+        "custom": ["fixture"]
+      },
+      "contentHash": "fixture-q02-content",
+      "source": {
+        "documentId": "peds-sample",
+        "slideNumber": 2,
+        "questionIndex": 1
+      },
+      "answerSummary": {
+        "correctChoiceId": "C",
+        "choices": [
+          { "id": "A", "label": "A", "displayOrder": 1 },
+          { "id": "B", "label": "B", "displayOrder": 2 },
+          { "id": "C", "label": "C", "displayOrder": 3 },
+          { "id": "D", "label": "D", "displayOrder": 4 }
+        ]
+      }
+    },
+    {
+      "id": "peds.sample.s003.q01",
+      "path": "questions/peds.sample.s003.q01.json",
+      "status": "ready",
+      "titlePreview": "A toddler has recurrent otitis media and eczema.",
+      "tags": {
+        "rotation": "Pediatrics",
+        "subject": "Immunology",
+        "system": "Immune",
+        "topic": "Primary immunodeficiency",
+        "custom": ["fixture"]
+      },
+      "contentHash": "fixture-q03-content",
+      "source": {
+        "documentId": "peds-sample",
+        "slideNumber": 3,
+        "questionIndex": 1
+      },
+      "answerSummary": {
+        "correctChoiceId": "D",
+        "choices": [
+          { "id": "A", "label": "A", "displayOrder": 1 },
+          { "id": "B", "label": "B", "displayOrder": 2 },
+          { "id": "C", "label": "C", "displayOrder": 3 },
+          { "id": "D", "label": "D", "displayOrder": 4 }
+        ]
+      }
+    }
+  ],
+  "tagIndex": {
+    "rotation": ["Pediatrics"],
+    "subject": ["Immunology", "Neonatology", "Pulmonology"],
+    "system": ["Hematology", "Immune", "Respiratory"],
+    "topic": ["Neonatal jaundice", "Pneumonia", "Primary immunodeficiency"]
+  },
+  "mediaIndex": [
+    {
+      "id": "q01.stem.cxr",
+      "path": "media/q01-stem-cxr.svg",
+      "mimeType": "image/svg+xml",
+      "role": "stem",
+      "sha256": "fixture-q01-stem-cxr",
+      "width": 640,
+      "height": 360
+    },
+    {
+      "id": "q02.explanation.nomogram",
+      "path": "media/q02-explanation-nomogram.svg",
+      "mimeType": "image/svg+xml",
+      "role": "explanation",
+      "sha256": "fixture-q02-explanation-nomogram",
+      "width": 640,
+      "height": 360
+    },
+    {
+      "id": "source.peds-sample.001",
+      "path": "source-slides/peds-sample/slide-001.svg",
+      "mimeType": "image/svg+xml",
+      "role": "source_slide",
+      "sha256": "fixture-source-001",
+      "width": 640,
+      "height": 360
+    }
+  ],
+  "validation": {
+    "status": "passed",
+    "errors": [],
+    "warnings": [],
+    "blockedQuestionCount": 0
+  }
+}

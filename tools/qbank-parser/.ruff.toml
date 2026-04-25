@@ -1,0 +1,28 @@
+line-length = 120
+target-version = "py311"
+include = [
+  "app/**/*.py",
+  "domain/**/*.py",
+  "formatting/**/*.py",
+  "providers/**/*.py",
+  "storage/**/*.py",
+]
+exclude = [
+  ".git",
+  ".pytest_cache",
+  "venv",
+  "build",
+  "dist",
+  "archives",
+  "output",
+  "data",
+]
+
+[lint]
+select = ["E9", "F63", "F7", "F82"]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"

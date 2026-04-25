@@ -272,7 +272,7 @@ describe('ExamViewPage', () => {
       expect(htmlHelpers.fetchQuestionAssets).toHaveBeenCalled()
     })
 
-    expect(screen.getAllByRole('button', { name: 'Source Slide' })).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: 'Source Slide' })).toHaveLength(1)
     expect(screen.getByText('Bravo')).toBeInTheDocument()
   })
 
