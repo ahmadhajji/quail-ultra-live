@@ -121,7 +121,8 @@ export const qbankInfoSchema = z.object({
   nativeContent: z.object({
     format: z.string(),
     schemaVersion: z.number(),
-    manifestPath: z.string()
+    manifestPath: z.string(),
+    questionPaths: z.record(z.string(), z.string()).default({})
   }).optional(),
   index: z.record(z.string(), z.record(z.string(), z.string())),
   tagnames: z.object({

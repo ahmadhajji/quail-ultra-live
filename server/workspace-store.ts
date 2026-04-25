@@ -27,6 +27,24 @@ type PackFileResult =
   | { kind: 'path', absolutePath: string }
   | { kind: 'stream', stream: Readable, contentType: string }
 
+function withNativeQuestionPaths(snapshot: any, manifest: any) {
+  const questionPaths = Object.fromEntries(
+    (Array.isArray(manifest?.questionIndex) ? manifest.questionIndex : [])
+      .filter((entry: any) => entry?.id && entry?.path)
+      .map((entry: any) => [String(entry.id), String(entry.path)])
+  )
+  return {
+    ...snapshot,
+    nativeContent: {
+      ...(snapshot?.nativeContent || {}),
+      questionPaths: {
+        ...(snapshot?.nativeContent?.questionPaths || {}),
+        ...questionPaths
+      }
+    }
+  }
+}
+
 async function ensureDir(target: string) {
   await fsp.mkdir(target, { recursive: true })
 }
@@ -342,7 +360,7 @@ class BlobWorkspaceStore extends BaseWorkspaceStore {
         throw new Error('Native Study Pack is missing progress metadata in blob storage.')
       }
       const qbankinfo = {
-        ...snapshot,
+        ...withNativeQuestionPaths(snapshot, nativeManifest),
         progress,
         path: `/api/study-packs/${packRow.id}/file`,
         revision: packRow.revision,
@@ -542,7 +560,7 @@ class RailwayWorkspaceStore extends BaseWorkspaceStore {
         throw new Error('Native Study Pack is missing progress metadata in Railway bucket storage.')
       }
       const qbankinfo = {
-        ...snapshot,
+        ...withNativeQuestionPaths(snapshot, nativeManifest),
         progress,
         path: `/api/study-packs/${packRow.id}/file`,
         revision: packRow.revision,

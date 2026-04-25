@@ -66,6 +66,7 @@ describe('native qbank contract validation', () => {
       options: ['A', 'B', 'C', 'D'],
       correct: 'B'
     })
+    expect(qbankinfo.nativeContent.questionPaths['peds.sample.s001.q01']).toBe('questions/peds.sample.s001.q01.json')
     expect(qbankinfo.questionMeta['peds.sample.s001.q01'].source_slide.asset_path).toBe('source-slides/peds-sample/slide-001.svg')
     expect(qbankinfo.progress.tagbuckets.Rotation.Pediatrics.all).toHaveLength(3)
   })

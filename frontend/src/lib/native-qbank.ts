@@ -75,23 +75,27 @@ export function nativeQuestionUrl(basePath: string, qid: string): string {
   return `${basePath}/questions/${encodeURIComponent(qid)}.json`
 }
 
+export function nativeQuestionPathUrl(basePath: string, relativePath: string): string {
+  return `${basePath}/${encodeRelativePath(relativePath.replace(/^\.?\//, ''))}`
+}
+
 export function nativeMediaUrl(basePath: string, relativePath: string): string {
   return `${basePath}/${encodeRelativePath(relativePath.replace(/^\.?\//, ''))}`
 }
 
-async function fetchNativeQuestionUncached(basePath: string, qid: string): Promise<NativeQuestion> {
-  const response = await window.fetch(nativeQuestionUrl(basePath, qid), { credentials: 'include' })
+async function fetchNativeQuestionUncached(basePath: string, qid: string, relativePath = ''): Promise<NativeQuestion> {
+  const response = await window.fetch(relativePath ? nativeQuestionPathUrl(basePath, relativePath) : nativeQuestionUrl(basePath, qid), { credentials: 'include' })
   if (!response.ok) {
     throw new Error('Unable to load native question content.')
   }
   return response.json()
 }
 
-export async function fetchNativeQuestion(basePath: string, qid: string): Promise<NativeQuestion> {
+export async function fetchNativeQuestion(basePath: string, qid: string, relativePath = ''): Promise<NativeQuestion> {
   if (!basePath || !qid) {
     throw new Error('Unable to load native question content.')
   }
-  const key = cacheKey(basePath, qid)
+  const key = cacheKey(basePath, relativePath || qid)
   const cached = NATIVE_QUESTION_CACHE.get(key)
   if (cached && !(cached instanceof Promise)) {
     return cached
@@ -99,7 +103,7 @@ export async function fetchNativeQuestion(basePath: string, qid: string): Promis
   if (cached instanceof Promise) {
     return cached
   }
-  const pending = fetchNativeQuestionUncached(basePath, qid)
+  const pending = fetchNativeQuestionUncached(basePath, qid, relativePath)
     .then((question) => {
       NATIVE_QUESTION_CACHE.set(key, question)
       trimCache()
@@ -113,15 +117,15 @@ export async function fetchNativeQuestion(basePath: string, qid: string): Promis
   return pending
 }
 
-export function prefetchNativeQuestion(basePath: string, qid: string): void {
+export function prefetchNativeQuestion(basePath: string, qid: string, relativePath = ''): void {
   if (!basePath || !qid) {
     return
   }
-  const key = cacheKey(basePath, qid)
+  const key = cacheKey(basePath, relativePath || qid)
   if (NATIVE_QUESTION_CACHE.has(key)) {
     return
   }
-  void fetchNativeQuestion(basePath, qid).catch(() => {
+  void fetchNativeQuestion(basePath, qid, relativePath).catch(() => {
     // Prefetch failures are non-fatal; the on-demand fetch will retry.
   })
 }

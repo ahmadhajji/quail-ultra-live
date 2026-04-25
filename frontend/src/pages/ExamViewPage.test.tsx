@@ -26,6 +26,15 @@ const htmlHelpers = vi.hoisted(() => ({
   prefetchImagesFromHtml: vi.fn()
 }))
 
+const nativeHelpers = vi.hoisted(() => ({
+  fetchNativeQuestion: vi.fn(),
+  prefetchNativeQuestion: vi.fn(),
+  prefetchNativeQuestionMedia: vi.fn(),
+  getNativeChoiceLabels: vi.fn(() => ({ A: 'Alpha native', B: 'Bravo native' })),
+  blocksToPlainText: vi.fn((blocks: Array<{ text?: string }> | undefined) => (blocks ?? []).map((block) => block.text || '').join(' ')),
+  nativeMediaUrl: vi.fn((basePath: string, relativePath: string) => `${basePath}/${relativePath}`)
+}))
+
 const highlighting = vi.hoisted(() => {
   const state: { lastOptions: { onSerializedChange: (serialized: string) => void } | null } = {
     lastOptions: null
@@ -53,6 +62,7 @@ vi.mock('../lib/api', async () => {
 vi.mock('../lib/navigation', () => navigation)
 vi.mock('../lib/usePackPage', () => packHook)
 vi.mock('../lib/qbank-html', () => htmlHelpers)
+vi.mock('../lib/native-qbank', () => nativeHelpers)
 vi.mock('../lib/text-highlighting', () => ({ mountQuestionHighlighter: highlighting.mountQuestionHighlighter }))
 
 describe('ExamViewPage', () => {
@@ -87,6 +97,20 @@ describe('ExamViewPage', () => {
       A: 'Alpha',
       B: 'Bravo',
       C: 'Charlie'
+    })
+    nativeHelpers.fetchNativeQuestion.mockResolvedValue({
+      id: 'native-101',
+      schemaVersion: 1,
+      status: 'ready',
+      stem: { blocks: [{ type: 'paragraph', text: 'Native stem' }] },
+      choices: [
+        { id: 'A', displayOrder: 1, text: [{ type: 'paragraph', text: 'Alpha native' }] },
+        { id: 'B', displayOrder: 2, text: [{ type: 'paragraph', text: 'Bravo native' }] }
+      ],
+      answerKey: { correctChoiceId: 'A' },
+      explanation: { correct: [{ type: 'paragraph', text: 'Native explanation' }] },
+      media: [],
+      integrity: { contentHash: 'native-hash' }
     })
   })
 
@@ -250,6 +274,28 @@ describe('ExamViewPage', () => {
 
     expect(screen.getAllByRole('button', { name: 'Source Slide' })).toHaveLength(2)
     expect(screen.getByText('Bravo')).toBeInTheDocument()
+  })
+
+  it('loads native questions from the manifest path instead of guessing by id', async () => {
+    fixture = createQbankInfoFixture()
+    fixture.format = 'native'
+    fixture.nativeContent = {
+      format: 'quail-ultra-qbank',
+      schemaVersion: 1,
+      manifestPath: 'quail-ultra-pack.json',
+      questionPaths: {
+        '101': 'questions/from-manifest-path.json',
+        '102': 'questions/second-from-manifest-path.json'
+      }
+    }
+    fixture.progress.blockhist['0']!.currentquesnum = 0
+
+    render(<ExamViewPage />)
+
+    await waitFor(() => {
+      expect(nativeHelpers.fetchNativeQuestion).toHaveBeenCalledWith('/api/study-packs/pack-1/file', '101', 'questions/from-manifest-path.json')
+    })
+    expect(htmlHelpers.fetchQuestionAssets).not.toHaveBeenCalled()
   })
 
   it('shows active flag state and rail markers', async () => {

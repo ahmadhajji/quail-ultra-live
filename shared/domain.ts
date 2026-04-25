@@ -123,6 +123,7 @@ export interface QbankInfo {
     format: string
     schemaVersion: number
     manifestPath: string
+    questionPaths?: Record<string, string>
   }
   index: Record<string, Record<string, string>>
   tagnames: {

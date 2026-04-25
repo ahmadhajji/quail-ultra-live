@@ -416,6 +416,7 @@ async function loadNativeWorkspaceData(workspaceDir: string) {
   const groups: Record<string, Record<string, string>> = {}
   const panes: Record<string, { file: string, prefs: string }> = {}
   const questionMeta: Record<string, any> = {}
+  const questionPaths: Record<string, string> = {}
   const mediaById = new Map<string, any>()
   for (const media of validation.manifest.mediaIndex ?? []) {
     mediaById.set(String(media.id), media)
@@ -423,6 +424,7 @@ async function loadNativeWorkspaceData(workspaceDir: string) {
 
   for (const entry of validation.manifest.questionIndex) {
     const qid = String(entry.id)
+    questionPaths[qid] = String(entry.path || `questions/${qid}.json`)
     const question = validation.questions[qid]
     const tags = question?.tags ?? entry.tags ?? {}
     if (entry.status === 'ready') {
@@ -459,7 +461,8 @@ async function loadNativeWorkspaceData(workspaceDir: string) {
     nativeContent: {
       format: NATIVE_QBANK_FORMAT,
       schemaVersion: NATIVE_QBANK_SCHEMA_VERSION,
-      manifestPath: NATIVE_QBANK_MANIFEST
+      manifestPath: NATIVE_QBANK_MANIFEST,
+      questionPaths
     },
     index,
     tagnames,

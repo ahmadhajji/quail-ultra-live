@@ -262,6 +262,7 @@ export function ExamViewPage() {
   const currentQuestionFlagged = Boolean(qbankinfo && isInBucket(qbankinfo.progress, qbankinfo, currentQid, 'flagged'))
   const qbankPath = qbankinfo?.path ?? ''
   const isNativePack = qbankinfo?.format === 'native'
+  const nativeQuestionPath = isNativePack && currentQid ? qbankinfo?.nativeContent?.questionPaths?.[currentQid] ?? '' : ''
   const explanationVisible = Boolean(block && currentState && (block.complete || (block.mode === 'tutor' && currentState.revealed)))
   const tutorReviewReady = Boolean(block && !block.complete && block.mode === 'tutor' && block.blockqlist.every((_, index) => block.questionStates[index]?.submitted))
   const showBottomNextButton = Boolean(block && (block.mode !== 'tutor' || block.complete || currentState?.submitted))
@@ -849,7 +850,7 @@ export function ExamViewPage() {
     setNativeQuestion(null)
 
     if (isNativePack) {
-      void fetchNativeQuestion(qbankPath, currentQid)
+      void fetchNativeQuestion(qbankPath, currentQid, nativeQuestionPath)
         .then((question) => {
           if (cancelled) {
             return
@@ -893,7 +894,7 @@ export function ExamViewPage() {
     return () => {
       cancelled = true
     }
-  }, [currentQid, isNativePack, qbankPath, selectedQnum, syncedSelectedQnum])
+  }, [currentQid, isNativePack, nativeQuestionPath, qbankPath, selectedQnum, syncedSelectedQnum])
 
   // Build a stable, memoized list of neighbor qids to prefetch. Using a joined
   // key keeps the effect below from re-firing on every unrelated rerender
@@ -925,8 +926,9 @@ export function ExamViewPage() {
     const qids = prefetchNeighborKey.split('|').filter(Boolean)
     for (const qid of qids) {
       if (isNativePack) {
-        prefetchNativeQuestion(qbankPath, qid)
-        void fetchNativeQuestion(qbankPath, qid)
+        const questionPath = qbankinfo?.nativeContent?.questionPaths?.[qid] ?? ''
+        prefetchNativeQuestion(qbankPath, qid, questionPath)
+        void fetchNativeQuestion(qbankPath, qid, questionPath)
           .then((question) => {
             if (!cancelled) {
               prefetchNativeQuestionMedia(qbankPath, question)
@@ -957,7 +959,7 @@ export function ExamViewPage() {
     return () => {
       cancelled = true
     }
-  }, [isNativePack, prefetchNeighborKey, qbankPath])
+  }, [isNativePack, prefetchNeighborKey, qbankPath, qbankinfo?.nativeContent?.questionPaths])
 
   useEffect(() => {
     if (!questionHtml) {
