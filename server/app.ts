@@ -24,6 +24,14 @@ import { createPresignedUpload } from './s3'
 import { copyBlobPrefix, createWorkspaceStore } from './workspace-store'
 import { isEmailConfigured, sendInviteEmail } from './email'
 import { legacyPageRedirectTarget, routePathFor } from './routes'
+import { findWorkspaceRoot, loadWorkspaceData } from '../shared/qbank'
+import { NATIVE_QBANK_MANIFEST, validateNativeQbankDirectory } from '../shared/native-qbank'
+import {
+  activeNativeQuestionCount,
+  diffNativePackManifests,
+  sha256Json,
+  summarizeNativeQuestion
+} from '../shared/native-pack-admin'
 import { deleteBlock, normalizeProgress, startBlock } from '../shared/progress'
 
 function nowIso() {
@@ -674,6 +682,227 @@ export async function createApp() {
     }
   }
 
+  async function readJsonFile(filePath: string) {
+    return JSON.parse(await fsp.readFile(filePath, 'utf8'))
+  }
+
+  async function writeJsonFile(filePath: string, value: any) {
+    await fsp.mkdir(path.dirname(filePath), { recursive: true })
+    await fsp.writeFile(filePath, JSON.stringify(value, null, 2))
+  }
+
+  function firstTextFromBlocks(blocks: any[] | undefined): string {
+    if (!Array.isArray(blocks)) {
+      return ''
+    }
+    const parts: string[] = []
+    for (const block of blocks) {
+      if (block?.type === 'paragraph' && typeof block.text === 'string') {
+        parts.push(block.text)
+      } else if (block?.type === 'list' && Array.isArray(block.items)) {
+        parts.push(...block.items.filter((item: unknown): item is string => typeof item === 'string'))
+      } else if (block?.type === 'table' && Array.isArray(block.rows)) {
+        for (const row of block.rows) {
+          if (Array.isArray(row)) {
+            parts.push(row.filter((cell: unknown): cell is string => typeof cell === 'string').join(' '))
+          }
+        }
+      }
+    }
+    return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 160)
+  }
+
+  function computeQuestionContentHash(question: any): string {
+    const clone = JSON.parse(JSON.stringify(question))
+    if (clone?.integrity && typeof clone.integrity === 'object') {
+      clone.integrity.contentHash = ''
+    }
+    return sha256Json(clone)
+  }
+
+  function computeManifestHash(manifest: any): string {
+    const clone = JSON.parse(JSON.stringify(manifest))
+    if (clone?.revision && typeof clone.revision === 'object') {
+      clone.revision.hash = ''
+    }
+    return sha256Json(clone)
+  }
+
+  function manifestEntryFromQuestion(question: any, existingEntry: any = {}, changeSummary = '') {
+    const orderedChoices = Array.isArray(question?.choices)
+      ? [...question.choices].sort((a, b) => Number(a?.displayOrder ?? 0) - Number(b?.displayOrder ?? 0))
+      : []
+    return {
+      ...existingEntry,
+      id: String(question.id),
+      path: String(existingEntry.path || `questions/${question.id}.json`),
+      status: question.status,
+      ...(existingEntry.replacesQuestionId ? { replacesQuestionId: existingEntry.replacesQuestionId } : {}),
+      ...(changeSummary ? { changeSummary } : (existingEntry.changeSummary ? { changeSummary: existingEntry.changeSummary } : {})),
+      titlePreview: firstTextFromBlocks(question?.stem?.blocks) || existingEntry.titlePreview || question.id,
+      tags: question.tags,
+      contentHash: question.integrity.contentHash,
+      source: {
+        documentId: question.source?.documentId || '',
+        slideNumber: question.source?.slideNumber || 1,
+        questionIndex: question.source?.questionIndex || 1
+      },
+      answerSummary: {
+        correctChoiceId: question.answerKey?.correctChoiceId || '',
+        choices: orderedChoices.map((choice) => ({
+          id: String(choice.id),
+          label: String(choice.label || choice.id),
+          displayOrder: Number(choice.displayOrder || 1)
+        }))
+      }
+    }
+  }
+
+  function rebuildTagIndex(questionIndex: any[]) {
+    const fields = ['rotation', 'subject', 'system', 'topic']
+    const next: Record<string, string[]> = {}
+    for (const field of fields) {
+      const values = new Set<string>()
+      for (const entry of questionIndex) {
+        const value = entry?.tags?.[field]
+        if (typeof value === 'string' && value.trim()) {
+          values.add(value.trim())
+        }
+      }
+      next[field] = Array.from(values).sort((left, right) => left.localeCompare(right))
+    }
+    return next
+  }
+
+  async function resolveNativeSourceWorkspace(body: any) {
+    const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'quail-native-source-'))
+    const sourceStudyPackId = String(body?.sourceStudyPackId || '').trim()
+    const sourcePath = String(body?.sourcePath || '').trim()
+
+    if (sourceStudyPackId) {
+      const sourcePack = await repository.getPackById(sourceStudyPackId)
+      if (!sourcePack) {
+        throw new Error('Source study pack not found.')
+      }
+      const materialized = await workspaceStore.materializeWorkspace(sourcePack.workspace_path)
+      const workspaceRoot = await findWorkspaceRoot(materialized)
+      await fsp.cp(workspaceRoot, tempRoot, { recursive: true })
+      await fsp.rm(materialized, { recursive: true, force: true })
+      return tempRoot
+    }
+
+    if (sourcePath) {
+      const workspaceRoot = await findWorkspaceRoot(path.resolve(sourcePath))
+      await fsp.cp(workspaceRoot, tempRoot, { recursive: true })
+      return tempRoot
+    }
+
+    await fsp.rm(tempRoot, { recursive: true, force: true })
+    throw new Error('Provide sourcePath or sourceStudyPackId.')
+  }
+
+  async function materializeSystemNativePack(systemPack: any) {
+    const workspaceRoot = await workspaceStore.materializeWorkspace(systemPack.workspace_path)
+    const manifestPath = path.join(workspaceRoot, NATIVE_QBANK_MANIFEST)
+    if (!fs.existsSync(manifestPath)) {
+      return {
+        workspaceRoot,
+        native: false,
+        manifest: null,
+        validation: null
+      }
+    }
+    const validation = await validateNativeQbankDirectory(workspaceRoot)
+    return {
+      workspaceRoot,
+      native: true,
+      manifest: validation.manifest ?? await readJsonFile(manifestPath),
+      validation
+    }
+  }
+
+  async function loadNativeQuestionDocuments(workspaceRoot: string, manifest: any) {
+    const questions: Record<string, any> = {}
+    for (const entry of Array.isArray(manifest?.questionIndex) ? manifest.questionIndex : []) {
+      const questionPath = path.join(workspaceRoot, String(entry.path || ''))
+      questions[String(entry.id)] = await readJsonFile(questionPath)
+    }
+    return questions
+  }
+
+  async function rewriteNativeManifestFromQuestions(workspaceRoot: string, manifest: any, questions: Record<string, any>, changeSummary = '') {
+    const currentEntries = new Map((Array.isArray(manifest.questionIndex) ? manifest.questionIndex : []).map((entry: any) => [String(entry.id), entry]))
+    const questionIndex = Object.values(questions)
+      .sort((left: any, right: any) => String(left.id).localeCompare(String(right.id)))
+      .map((question: any) => {
+        question.integrity ??= {}
+        question.integrity.contentHash = computeQuestionContentHash(question)
+        return manifestEntryFromQuestion(question, currentEntries.get(String(question.id)) || {}, changeSummary)
+      })
+
+    const previousHash = String(manifest?.revision?.hash || '')
+    manifest.questionIndex = questionIndex
+    manifest.tagIndex = rebuildTagIndex(questionIndex)
+    manifest.updatedAt = nowIso()
+    manifest.validation = {
+      status: 'passed',
+      errors: [],
+      warnings: Array.isArray(manifest?.validation?.warnings) ? manifest.validation.warnings : [],
+      blockedQuestionCount: questionIndex.filter((entry: any) => entry.status === 'blocked').length
+    }
+    manifest.revision = {
+      number: Number(manifest?.revision?.number || 0) + 1,
+      previousHash,
+      hash: ''
+    }
+    manifest.revision.hash = computeManifestHash(manifest)
+
+    for (const entry of questionIndex) {
+      await writeJsonFile(path.join(workspaceRoot, entry.path), questions[entry.id])
+    }
+    await writeJsonFile(path.join(workspaceRoot, NATIVE_QBANK_MANIFEST), manifest)
+    return manifest
+  }
+
+  async function prepareNativeWorkspaceForPublish(workspaceRoot: string, currentManifest?: any) {
+    const manifestPath = path.join(workspaceRoot, NATIVE_QBANK_MANIFEST)
+    const manifest = await readJsonFile(manifestPath)
+    if (currentManifest) {
+      const nextRevision = Math.max(Number(manifest?.revision?.number || 0), Number(currentManifest?.revision?.number || 0) + 1)
+      manifest.updatedAt = nowIso()
+      manifest.revision = {
+        number: nextRevision,
+        previousHash: String(currentManifest?.revision?.hash || manifest?.revision?.previousHash || ''),
+        hash: ''
+      }
+      manifest.revision.hash = computeManifestHash(manifest)
+      await writeJsonFile(manifestPath, manifest)
+    }
+    return loadWorkspaceData(workspaceRoot)
+  }
+
+  async function publishPreparedNativeWorkspace(systemPack: any, workspaceRoot: string, qbankinfo: any) {
+    const timestamp = nowIso()
+    const questionCount = Object.keys(qbankinfo.index || {}).length
+    await workspaceStore.replaceWorkspaceFromLocalDirectory(systemPack.workspace_path, workspaceRoot)
+    await repository.updateSystemPack(systemPack.id, {
+      questionCount,
+      updatedAt: timestamp
+    })
+
+    const userPacks = await repository.listAllPacks()
+    for (const userPack of userPacks) {
+      if (userPack.workspace_path !== systemPack.workspace_path) {
+        continue
+      }
+      await repository.updatePack(userPack.id, {
+        questionCount,
+        revision: Number(userPack.revision || 0) + 1,
+        updatedAt: timestamp
+      })
+    }
+  }
+
   app.get('/api/library', requireAuth, asyncRoute(async function listLibrary(_req: any, res: any) {
     const rows = await repository.listSystemPacks()
     res.json({ packs: rows.map(systemPackSummary) })
@@ -781,6 +1010,232 @@ export async function createApp() {
     })
     const created = await repository.getPackById(userPackId)
     res.status(201).json({ pack: packSummary(created) })
+  }))
+
+  app.get('/api/admin/native-packs/:packId/content', requireAuth, requireAdmin, asyncRoute(async function getNativePackContent(req: any, res: any) {
+    const systemPack = await repository.getSystemPackById(String(req.params.packId || ''))
+    if (!systemPack) {
+      return jsonError(res, 404, 'Library pack not found')
+    }
+    const materialized = await materializeSystemNativePack(systemPack)
+    try {
+      if (!materialized.native || !materialized.manifest) {
+        return res.json({
+          pack: systemPackSummary(systemPack),
+          native: false,
+          error: 'This library pack is legacy. Dynamic content editing is available for native packs only.'
+        })
+      }
+      const questions = materialized.validation?.questions || await loadNativeQuestionDocuments(materialized.workspaceRoot, materialized.manifest)
+      const questionSummaries = (materialized.manifest.questionIndex || []).map((entry: any) => (
+        summarizeNativeQuestion(entry, questions[String(entry.id)])
+      ))
+      res.json({
+        pack: systemPackSummary(systemPack),
+        native: true,
+        manifest: {
+          packId: materialized.manifest.packId,
+          title: materialized.manifest.title,
+          revision: materialized.manifest.revision,
+          validation: materialized.manifest.validation,
+          activeQuestionCount: activeNativeQuestionCount(materialized.manifest),
+          totalQuestionCount: questionSummaries.length
+        },
+        validation: {
+          ok: Boolean(materialized.validation?.ok),
+          errors: materialized.validation?.errors || [],
+          warnings: materialized.validation?.warnings || []
+        },
+        questions: questionSummaries
+      })
+    } finally {
+      await fsp.rm(materialized.workspaceRoot, { recursive: true, force: true })
+    }
+  }))
+
+  app.get('/api/admin/native-packs/:packId/questions/:qid', requireAuth, requireAdmin, asyncRoute(async function getNativePackQuestion(req: any, res: any) {
+    const systemPack = await repository.getSystemPackById(String(req.params.packId || ''))
+    if (!systemPack) {
+      return jsonError(res, 404, 'Library pack not found')
+    }
+    const materialized = await materializeSystemNativePack(systemPack)
+    try {
+      if (!materialized.native || !materialized.manifest) {
+        return jsonError(res, 400, 'This library pack is legacy.')
+      }
+      const entry = (materialized.manifest.questionIndex || []).find((item: any) => String(item.id) === String(req.params.qid || ''))
+      if (!entry) {
+        return jsonError(res, 404, 'Question not found')
+      }
+      const question = await readJsonFile(path.join(materialized.workspaceRoot, entry.path))
+      res.json({ question })
+    } finally {
+      await fsp.rm(materialized.workspaceRoot, { recursive: true, force: true })
+    }
+  }))
+
+  app.post('/api/admin/native-packs/:packId/validate', requireAuth, requireAdmin, asyncRoute(async function validateNativeRevision(req: any, res: any) {
+    const systemPack = await repository.getSystemPackById(String(req.params.packId || ''))
+    if (!systemPack) {
+      return jsonError(res, 404, 'Library pack not found')
+    }
+    const current = await materializeSystemNativePack(systemPack)
+    let sourceRoot = ''
+    try {
+      if (!current.native || !current.manifest) {
+        return jsonError(res, 400, 'This library pack is legacy. Native revisions can only target native library packs.')
+      }
+      sourceRoot = await resolveNativeSourceWorkspace(req.body)
+      const sourceValidation = await validateNativeQbankDirectory(sourceRoot)
+      const incomingManifest = sourceValidation.manifest || (fs.existsSync(path.join(sourceRoot, NATIVE_QBANK_MANIFEST)) ? await readJsonFile(path.join(sourceRoot, NATIVE_QBANK_MANIFEST)) : null)
+      const diff = incomingManifest
+        ? diffNativePackManifests(current.manifest, incomingManifest, current.manifest.packId)
+        : diffNativePackManifests(current.manifest, {}, current.manifest.packId)
+      diff.errors.push(...sourceValidation.errors)
+      diff.warnings.push(...sourceValidation.warnings)
+      diff.canPublish = diff.errors.length === 0
+      res.json({ diff, validation: { ok: sourceValidation.ok, errors: sourceValidation.errors, warnings: sourceValidation.warnings } })
+    } finally {
+      if (sourceRoot) {
+        await fsp.rm(sourceRoot, { recursive: true, force: true })
+      }
+      await fsp.rm(current.workspaceRoot, { recursive: true, force: true })
+    }
+  }))
+
+  app.post('/api/admin/native-packs/:packId/revisions', requireAuth, requireAdmin, asyncRoute(async function publishNativeRevision(req: any, res: any) {
+    const systemPack = await repository.getSystemPackById(String(req.params.packId || ''))
+    if (!systemPack) {
+      return jsonError(res, 404, 'Library pack not found')
+    }
+    const current = await materializeSystemNativePack(systemPack)
+    let sourceRoot = ''
+    try {
+      if (!current.native || !current.manifest) {
+        return jsonError(res, 400, 'This library pack is legacy. Native revisions can only target native library packs.')
+      }
+      sourceRoot = await resolveNativeSourceWorkspace(req.body)
+      const sourceValidation = await validateNativeQbankDirectory(sourceRoot)
+      if (!sourceValidation.manifest) {
+        return jsonError(res, 400, 'Incoming pack is missing a native manifest.')
+      }
+      const diff = diffNativePackManifests(current.manifest, sourceValidation.manifest, current.manifest.packId)
+      diff.errors.push(...sourceValidation.errors)
+      diff.warnings.push(...sourceValidation.warnings)
+      diff.canPublish = diff.errors.length === 0
+      if (!diff.canPublish || !sourceValidation.ok) {
+        return res.status(400).json({ diff, validation: { ok: sourceValidation.ok, errors: sourceValidation.errors, warnings: sourceValidation.warnings } })
+      }
+      const prepared = await prepareNativeWorkspaceForPublish(sourceRoot, current.manifest)
+      await publishPreparedNativeWorkspace(systemPack, sourceRoot, prepared)
+      const updated = await repository.getSystemPackById(systemPack.id)
+      res.json({ pack: systemPackSummary(updated), diff })
+    } finally {
+      if (sourceRoot) {
+        await fsp.rm(sourceRoot, { recursive: true, force: true })
+      }
+      await fsp.rm(current.workspaceRoot, { recursive: true, force: true })
+    }
+  }))
+
+  app.patch('/api/admin/native-packs/:packId/questions/:qid', requireAuth, requireAdmin, asyncRoute(async function updateNativeQuestion(req: any, res: any) {
+    const systemPack = await repository.getSystemPackById(String(req.params.packId || ''))
+    if (!systemPack) {
+      return jsonError(res, 404, 'Library pack not found')
+    }
+    const materialized = await materializeSystemNativePack(systemPack)
+    try {
+      if (!materialized.native || !materialized.manifest) {
+        return jsonError(res, 400, 'This library pack is legacy.')
+      }
+      const qid = String(req.params.qid || '')
+      const questions = await loadNativeQuestionDocuments(materialized.workspaceRoot, materialized.manifest)
+      const question = req.body?.question
+      if (!question || typeof question !== 'object' || String(question.id || '') !== qid) {
+        return jsonError(res, 400, 'Request body must include a full question document with the matching id.')
+      }
+      if (!questions[qid]) {
+        return jsonError(res, 404, 'Question not found')
+      }
+      questions[qid] = question
+      await rewriteNativeManifestFromQuestions(materialized.workspaceRoot, materialized.manifest, questions, String(req.body?.changeSummary || 'Manual admin edit'))
+      const validation = await validateNativeQbankDirectory(materialized.workspaceRoot)
+      if (!validation.ok) {
+        return res.status(400).json({ validation: { ok: false, errors: validation.errors, warnings: validation.warnings } })
+      }
+      const prepared = await prepareNativeWorkspaceForPublish(materialized.workspaceRoot)
+      await publishPreparedNativeWorkspace(systemPack, materialized.workspaceRoot, prepared)
+      res.json({ question: questions[qid], validation: { ok: true, errors: [], warnings: validation.warnings } })
+    } finally {
+      await fsp.rm(materialized.workspaceRoot, { recursive: true, force: true })
+    }
+  }))
+
+  app.post('/api/admin/native-packs/:packId/questions', requireAuth, requireAdmin, asyncRoute(async function createNativeQuestion(req: any, res: any) {
+    const systemPack = await repository.getSystemPackById(String(req.params.packId || ''))
+    if (!systemPack) {
+      return jsonError(res, 404, 'Library pack not found')
+    }
+    const materialized = await materializeSystemNativePack(systemPack)
+    try {
+      if (!materialized.native || !materialized.manifest) {
+        return jsonError(res, 400, 'This library pack is legacy.')
+      }
+      const question = req.body?.question
+      const qid = String(question?.id || '')
+      if (!question || typeof question !== 'object' || !qid) {
+        return jsonError(res, 400, 'Request body must include a full question document with an id.')
+      }
+      const questions = await loadNativeQuestionDocuments(materialized.workspaceRoot, materialized.manifest)
+      if (questions[qid]) {
+        return jsonError(res, 409, 'Question id already exists.')
+      }
+      questions[qid] = question
+      materialized.manifest.questionIndex.push({ id: qid, path: `questions/${qid}.json` })
+      await rewriteNativeManifestFromQuestions(materialized.workspaceRoot, materialized.manifest, questions, String(req.body?.changeSummary || 'Manual admin add'))
+      const validation = await validateNativeQbankDirectory(materialized.workspaceRoot)
+      if (!validation.ok) {
+        return res.status(400).json({ validation: { ok: false, errors: validation.errors, warnings: validation.warnings } })
+      }
+      const prepared = await prepareNativeWorkspaceForPublish(materialized.workspaceRoot)
+      await publishPreparedNativeWorkspace(systemPack, materialized.workspaceRoot, prepared)
+      res.status(201).json({ question, validation: { ok: true, errors: [], warnings: validation.warnings } })
+    } finally {
+      await fsp.rm(materialized.workspaceRoot, { recursive: true, force: true })
+    }
+  }))
+
+  app.post('/api/admin/native-packs/:packId/questions/:qid/deprecate', requireAuth, requireAdmin, asyncRoute(async function deprecateNativeQuestion(req: any, res: any) {
+    const systemPack = await repository.getSystemPackById(String(req.params.packId || ''))
+    if (!systemPack) {
+      return jsonError(res, 404, 'Library pack not found')
+    }
+    const materialized = await materializeSystemNativePack(systemPack)
+    try {
+      if (!materialized.native || !materialized.manifest) {
+        return jsonError(res, 400, 'This library pack is legacy.')
+      }
+      const qid = String(req.params.qid || '')
+      const questions = await loadNativeQuestionDocuments(materialized.workspaceRoot, materialized.manifest)
+      const question = questions[qid]
+      if (!question) {
+        return jsonError(res, 404, 'Question not found')
+      }
+      question.status = 'deprecated'
+      question.quality ??= {}
+      question.quality.reviewStatus = question.quality.reviewStatus || 'edited'
+      questions[qid] = question
+      await rewriteNativeManifestFromQuestions(materialized.workspaceRoot, materialized.manifest, questions, String(req.body?.changeSummary || 'Deprecated by admin'))
+      const validation = await validateNativeQbankDirectory(materialized.workspaceRoot)
+      if (!validation.ok) {
+        return res.status(400).json({ validation: { ok: false, errors: validation.errors, warnings: validation.warnings } })
+      }
+      const prepared = await prepareNativeWorkspaceForPublish(materialized.workspaceRoot)
+      await publishPreparedNativeWorkspace(systemPack, materialized.workspaceRoot, prepared)
+      res.json({ question, validation: { ok: true, errors: [], warnings: validation.warnings } })
+    } finally {
+      await fsp.rm(materialized.workspaceRoot, { recursive: true, force: true })
+    }
   }))
 
   app.get('/api/study-packs', requireAuth, asyncRoute(async function listPacks(req: any, res: any) {

@@ -70,6 +70,29 @@ describe('native qbank contract validation', () => {
     expect(qbankinfo.progress.tagbuckets.Rotation.Pediatrics.all).toHaveLength(3)
   })
 
+  it('keeps deprecated native questions readable but excludes them from new block buckets', async () => {
+    const workspaceRoot = await copyFixture('native-pack-minimal')
+    const manifestPath = path.join(workspaceRoot, 'quail-ultra-pack.json')
+    const manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf8'))
+    manifest.questionIndex[2].status = 'deprecated'
+    await fsp.writeFile(manifestPath, JSON.stringify(manifest, null, 2))
+    const questionPath = path.join(workspaceRoot, 'questions', 'peds.sample.s003.q01.json')
+    const question = JSON.parse(await fsp.readFile(questionPath, 'utf8'))
+    question.status = 'deprecated'
+    await fsp.writeFile(questionPath, JSON.stringify(question, null, 2))
+
+    const result = await validateNativeQbankDirectory(workspaceRoot)
+    const qbankinfo = await loadWorkspaceData(workspaceRoot)
+
+    expect(result.ok).toBe(true)
+    expect(Object.keys(qbankinfo.index)).toEqual([
+      'peds.sample.s001.q01',
+      'peds.sample.s002.q01'
+    ])
+    expect(qbankinfo.choices['peds.sample.s003.q01'].correct).toBe('D')
+    expect(qbankinfo.progress.tagbuckets.Rotation.Pediatrics.all).toHaveLength(2)
+  })
+
   it('keeps legacy fixture detection intact', async () => {
     const workspaceRoot = await copyFixture('legacy-pack-minimal')
     const detected = await findWorkspaceRoot(workspaceRoot)

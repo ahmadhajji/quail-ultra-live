@@ -131,6 +131,10 @@ function createEmptyBucketState(): BucketState {
   }
 }
 
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean)))
+}
+
 export function createTagBuckets(index: QbankInfo['index'], tagnames: QbankInfo['tagnames']): ProgressRecord['tagbuckets'] {
   const tagBuckets: ProgressRecord['tagbuckets'] = {}
   const tagKeys = Object.keys(tagnames.tagnames).sort((a, b) => Number(a) - Number(b))
@@ -228,6 +232,58 @@ export function replayBuckets(progress: ProgressRecord, qbankinfo: Pick<QbankInf
   }
 }
 
+export function reconcileTagBuckets(progress: ProgressRecord, qbankinfo: Pick<QbankInfo, 'index' | 'tagnames'>): void {
+  const activeQuestionIds = new Set(Object.keys(qbankinfo.index))
+  const usedQuestionIds = new Set<string>()
+  for (const block of Object.values(progress.blockhist)) {
+    for (const qid of block?.blockqlist ?? []) {
+      if (qid) {
+        usedQuestionIds.add(qid)
+      }
+    }
+  }
+
+  const tagKeys = Object.keys(qbankinfo.tagnames.tagnames).sort((a, b) => Number(a) - Number(b))
+  for (const key of tagKeys) {
+    const tagName = qbankinfo.tagnames.tagnames[key]
+    if (!tagName) {
+      continue
+    }
+    progress.tagbuckets[tagName] ??= {}
+  }
+
+  const activeByTag = new Map<string, Set<string>>()
+  for (const qid of activeQuestionIds) {
+    for (const key of tagKeys) {
+      const tagName = qbankinfo.tagnames.tagnames[key]
+      const subtag = qbankinfo.index[qid]?.[key]
+      if (!tagName || !subtag) {
+        continue
+      }
+      const bucketKey = `${tagName}\u0000${subtag}`
+      activeByTag.get(bucketKey)?.add(qid) ?? activeByTag.set(bucketKey, new Set([qid]))
+      progress.tagbuckets[tagName] ??= {}
+      progress.tagbuckets[tagName][subtag] ??= createEmptyBucketState()
+    }
+  }
+
+  for (const [tagName, subtags] of Object.entries(progress.tagbuckets)) {
+    for (const [subtag, bucket] of Object.entries(subtags)) {
+      const activeForBucket = activeByTag.get(`${tagName}\u0000${subtag}`) ?? new Set<string>()
+      const activeList = Array.from(activeForBucket)
+      bucket.all = activeList
+      bucket.unused = uniqueStrings(bucket.unused).filter((qid) => activeForBucket.has(qid) && !usedQuestionIds.has(qid))
+      for (const qid of activeList) {
+        if (!usedQuestionIds.has(qid) && !bucket.unused.includes(qid)) {
+          bucket.unused.push(qid)
+        }
+      }
+      bucket.incorrects = uniqueStrings(bucket.incorrects).filter((qid) => activeForBucket.has(qid))
+      bucket.flagged = uniqueStrings(bucket.flagged).filter((qid) => activeForBucket.has(qid))
+    }
+  }
+}
+
 export function normalizeProgress(progressLike: LooseProgressRecord | ProgressRecord, qbankinfo: Pick<QbankInfo, 'index' | 'tagnames' | 'choices'>): ProgressRecord {
   const rawBlockhist = typeof progressLike.blockhist === 'object' && progressLike.blockhist !== null
     ? progressLike.blockhist as Record<string, LegacyBlockRecord>
@@ -246,6 +302,8 @@ export function normalizeProgress(progressLike: LooseProgressRecord | ProgressRe
   if (!progress.tagbuckets || Object.keys(progress.tagbuckets).length === 0) {
     replayBuckets(progress, qbankinfo)
   }
+
+  reconcileTagBuckets(progress, qbankinfo)
 
   return progress
 }

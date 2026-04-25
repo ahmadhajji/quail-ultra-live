@@ -179,6 +179,8 @@ abstract class BaseWorkspaceStore {
   abstract savePackProgress(progressPath: string, progress: any): Promise<void>
   abstract listManifest(workspacePath: string): Promise<string[]>
   abstract getPackFile(workspacePath: string, relativePath: string): Promise<PackFileResult>
+  abstract materializeWorkspace(workspacePath: string): Promise<string>
+  abstract replaceWorkspaceFromLocalDirectory(workspacePath: string, directory: string): Promise<void>
   abstract deleteWorkspace(workspacePath: string): Promise<void>
   abstract finalizeImportedWorkspace(sessionRow: any, packId: string): Promise<{ workspacePath: string, questionCount: number, packName: string }>
   abstract importWorkspaceFromLocalDirectory(directory: string, targetPrefixOrPath: string): Promise<{ questionCount: number, packName: string }>
@@ -241,6 +243,18 @@ class LocalWorkspaceStore extends BaseWorkspaceStore {
   async getPackFile(workspacePath: string, relativePath: string) {
     const absolutePath = safeResolveWorkspaceFile(workspacePath, relativePath)
     return { kind: 'path', absolutePath }
+  }
+
+  async materializeWorkspace(workspacePath: string) {
+    const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'quail-ultra-live-workspace-'))
+    await fsp.cp(workspacePath, tempRoot, { recursive: true })
+    return tempRoot
+  }
+
+  async replaceWorkspaceFromLocalDirectory(workspacePath: string, directory: string) {
+    await ensureDir(path.dirname(workspacePath))
+    await fsp.rm(workspacePath, { recursive: true, force: true })
+    await fsp.cp(directory, workspacePath, { recursive: true })
   }
 
   async deleteWorkspace(workspacePath: string) {
@@ -429,6 +443,15 @@ class BlobWorkspaceStore extends BaseWorkspaceStore {
     }
   }
 
+  async materializeWorkspace(workspacePath: string) {
+    return this.materializeImportPrefixToTemp(workspacePath)
+  }
+
+  async replaceWorkspaceFromLocalDirectory(workspacePath: string, directory: string) {
+    await removeBlobPrefix(workspacePath)
+    await uploadDirectoryToBlob(workspacePath, directory)
+  }
+
   async deleteWorkspace(workspacePath: string) {
     await removeBlobPrefix(workspacePath)
   }
@@ -596,6 +619,15 @@ class RailwayWorkspaceStore extends BaseWorkspaceStore {
       stream: file.stream,
       contentType: file.contentType
     }
+  }
+
+  async materializeWorkspace(workspacePath: string) {
+    return materializeS3PrefixToTemp(workspacePath)
+  }
+
+  async replaceWorkspaceFromLocalDirectory(workspacePath: string, directory: string) {
+    await deleteS3Prefix(workspacePath)
+    await uploadDirectoryToS3(workspacePath, directory)
   }
 
   async deleteWorkspace(workspacePath: string) {

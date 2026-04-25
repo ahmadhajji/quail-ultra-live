@@ -208,8 +208,10 @@ async function validateNativeQbankDirectory(workspaceDir: string) {
       continue
     }
     pushDuplicateIssue('question', qid, seenQuestionIds, errors)
-    if (entry.status !== 'ready') {
-      warnings.push(`Question "${qid}" has status "${entry.status}". Only ready questions are importable for live packs.`)
+    if (entry.status === 'blocked' || entry.status === 'draft') {
+      errors.push(`Question "${qid}" has status "${entry.status}". Published native packs may only include ready or deprecated questions.`)
+    } else if (entry.status === 'deprecated') {
+      warnings.push(`Question "${qid}" is deprecated and will be excluded from new blocks.`)
     }
 
     const questionPath = safePackPath(workspaceDir, String(entry?.path ?? ''))
@@ -394,11 +396,11 @@ async function loadNativeWorkspaceData(workspaceDir: string) {
     throw new Error(`Native QBank validation failed: ${validation.errors.slice(0, 10).join('; ')}`)
   }
 
-  const notReady = validation.manifest.questionIndex
-    .filter((entry: any) => entry.status !== 'ready')
+  const notPublishable = validation.manifest.questionIndex
+    .filter((entry: any) => entry.status === 'draft' || entry.status === 'blocked')
     .map((entry: any) => entry.id)
-  if (notReady.length > 0) {
-    throw new Error(`Native QBank contains non-ready questions: ${notReady.slice(0, 10).join(', ')}`)
+  if (notPublishable.length > 0) {
+    throw new Error(`Native QBank contains draft or blocked questions: ${notPublishable.slice(0, 10).join(', ')}`)
   }
 
   const tagnames = {
@@ -423,11 +425,13 @@ async function loadNativeWorkspaceData(workspaceDir: string) {
     const qid = String(entry.id)
     const question = validation.questions[qid]
     const tags = question?.tags ?? entry.tags ?? {}
-    index[qid] = {
-      '0': String(tags.rotation || validation.manifest.rotation || 'Untagged'),
-      '1': String(tags.subject || 'Untagged'),
-      '2': String(tags.system || 'Untagged'),
-      '3': String(tags.topic || 'Untagged')
+    if (entry.status === 'ready') {
+      index[qid] = {
+        '0': String(tags.rotation || validation.manifest.rotation || 'Untagged'),
+        '1': String(tags.subject || 'Untagged'),
+        '2': String(tags.system || 'Untagged'),
+        '3': String(tags.topic || 'Untagged')
+      }
     }
     const orderedChoices = [...(question?.choices ?? [])]
       .sort((a, b) => Number(a?.displayOrder ?? 0) - Number(b?.displayOrder ?? 0))

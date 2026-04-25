@@ -59,6 +59,8 @@
           "id": { "$ref": "https://quail-ultra-live.local/contracts/quail-ultra-qbank/v1/question.schema.json#/$defs/id" },
           "path": { "type": "string", "minLength": 1 },
           "status": { "enum": ["draft", "ready", "blocked", "deprecated"] },
+          "replacesQuestionId": { "$ref": "https://quail-ultra-live.local/contracts/quail-ultra-qbank/v1/question.schema.json#/$defs/id" },
+          "changeSummary": { "type": "string" },
           "titlePreview": { "type": "string" },
           "tags": { "$ref": "https://quail-ultra-live.local/contracts/quail-ultra-qbank/v1/question.schema.json#/$defs/tags" },
           "contentHash": { "type": "string", "minLength": 1 },

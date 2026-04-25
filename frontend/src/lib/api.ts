@@ -1,12 +1,12 @@
 import { z } from 'zod'
 import { upload as uploadBlobClient } from '@vercel/blob/client'
 import { unzipSync, zipSync } from 'fflate'
-import { adminUserSchema, adminUsersResponseSchema, appSettingsResponseSchema, authConfigSchema, authResponseSchema, importSessionSchema, inviteCreationResponseSchema, invitesResponseSchema, libraryPackSchema, libraryPacksResponseSchema, manifestResponseSchema, packProgressSummarySchema, qbankInfoResponseSchema, qbankInfoSchema, revisionResponseSchema, sessionResponseSchema, startBlockResponseSchema, studyPackSchema, studyPacksResponseSchema } from './schemas'
+import { adminUserSchema, adminUsersResponseSchema, appSettingsResponseSchema, authConfigSchema, authResponseSchema, importSessionSchema, inviteCreationResponseSchema, invitesResponseSchema, libraryPackSchema, libraryPacksResponseSchema, manifestResponseSchema, nativePackContentSchema, nativePackDiffSchema, packProgressSummarySchema, qbankInfoResponseSchema, qbankInfoSchema, revisionResponseSchema, sessionResponseSchema, startBlockResponseSchema, studyPackSchema, studyPacksResponseSchema } from './schemas'
 import { getCurrentBlockKey } from './navigation'
 import { ProgressSyncCoordinator } from './progress-sync'
 import { normalizeProgress } from './progress'
 import { STORE_PREFIX, WARM_PREFIX, localStore } from './store'
-import type { AdminUser, AppSettings, CachedPackEntry, DirtyProgressEntry, InviteCreationResult, InviteRecord, LibraryPackSummary, PackProgressSummary, ProgressRecord, QbankInfo, StartBlockPreferences, StudyPackSummary, SyncMetadata, SyncProgressOptions, SyncProgressResult, User, UserRole, UserStatus } from '../types/domain'
+import type { AdminUser, AppSettings, CachedPackEntry, DirtyProgressEntry, InviteCreationResult, InviteRecord, LibraryPackSummary, NativePackContent, NativePackDiff, PackProgressSummary, ProgressRecord, QbankInfo, StartBlockPreferences, StudyPackSummary, SyncMetadata, SyncProgressOptions, SyncProgressResult, User, UserRole, UserStatus } from '../types/domain'
 
 const DB_NAME = 'quail-ultra-live'
 const DB_VERSION = 1
@@ -900,6 +900,62 @@ export async function deleteLibraryPack(systemPackId: string): Promise<void> {
   await requestRaw(`/api/library/${encodeURIComponent(systemPackId)}`, {
     method: 'DELETE'
   })
+}
+
+// --- Native library pack content -----------------------------------------
+
+export async function getNativePackContent(systemPackId: string): Promise<NativePackContent> {
+  return request(`/api/admin/native-packs/${encodeURIComponent(systemPackId)}/content`, nativePackContentSchema)
+}
+
+export async function getNativePackQuestion(systemPackId: string, questionId: string): Promise<unknown> {
+  const payload = await requestRaw(`/api/admin/native-packs/${encodeURIComponent(systemPackId)}/questions/${encodeURIComponent(questionId)}`)
+  return z.object({ question: z.unknown() }).parse(payload).question
+}
+
+export async function validateNativePackRevision(systemPackId: string, input: { sourcePath?: string; sourceStudyPackId?: string }): Promise<NativePackDiff> {
+  const payload = await requestRaw(`/api/admin/native-packs/${encodeURIComponent(systemPackId)}/validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input)
+  })
+  return z.object({ diff: nativePackDiffSchema }).parse(payload).diff
+}
+
+export async function publishNativePackRevision(systemPackId: string, input: { sourcePath?: string; sourceStudyPackId?: string }): Promise<{ pack: LibraryPackSummary; diff: NativePackDiff }> {
+  const payload = await requestRaw(`/api/admin/native-packs/${encodeURIComponent(systemPackId)}/revisions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input)
+  })
+  return z.object({ pack: libraryPackSchema, diff: nativePackDiffSchema }).parse(payload)
+}
+
+export async function updateNativePackQuestion(systemPackId: string, questionId: string, question: unknown, changeSummary: string): Promise<unknown> {
+  const payload = await requestRaw(`/api/admin/native-packs/${encodeURIComponent(systemPackId)}/questions/${encodeURIComponent(questionId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question, changeSummary })
+  })
+  return z.object({ question: z.unknown() }).parse(payload).question
+}
+
+export async function createNativePackQuestion(systemPackId: string, question: unknown, changeSummary: string): Promise<unknown> {
+  const payload = await requestRaw(`/api/admin/native-packs/${encodeURIComponent(systemPackId)}/questions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question, changeSummary })
+  })
+  return z.object({ question: z.unknown() }).parse(payload).question
+}
+
+export async function deprecateNativePackQuestion(systemPackId: string, questionId: string, changeSummary: string): Promise<unknown> {
+  const payload = await requestRaw(`/api/admin/native-packs/${encodeURIComponent(systemPackId)}/questions/${encodeURIComponent(questionId)}/deprecate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ changeSummary })
+  })
+  return z.object({ question: z.unknown() }).parse(payload).question
 }
 
 // --- Admin pack utilities --------------------------------------------------

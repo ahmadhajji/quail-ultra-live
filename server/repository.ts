@@ -86,6 +86,7 @@ export interface AppRepository {
   updatePack(packId: string, input: {
     revision: number
     updatedAt: string
+    questionCount?: number
     lastClientInstanceId?: string
     lastClientMutationSeq?: number
     lastClientUpdatedAt?: string
@@ -104,6 +105,10 @@ export interface AppRepository {
     questionCount: number
     workspacePath: string
     createdAt: string
+    updatedAt: string
+  }): Promise<void>
+  updateSystemPack(systemPackId: string, input: {
+    questionCount: number
     updatedAt: string
   }): Promise<void>
   deleteSystemPack(systemPackId: string): Promise<void>
@@ -140,6 +145,7 @@ abstract class BaseRepository implements AppRepository {
   abstract listSystemPacks(): Promise<any[]>
   abstract getSystemPackById(systemPackId: string): Promise<any | null>
   abstract createSystemPack(input: any): Promise<void>
+  abstract updateSystemPack(systemPackId: string, input: any): Promise<void>
   abstract deleteSystemPack(systemPackId: string): Promise<void>
 
   async countUsers(): Promise<number> {
@@ -421,11 +427,15 @@ class LocalRepository extends BaseRepository {
   }
 
   async updatePack(packId: string, input: any) {
+    const nextQuestionCount = Number.isFinite(Number(input.questionCount)) ? Number(input.questionCount) : -1
     this.db.prepare(`
       UPDATE study_packs
-      SET revision = ?, updated_at = ?, last_client_instance_id = ?, last_client_mutation_seq = ?, last_client_updated_at = ?
+      SET question_count = CASE WHEN ? >= 0 THEN ? ELSE question_count END,
+        revision = ?, updated_at = ?, last_client_instance_id = ?, last_client_mutation_seq = ?, last_client_updated_at = ?
       WHERE id = ?
     `).run(
+      nextQuestionCount,
+      nextQuestionCount,
       input.revision,
       input.updatedAt,
       input.lastClientInstanceId || '',
@@ -508,6 +518,11 @@ class LocalRepository extends BaseRepository {
       INSERT INTO system_packs (id, name, description, question_count, workspace_path, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(input.id, input.name, input.description || '', input.questionCount, input.workspacePath, input.createdAt, input.updatedAt)
+  }
+
+  async updateSystemPack(systemPackId: string, input: any) {
+    this.db.prepare('UPDATE system_packs SET question_count = ?, updated_at = ? WHERE id = ?')
+      .run(input.questionCount, input.updatedAt, systemPackId)
   }
 
   async deleteSystemPack(systemPackId: string) {
@@ -730,11 +745,15 @@ class CloudRepository extends BaseRepository {
   }
 
   async updatePack(packId: string, input: any) {
+    const nextQuestionCount = Number.isFinite(Number(input.questionCount)) ? Number(input.questionCount) : -1
     await this.sql.query(`
       UPDATE study_packs
-      SET revision = $1, updated_at = $2, last_client_instance_id = $3, last_client_mutation_seq = $4, last_client_updated_at = $5
-      WHERE id = $6
+      SET question_count = CASE WHEN $1 >= 0 THEN $2 ELSE question_count END,
+        revision = $3, updated_at = $4, last_client_instance_id = $5, last_client_mutation_seq = $6, last_client_updated_at = $7
+      WHERE id = $8
     `, [
+      nextQuestionCount,
+      nextQuestionCount,
       input.revision,
       input.updatedAt,
       input.lastClientInstanceId || '',
@@ -820,6 +839,13 @@ class CloudRepository extends BaseRepository {
       INSERT INTO system_packs (id, name, description, question_count, workspace_path, created_at, updated_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
     `, [input.id, input.name, input.description || '', input.questionCount, input.workspacePath, input.createdAt, input.updatedAt])
+  }
+
+  async updateSystemPack(systemPackId: string, input: any) {
+    await this.sql.query(
+      'UPDATE system_packs SET question_count = $1, updated_at = $2 WHERE id = $3',
+      [input.questionCount, input.updatedAt, systemPackId]
+    )
   }
 
   async deleteSystemPack(systemPackId: string) {

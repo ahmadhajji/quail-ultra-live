@@ -3,21 +3,27 @@ import { AppShell } from '../components/AppShell'
 import {
   createAdminUser,
   createInvite,
+  deprecateNativePackQuestion,
   deleteAdminPack,
   deleteAdminUser,
   deleteLibraryPack,
   getAdminPackProgressSummary,
   getAppSettings,
+  getNativePackContent,
+  getNativePackQuestion,
   getSession,
   listAdminUsers,
   listInvites,
   listLibraryPacks,
   listUserPacks,
   promoteToLibrary,
+  publishNativePackRevision,
   resetAdminPack,
   revokeInvite,
   updateAdminUser,
-  updateAppSettings
+  updateAppSettings,
+  updateNativePackQuestion,
+  validateNativePackRevision
 } from '../lib/api'
 import { navigate } from '../lib/navigation'
 import type {
@@ -26,12 +32,15 @@ import type {
   InviteCreationResult,
   InviteRecord,
   LibraryPackSummary,
+  NativePackContent,
+  NativePackDiff,
+  NativeQuestionSummary,
   PackProgressSummary,
   StudyPackSummary,
   UserRole
 } from '../types/domain'
 
-type AdminTab = 'overview' | 'users' | 'invites' | 'library' | 'settings'
+type AdminTab = 'overview' | 'users' | 'invites' | 'library' | 'content' | 'settings'
 
 interface CreateUserFormState {
   username: string
@@ -94,6 +103,15 @@ export function AdminPage() {
   const [userPacksLoading, setUserPacksLoading] = useState(false)
   const [progressSummaries, setProgressSummaries] = useState<Record<string, PackProgressSummary>>({})
   const [promoteFormByPack, setPromoteFormByPack] = useState<Record<string, PromoteFormState>>({})
+  const [selectedNativePackId, setSelectedNativePackId] = useState('')
+  const [nativeContent, setNativeContent] = useState<NativePackContent | null>(null)
+  const [nativeContentLoading, setNativeContentLoading] = useState(false)
+  const [nativeSourcePath, setNativeSourcePath] = useState('')
+  const [nativeSourceStudyPackId, setNativeSourceStudyPackId] = useState('')
+  const [nativeDiff, setNativeDiff] = useState<NativePackDiff | null>(null)
+  const [selectedNativeQuestionId, setSelectedNativeQuestionId] = useState('')
+  const [nativeQuestionDraft, setNativeQuestionDraft] = useState('')
+  const [nativeQuestionSaving, setNativeQuestionSaving] = useState(false)
 
   async function refreshAdminData(): Promise<void> {
     const [nextSettings, nextUsers, nextInvites, nextLibrary] = await Promise.all([
@@ -126,6 +144,39 @@ export function AdminPage() {
     } finally {
       setUserPacksLoading(false)
     }
+  }
+
+  function nativeRevisionSource(): { sourcePath?: string; sourceStudyPackId?: string } {
+    return {
+      ...(nativeSourcePath.trim() ? { sourcePath: nativeSourcePath.trim() } : {}),
+      ...(nativeSourceStudyPackId.trim() ? { sourceStudyPackId: nativeSourceStudyPackId.trim() } : {})
+    }
+  }
+
+  async function loadNativeContent(packId = selectedNativePackId): Promise<void> {
+    if (!packId) {
+      setNativeContent(null)
+      return
+    }
+    setNativeContentLoading(true)
+    try {
+      const content = await getNativePackContent(packId)
+      setNativeContent(content)
+      setSelectedNativeQuestionId('')
+      setNativeQuestionDraft('')
+      setNativeDiff(null)
+    } finally {
+      setNativeContentLoading(false)
+    }
+  }
+
+  async function loadNativeQuestion(questionId: string): Promise<void> {
+    if (!selectedNativePackId || !questionId) {
+      return
+    }
+    const question = await getNativePackQuestion(selectedNativePackId, questionId)
+    setSelectedNativeQuestionId(questionId)
+    setNativeQuestionDraft(JSON.stringify(question, null, 2))
   }
 
   useEffect(() => {
@@ -199,6 +250,7 @@ export function AdminPage() {
           ['users', 'Users'],
           ['invites', 'Invites'],
           ['library', 'Library'],
+          ['content', 'Content'],
           ['settings', 'Settings']
         ] as const).map(([key, label]) => (
           <button
@@ -589,6 +641,255 @@ export function AdminPage() {
         </section>
       ) : null}
 
+      {tab === 'content' ? (
+        <section className="q-admin-section">
+          <div className="q-panel">
+            <div className="q-panel-header"><div><p className="q-panel-title">Native Pack Content</p></div></div>
+            <div className="q-panel-body">
+              <div className="q-form-grid">
+                <div className="q-metric-box">
+                  <div className="q-metric-label">Library Pack</div>
+                  <select
+                    className="q-input"
+                    value={selectedNativePackId}
+                    onChange={(event) => {
+                      setSelectedNativePackId(event.target.value)
+                      setNativeContent(null)
+                      setNativeDiff(null)
+                      setSelectedNativeQuestionId('')
+                      setNativeQuestionDraft('')
+                    }}
+                  >
+                    <option value="">Select a library pack</option>
+                    {libraryPacks.map((pack) => (
+                      <option key={pack.id} value={pack.id}>{pack.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="q-metric-box">
+                  <div className="q-metric-label">Revision Source Path</div>
+                  <input
+                    className="q-input"
+                    value={nativeSourcePath}
+                    onChange={(event) => setNativeSourcePath(event.target.value)}
+                    placeholder="/Users/.../output/packs/pediatrics"
+                  />
+                </div>
+                <div className="q-metric-box">
+                  <div className="q-metric-label">Source Study Pack ID</div>
+                  <input
+                    className="q-input"
+                    value={nativeSourceStudyPackId}
+                    onChange={(event) => setNativeSourceStudyPackId(event.target.value)}
+                    placeholder="Optional imported native pack id"
+                  />
+                </div>
+              </div>
+              <div className="mt-3 d-flex flex-wrap">
+                <button
+                  className="btn btn-outline-primary mr-2 mb-2"
+                  type="button"
+                  disabled={!selectedNativePackId || nativeContentLoading}
+                  onClick={async () => {
+                    try {
+                      setError('')
+                      await loadNativeContent()
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'Unable to load native content.')
+                    }
+                  }}
+                >
+                  Load Content
+                </button>
+                <button
+                  className="btn btn-outline-secondary mr-2 mb-2"
+                  type="button"
+                  disabled={!selectedNativePackId}
+                  onClick={async () => {
+                    try {
+                      setError('')
+                      setNativeDiff(await validateNativePackRevision(selectedNativePackId, nativeRevisionSource()))
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'Unable to validate revision.')
+                    }
+                  }}
+                >
+                  Validate Revision
+                </button>
+                <button
+                  className="btn btn-primary mb-2"
+                  type="button"
+                  disabled={!selectedNativePackId}
+                  onClick={async () => {
+                    if (!window.confirm('Publish this native revision to the selected library pack?')) return
+                    try {
+                      setError('')
+                      const result = await publishNativePackRevision(selectedNativePackId, nativeRevisionSource())
+                      setNativeDiff(result.diff)
+                      await refreshAdminData()
+                      await loadNativeContent(selectedNativePackId)
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'Unable to publish revision.')
+                    }
+                  }}
+                >
+                  Publish Revision
+                </button>
+              </div>
+              {nativeContentLoading ? <div className="q-helper-copy mt-3">Loading native content...</div> : null}
+              {nativeContent && !nativeContent.native ? (
+                <p className="q-helper-copy mt-3 mb-0">{nativeContent.error || 'This pack is not native.'}</p>
+              ) : null}
+              {nativeContent?.native && nativeContent.manifest ? (
+                <div className="q-stats-grid mt-4">
+                  <div className="q-stat-card">
+                    <span className="q-stat-card-label">Pack ID</span>
+                    <span className="q-stat-card-value" style={{ fontSize: 18 }}>{nativeContent.manifest.packId}</span>
+                  </div>
+                  <div className="q-stat-card">
+                    <span className="q-stat-card-label">Revision</span>
+                    <span className="q-stat-card-value">{nativeContent.manifest.revision.number}</span>
+                  </div>
+                  <div className="q-stat-card">
+                    <span className="q-stat-card-label">Ready</span>
+                    <span className="q-stat-card-value">{nativeContent.manifest.activeQuestionCount}</span>
+                  </div>
+                  <div className="q-stat-card">
+                    <span className="q-stat-card-label">Total</span>
+                    <span className="q-stat-card-value">{nativeContent.manifest.totalQuestionCount}</span>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          {nativeDiff ? (
+            <div className="q-panel mt-4">
+              <div className="q-panel-header"><div><p className="q-panel-title">Revision Diff</p></div></div>
+              <div className="q-panel-body">
+                <div className="q-stats-grid">
+                  <div className="q-stat-card"><span className="q-stat-card-label">Added</span><span className="q-stat-card-value">{nativeDiff.added.length}</span></div>
+                  <div className="q-stat-card"><span className="q-stat-card-label">Changed</span><span className="q-stat-card-value">{nativeDiff.changed.length}</span></div>
+                  <div className="q-stat-card"><span className="q-stat-card-label">Deprecated</span><span className="q-stat-card-value">{nativeDiff.deprecated.length}</span></div>
+                  <div className="q-stat-card"><span className="q-stat-card-label">Blocked</span><span className="q-stat-card-value">{nativeDiff.blocked.length}</span></div>
+                </div>
+                {nativeDiff.errors.length > 0 ? (
+                  <div className="q-error-copy mt-3">{nativeDiff.errors.slice(0, 6).join(' ')}</div>
+                ) : null}
+                {nativeDiff.warnings.length > 0 ? (
+                  <div className="q-helper-copy mt-3">{nativeDiff.warnings.slice(0, 6).join(' ')}</div>
+                ) : null}
+                <NativeDiffTable title="Added" rows={nativeDiff.added} />
+                <NativeDiffTable title="Changed" rows={nativeDiff.changed} />
+                <NativeDiffTable title="Deprecated" rows={nativeDiff.deprecated} />
+              </div>
+            </div>
+          ) : null}
+
+          {nativeContent?.native ? (
+            <div className="q-panel mt-4">
+              <div className="q-panel-header"><div><p className="q-panel-title">Questions</p></div></div>
+              <div className="q-panel-body">
+                <div className="table-responsive">
+                  <table className="table table-hover">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Status</th>
+                        <th>Topic</th>
+                        <th>Answer</th>
+                        <th>Source</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(nativeContent.questions || []).map((question) => (
+                        <tr key={question.id}>
+                          <td>{question.id}</td>
+                          <td>{question.status}</td>
+                          <td>{String(question.tags.topic || '')}</td>
+                          <td>{question.correctChoiceId}</td>
+                          <td>{String(question.source.documentId || '')}:{String(question.source.slideNumber || '')}</td>
+                          <td>
+                            <button
+                              className="btn btn-outline-primary btn-sm mr-2"
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  setError('')
+                                  await loadNativeQuestion(question.id)
+                                } catch (e) {
+                                  setError(e instanceof Error ? e.message : 'Unable to load question.')
+                                }
+                              }}
+                            >
+                              Edit
+                            </button>
+                            {question.status !== 'deprecated' ? (
+                              <button
+                                className="btn btn-outline-danger btn-sm"
+                                type="button"
+                                onClick={async () => {
+                                  if (!window.confirm(`Deprecate ${question.id}?`)) return
+                                  try {
+                                    setError('')
+                                    await deprecateNativePackQuestion(selectedNativePackId, question.id, 'Deprecated from admin Content tab')
+                                    await loadNativeContent(selectedNativePackId)
+                                    await refreshAdminData()
+                                  } catch (e) {
+                                    setError(e instanceof Error ? e.message : 'Unable to deprecate question.')
+                                  }
+                                }}
+                              >
+                                Deprecate
+                              </button>
+                            ) : null}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {selectedNativeQuestionId ? (
+                  <div className="q-metric-box mt-4">
+                    <div className="q-metric-label">Question JSON: {selectedNativeQuestionId}</div>
+                    <textarea
+                      className="q-input"
+                      style={{ minHeight: 360, fontFamily: 'var(--font-mono, monospace)' }}
+                      value={nativeQuestionDraft}
+                      onChange={(event) => setNativeQuestionDraft(event.target.value)}
+                    />
+                    <div className="mt-3">
+                      <button
+                        className="btn btn-primary"
+                        type="button"
+                        disabled={nativeQuestionSaving}
+                        onClick={async () => {
+                          try {
+                            setNativeQuestionSaving(true)
+                            setError('')
+                            const parsed = JSON.parse(nativeQuestionDraft)
+                            await updateNativePackQuestion(selectedNativePackId, selectedNativeQuestionId, parsed, 'Manual admin edit')
+                            await loadNativeContent(selectedNativePackId)
+                            await refreshAdminData()
+                          } catch (e) {
+                            setError(e instanceof Error ? e.message : 'Unable to save question.')
+                          } finally {
+                            setNativeQuestionSaving(false)
+                          }
+                        }}
+                      >
+                        Save Question
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       {tab === 'settings' ? (
         <section className="q-admin-section">
           <div className="q-panel">
@@ -681,6 +982,41 @@ export function AdminPage() {
 
       {error ? <p className="q-error-copy" style={{ padding: '0 24px 24px' }}>{error}</p> : null}
     </AppShell>
+  )
+}
+
+function NativeDiffTable({ title, rows }: { title: string; rows: NativeQuestionSummary[] }) {
+  if (rows.length === 0) {
+    return null
+  }
+  return (
+    <div className="mt-4">
+      <p className="q-panel-title" style={{ fontSize: 16 }}>{title}</p>
+      <div className="table-responsive">
+        <table className="table table-hover">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Status</th>
+              <th>Topic</th>
+              <th>Answer</th>
+              <th>Change</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={`${title}-${row.id}`}>
+                <td>{row.id}</td>
+                <td>{row.status}</td>
+                <td>{String(row.tags.topic || '')}</td>
+                <td>{row.correctChoiceId}</td>
+                <td>{row.changeSummary || row.titlePreview}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   )
 }
 
