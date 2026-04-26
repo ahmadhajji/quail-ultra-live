@@ -74,8 +74,16 @@ RESPONSE_SCHEMA: dict[str, Any] = {
                     "question_index": {"type": "integer", "minimum": 1},
                     "stem_text": {"type": "string"},
                     "choices": {
-                        "type": "object",
-                        "additionalProperties": {"type": "string"},
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "properties": {
+                                "letter": {"type": "string"},
+                                "text": {"type": "string"},
+                            },
+                            "required": ["letter", "text"],
+                        },
                     },
                     "correct_answer": {"type": "string"},
                     "explanation_hint": {"type": "string"},
@@ -172,13 +180,13 @@ class OpenAIDetectAdapter:
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": user_payload},
                     ],
-                    response_format={
-                        "type": "json_schema",
-                        "json_schema": {
+                    text={
+                        "format": {
+                            "type": "json_schema",
                             "name": "DetectedSlide",
                             "schema": RESPONSE_SCHEMA,
                             "strict": True,
-                        },
+                        }
                     },
                 )
                 return self._parse_response(slide, response)
@@ -336,12 +344,23 @@ def _build_questions(slide: RawSlide, payload: dict, model_name: str) -> list[De
         warnings = list(entry.get("warnings", []) or [])
         status = "needs_review" if confidence < 70 or warnings else "ok"
 
+        # choices is now a list of {letter, text} dicts (strict schema compatible)
+        raw_choices = entry.get("choices") or []
+        if isinstance(raw_choices, list):
+            choices_dict = {
+                str(c.get("letter", "")).strip().upper(): str(c.get("text", "")).strip()
+                for c in raw_choices
+                if c.get("letter") and c.get("text")
+            }
+        else:
+            choices_dict = {k: str(v).strip() for k, v in raw_choices.items()}
+
         question = DetectedQuestion(
             deck_id=slide.deck_id,
             slide_number=slide.slide_number,
             question_index=index,
             stem_text=str(entry.get("stem_text", "") or "").strip(),
-            choices={k: str(v).strip() for k, v in (entry.get("choices") or {}).items()},
+            choices=choices_dict,
             correct_answer=str(entry.get("correct_answer", "") or "").strip().upper(),
             explanation_hint=str(entry.get("explanation_hint", "") or "").strip(),
             stem_image_paths=stem_image_paths,

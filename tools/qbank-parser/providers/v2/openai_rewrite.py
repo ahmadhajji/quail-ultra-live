@@ -57,14 +57,30 @@ REWRITE_RESPONSE_SCHEMA: dict[str, Any] = {
         "question_stem": {"type": "string"},
         "question": {"type": "string"},
         "choices": {
-            "type": "object",
-            "additionalProperties": {"type": "string"},
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "letter": {"type": "string"},
+                    "text": {"type": "string"},
+                },
+                "required": ["letter", "text"],
+            },
         },
         "correct_answer": {"type": "string"},
         "correct_answer_explanation": {"type": "string"},
         "incorrect_explanations": {
-            "type": "object",
-            "additionalProperties": {"type": "string"},
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "letter": {"type": "string"},
+                    "explanation": {"type": "string"},
+                },
+                "required": ["letter", "explanation"],
+            },
         },
         "educational_objective": {"type": "string"},
         "tags": {
@@ -156,13 +172,13 @@ class OpenAIRewriteAdapter:
                         {"role": "system", "content": REWRITE_SYSTEM_PROMPT},
                         {"role": "user", "content": [{"type": "input_text", "text": user_prompt}]},
                     ],
-                    response_format={
-                        "type": "json_schema",
-                        "json_schema": {
+                    text={
+                        "format": {
+                            "type": "json_schema",
                             "name": "RewrittenQuestion",
                             "schema": REWRITE_RESPONSE_SCHEMA,
                             "strict": True,
-                        },
+                        }
                     },
                 )
             except Exception as exc:  # broad: network / rate-limit / parse all retry
@@ -300,16 +316,34 @@ def _build_rewritten_question(
         stem_parts.append(lead_in)
     stem = "\n\n".join(stem_parts).strip()
 
-    choices = {k: str(v).strip() for k, v in (payload.get("choices") or {}).items() if str(v).strip()}
+    # choices is a list of {letter, text} (strict schema format)
+    raw_choices = payload.get("choices") or []
+    if isinstance(raw_choices, list):
+        choices = {
+            str(c.get("letter", "")).strip().upper(): str(c.get("text", "")).strip()
+            for c in raw_choices
+            if c.get("letter") and c.get("text")
+        }
+    else:
+        choices = {k: str(v).strip() for k, v in raw_choices.items() if str(v).strip()}
+
     correct_answer = str(payload.get("correct_answer", "") or "").strip().upper()
     correct_explanation = str(payload.get("correct_answer_explanation", "") or "").strip()
 
-    raw_incorrect = payload.get("incorrect_explanations") or {}
-    incorrect_explanations = {
-        str(k).strip().upper(): str(v).strip()
-        for k, v in raw_incorrect.items()
-        if str(v).strip()
-    }
+    # incorrect_explanations is a list of {letter, explanation}
+    raw_incorrect = payload.get("incorrect_explanations") or []
+    if isinstance(raw_incorrect, list):
+        incorrect_explanations = {
+            str(item.get("letter", "")).strip().upper(): str(item.get("explanation", "")).strip()
+            for item in raw_incorrect
+            if item.get("letter") and item.get("explanation")
+        }
+    else:
+        incorrect_explanations = {
+            str(k).strip().upper(): str(v).strip()
+            for k, v in raw_incorrect.items()
+            if str(v).strip()
+        }
 
     educational_objective = str(payload.get("educational_objective", "") or "").strip()
     tags = payload.get("tags") or {}
