@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qbank-parser"
+version = "0.1.0"
+description = "QBank parser pipeline for extraction, review, and USMLE formatting"
+requires-python = ">=3.10"
+readme = "README.md"
+license = "MIT"
+
+[tool.setuptools]
+py-modules = [
+  "archive_run",
+  "config",
+  "convert_to_quail",
+  "main",
+  "md_to_pdf",
+  "qbank_cli",
+  "setup_google_auth",
+]
+
+[tool.setuptools.packages.find]
+include = [
+  "adapters*",
+  "ai*",
+  "app*",
+  "core*",
+  "domain*",
+  "export*",
+  "formatting*",
+  "parsers*",
+  "providers*",
+  "review*",
+  "stats*",
+  "storage*",
+  "utils*",
+]
+exclude = [
+  "tests*",
+]

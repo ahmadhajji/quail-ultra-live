@@ -118,6 +118,13 @@ export interface ProgressRecord {
 }
 
 export interface QbankInfo {
+  format?: 'legacy' | 'native'
+  nativeContent?: {
+    format: string
+    schemaVersion: number
+    manifestPath: string
+    questionPaths?: Record<string, string>
+  }
   index: Record<string, Record<string, string>>
   tagnames: {
     tagnames: Record<string, string>
@@ -246,4 +253,70 @@ export interface PackProgressSummary {
   correctCount: number
   unusedCount: number
   incorrectCount: number
+}
+
+export type NativeQuestionStatus = 'draft' | 'ready' | 'blocked' | 'deprecated'
+
+export interface NativeQuestionSummary {
+  id: string
+  path: string
+  status: NativeQuestionStatus
+  titlePreview: string
+  contentHash: string
+  correctChoiceId: string
+  tags: Record<string, unknown>
+  source: Record<string, unknown>
+  parserConfidence: number | null
+  reviewStatus: string
+  validationStatus: string
+  warnings: string[]
+  changeSummary: string
+  replacesQuestionId: string
+}
+
+export interface NativePackDiff {
+  targetPackId: string
+  incomingPackId: string
+  currentRevision: number
+  incomingRevision: number
+  activeQuestionCount: number
+  totalQuestionCount: number
+  added: NativeQuestionSummary[]
+  changed: NativeQuestionSummary[]
+  unchanged: NativeQuestionSummary[]
+  deprecated: NativeQuestionSummary[]
+  blocked: NativeQuestionSummary[]
+  removed: NativeQuestionSummary[]
+  warnings: string[]
+  errors: string[]
+  canPublish: boolean
+}
+
+export interface NativePackContent {
+  pack: LibraryPackSummary
+  native: boolean
+  error?: string | undefined
+  manifest?: {
+    packId: string
+    title: string
+    revision: {
+      number: number
+      hash: string
+      previousHash?: string | undefined
+    }
+    validation: {
+      status: string
+      errors: string[]
+      warnings: string[]
+      blockedQuestionCount: number
+    }
+    activeQuestionCount: number
+    totalQuestionCount: number
+  } | undefined
+  validation?: {
+    ok: boolean
+    errors: string[]
+    warnings: string[]
+  } | undefined
+  questions?: NativeQuestionSummary[] | undefined
 }

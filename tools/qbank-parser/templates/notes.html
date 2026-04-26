@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notes</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            padding: 15px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        h1 {
+            font-size: 16px;
+            color: #4fc3f7;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .toolbar button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.15s;
+        }
+
+        .toolbar button:hover {
+            opacity: 0.9;
+        }
+
+        .btn-clear {
+            background: #e57373;
+            color: #fff;
+        }
+
+        .btn-save {
+            background: #81c784;
+            color: #1a1a2e;
+        }
+
+        .btn-copy {
+            background: #4fc3f7;
+            color: #1a1a2e;
+        }
+
+        .status {
+            font-size: 11px;
+            color: #888;
+            margin-left: auto;
+            align-self: center;
+        }
+
+        .status.saved {
+            color: #81c784;
+        }
+
+        #notes {
+            flex: 1;
+            width: 100%;
+            min-height: 350px;
+            background: #252545;
+            border: 1px solid #3d3d5c;
+            border-radius: 10px;
+            padding: 15px;
+            color: #e0e0e0;
+            font-size: 14px;
+            font-family: inherit;
+            line-height: 1.6;
+            resize: none;
+        }
+
+        #notes:focus {
+            outline: none;
+            border-color: #4fc3f7;
+        }
+
+        #notes::placeholder {
+            color: #666;
+        }
+
+        .char-count {
+            text-align: right;
+            font-size: 11px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .info {
+            text-align: center;
+            font-size: 11px;
+            color: #666;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #3d3d5c;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>📝 Exam Notes</h1>
+
+    <div class="toolbar">
+        <button class="btn-clear" onclick="clearNotes()" title="Clear all notes">Clear</button>
+        <button class="btn-copy" onclick="copyNotes()" title="Copy to clipboard">Copy</button>
+        <span class="status" id="status"></span>
+    </div>
+
+    <textarea id="notes" placeholder="Type your notes here...
+
+You can use this space to:
+• Jot down key points from questions
+• Write formulas to remember
+• Make calculations
+• Keep track of flagged questions
+
+Notes persist during your session."></textarea>
+
+    <div class="char-count"><span id="charCount">0</span> characters</div>
+
+    <div class="info">Notes are saved locally in your browser session</div>
+
+    <script>
+        const notes = document.getElementById('notes');
+        const status = document.getElementById('status');
+        const charCount = document.getElementById('charCount');
+        const STORAGE_KEY = 'quail_exam_notes';
+
+        // Load saved notes on startup
+        const savedNotes = localStorage.getItem(STORAGE_KEY);
+        if (savedNotes) {
+            notes.value = savedNotes;
+            updateCharCount();
+        }
+
+        // Auto-save on input
+        notes.addEventListener('input', function () {
+            localStorage.setItem(STORAGE_KEY, notes.value);
+            updateCharCount();
+            showStatus('Auto-saved', 'saved');
+        });
+
+        function updateCharCount() {
+            charCount.textContent = notes.value.length;
+        }
+
+        function showStatus(message, className) {
+            status.textContent = message;
+            status.className = 'status ' + (className || '');
+            setTimeout(() => { status.textContent = ''; }, 2000);
+        }
+
+        function clearNotes() {
+            if (notes.value && !confirm('Clear all notes?')) return;
+            notes.value = '';
+            localStorage.removeItem(STORAGE_KEY);
+            updateCharCount();
+            showStatus('Cleared');
+        }
+
+        function copyNotes() {
+            if (!notes.value) {
+                showStatus('Nothing to copy');
+                return;
+            }
+            navigator.clipboard.writeText(notes.value).then(() => {
+                showStatus('Copied!', 'saved');
+            }).catch(() => {
+                // Fallback for older browsers
+                notes.select();
+                document.execCommand('copy');
+                showStatus('Copied!', 'saved');
+            });
+        }
+
+        // Focus textarea on load
+        notes.focus();
+    </script>
+</body>
+
+</html>

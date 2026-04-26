@@ -1,0 +1,16 @@
+# QBank Parser Dependencies
+
+python-pptx>=0.6.21
+openai>=1.0.0
+google-auth>=2.23.0
+google-auth-oauthlib>=1.1.0
+google-api-python-client>=2.100.0
+Pillow>=10.0.0
+python-dotenv>=1.0.0
+rich>=13.0.0
+readchar>=4.0.0
+tqdm>=4.66.0
+pdf2image>=1.16.0
+markdown2>=2.5.0
+playwright>=1.50.0
+jsonschema>=4.0.0

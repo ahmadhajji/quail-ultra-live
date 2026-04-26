@@ -1,0 +1,92 @@
+{
+  "id": "peds.sample.s003.q01",
+  "schemaVersion": 1,
+  "status": "ready",
+  "source": {
+    "documentId": "peds-sample",
+    "documentTitle": "Pediatrics Fixture Slides",
+    "slideNumber": 3,
+    "questionIndex": 1,
+    "sourceGroupId": "peds-sample:3",
+    "comments": [
+      { "author": "Fixture Reviewer", "content": "Repeated-infection pattern should cue immune workup." }
+    ]
+  },
+  "tags": {
+    "rotation": "Pediatrics",
+    "subject": "Immunology",
+    "system": "Immune",
+    "topic": "Primary immunodeficiency",
+    "custom": ["fixture"]
+  },
+  "stem": {
+    "blocks": [
+      { "type": "paragraph", "text": "A 2-year-old has recurrent otitis media, eczema, and thrombocytopenia." },
+      { "type": "paragraph", "text": "Which diagnosis best explains these findings?" }
+    ]
+  },
+  "choices": [
+    { "id": "A", "label": "A", "displayOrder": 1, "originalOrder": 1, "text": [{ "type": "paragraph", "text": "DiGeorge syndrome" }], "textHash": "fixture-q03-a" },
+    { "id": "B", "label": "B", "displayOrder": 2, "originalOrder": 2, "text": [{ "type": "paragraph", "text": "Chronic granulomatous disease" }], "textHash": "fixture-q03-b" },
+    { "id": "C", "label": "C", "displayOrder": 3, "originalOrder": 3, "text": [{ "type": "paragraph", "text": "Selective IgA deficiency" }], "textHash": "fixture-q03-c" },
+    { "id": "D", "label": "D", "displayOrder": 4, "originalOrder": 4, "text": [{ "type": "paragraph", "text": "Wiskott-Aldrich syndrome" }], "textHash": "fixture-q03-d" }
+  ],
+  "answerKey": {
+    "correctChoiceId": "D",
+    "source": "slide answer key",
+    "confidence": 0.94,
+    "reviewStatus": "approved"
+  },
+  "explanation": {
+    "correct": [
+      { "type": "paragraph", "text": "Wiskott-Aldrich syndrome classically presents with recurrent infections, eczema, and thrombocytopenia." }
+    ],
+    "incorrect": {
+      "A": [{ "type": "paragraph", "text": "DiGeorge syndrome causes thymic aplasia with hypocalcemia and conotruncal defects." }],
+      "B": [{ "type": "paragraph", "text": "Chronic granulomatous disease causes catalase-positive infections, not eczema with thrombocytopenia." }],
+      "C": [{ "type": "paragraph", "text": "Selective IgA deficiency causes mucosal infections but does not explain thrombocytopenia." }]
+    },
+    "educationalObjective": [
+      { "type": "paragraph", "text": "Recognize the classic triad of Wiskott-Aldrich syndrome." }
+    ],
+    "references": ["fixture-source"]
+  },
+  "media": [],
+  "quality": {
+    "parserConfidence": 0.94,
+    "validationStatus": "passed",
+    "reviewStatus": "approved",
+    "warnings": ["Fixture warning used to exercise caution rendering."],
+    "errors": [],
+    "factCheck": {
+      "status": "confirmed",
+      "note": "Fixture fact check.",
+      "sources": ["fixture-source"],
+      "model": "fixture"
+    }
+  },
+  "ai": {
+    "extractionModel": "fixture",
+    "formatterModel": "fixture",
+    "promptVersion": "fixture",
+    "schemaVersion": "1",
+    "inputHash": "fixture-q03-input",
+    "outputHash": "fixture-q03-output",
+    "cacheKeys": ["fixture-q03"],
+    "cost": {
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "estimatedUsd": 0
+    }
+  },
+  "dedupe": {
+    "fingerprint": "peds-sample:wiskott-aldrich",
+    "relatedQuestionIds": [],
+    "conflictStatus": "none"
+  },
+  "integrity": {
+    "sourceHash": "fixture-q03-source",
+    "contentHash": "fixture-q03-content",
+    "mediaHashes": {}
+  }
+}

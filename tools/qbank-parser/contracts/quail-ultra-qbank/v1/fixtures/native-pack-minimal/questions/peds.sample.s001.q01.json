@@ -1,0 +1,114 @@
+{
+  "id": "peds.sample.s001.q01",
+  "schemaVersion": 1,
+  "status": "ready",
+  "source": {
+    "documentId": "peds-sample",
+    "documentTitle": "Pediatrics Fixture Slides",
+    "slideNumber": 1,
+    "questionIndex": 1,
+    "sourceGroupId": "peds-sample:1",
+    "sourceSlideMediaId": "source.peds-sample.001",
+    "comments": []
+  },
+  "tags": {
+    "rotation": "Pediatrics",
+    "subject": "Pulmonology",
+    "system": "Respiratory",
+    "topic": "Pneumonia",
+    "custom": ["fixture"]
+  },
+  "stem": {
+    "blocks": [
+      { "type": "paragraph", "text": "A 6-year-old has fever, cough, tachypnea, and focal crackles in the right lower lung field." },
+      { "type": "media", "mediaId": "q01.stem.cxr", "caption": "Chest radiograph from the source slide." },
+      { "type": "paragraph", "text": "Which organism is the most likely cause?" }
+    ]
+  },
+  "choices": [
+    { "id": "A", "label": "A", "displayOrder": 1, "originalOrder": 1, "text": [{ "type": "paragraph", "text": "Respiratory syncytial virus" }], "textHash": "fixture-q01-a" },
+    { "id": "B", "label": "B", "displayOrder": 2, "originalOrder": 2, "text": [{ "type": "paragraph", "text": "Streptococcus pneumoniae" }], "textHash": "fixture-q01-b" },
+    { "id": "C", "label": "C", "displayOrder": 3, "originalOrder": 3, "text": [{ "type": "paragraph", "text": "Mycoplasma pneumoniae" }], "textHash": "fixture-q01-c" },
+    { "id": "D", "label": "D", "displayOrder": 4, "originalOrder": 4, "text": [{ "type": "paragraph", "text": "Bordetella pertussis" }], "textHash": "fixture-q01-d" }
+  ],
+  "answerKey": {
+    "correctChoiceId": "B",
+    "source": "slide answer key",
+    "confidence": 0.98,
+    "reviewStatus": "approved"
+  },
+  "explanation": {
+    "correct": [
+      { "type": "paragraph", "text": "Focal lobar findings in a school-aged child are most consistent with pneumococcal pneumonia." }
+    ],
+    "incorrect": {
+      "A": [{ "type": "paragraph", "text": "RSV usually causes bronchiolitis with diffuse wheezing in younger children." }],
+      "C": [{ "type": "paragraph", "text": "Mycoplasma commonly causes atypical pneumonia with a more indolent course." }],
+      "D": [{ "type": "paragraph", "text": "Pertussis causes paroxysmal cough rather than focal lobar crackles." }]
+    },
+    "educationalObjective": [
+      { "type": "paragraph", "text": "Recognize typical bacterial pneumonia in children." }
+    ],
+    "references": ["fixture-source"]
+  },
+  "media": [
+    {
+      "id": "q01.stem.cxr",
+      "path": "media/q01-stem-cxr.svg",
+      "mimeType": "image/svg+xml",
+      "role": "stem",
+      "sha256": "fixture-q01-stem-cxr",
+      "width": 640,
+      "height": 360
+    },
+    {
+      "id": "source.peds-sample.001",
+      "path": "source-slides/peds-sample/slide-001.svg",
+      "mimeType": "image/svg+xml",
+      "role": "source_slide",
+      "sha256": "fixture-source-001",
+      "width": 640,
+      "height": 360
+    }
+  ],
+  "quality": {
+    "parserConfidence": 0.98,
+    "validationStatus": "passed",
+    "reviewStatus": "approved",
+    "warnings": [],
+    "errors": [],
+    "factCheck": {
+      "status": "confirmed",
+      "note": "Fixture fact check.",
+      "sources": ["fixture-source"],
+      "model": "fixture"
+    }
+  },
+  "ai": {
+    "extractionModel": "fixture",
+    "formatterModel": "fixture",
+    "promptVersion": "fixture",
+    "schemaVersion": "1",
+    "inputHash": "fixture-q01-input",
+    "outputHash": "fixture-q01-output",
+    "cacheKeys": ["fixture-q01"],
+    "cost": {
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "estimatedUsd": 0
+    }
+  },
+  "dedupe": {
+    "fingerprint": "peds-sample:pneumonia",
+    "relatedQuestionIds": [],
+    "conflictStatus": "none"
+  },
+  "integrity": {
+    "sourceHash": "fixture-q01-source",
+    "contentHash": "fixture-q01-content",
+    "mediaHashes": {
+      "q01.stem.cxr": "fixture-q01-stem-cxr",
+      "source.peds-sample.001": "fixture-source-001"
+    }
+  }
+}

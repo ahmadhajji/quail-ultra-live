@@ -7,6 +7,7 @@ import { Readable } from 'node:stream'
 import { copy, del, get, list, put } from '@vercel/blob'
 import { createTagBuckets, normalizeProgress } from '../shared/progress'
 import { findWorkspaceRoot, listWorkspaceManifest, loadWorkspaceData, safeResolveWorkspaceFile, saveProgress, withPackPath } from '../shared/qbank'
+import { NATIVE_QBANK_FORMAT, NATIVE_QBANK_INFO_SNAPSHOT, NATIVE_QBANK_MANIFEST } from '../shared/native-qbank'
 import { PACKS_DIR, getBlobToken, getStorageBackend } from './config'
 import {
   deleteS3Prefix,
@@ -25,6 +26,24 @@ type LoadedPack = {
 type PackFileResult =
   | { kind: 'path', absolutePath: string }
   | { kind: 'stream', stream: Readable, contentType: string }
+
+function withNativeQuestionPaths(snapshot: any, manifest: any) {
+  const questionPaths = Object.fromEntries(
+    (Array.isArray(manifest?.questionIndex) ? manifest.questionIndex : [])
+      .filter((entry: any) => entry?.id && entry?.path)
+      .map((entry: any) => [String(entry.id), String(entry.path)])
+  )
+  return {
+    ...snapshot,
+    nativeContent: {
+      ...(snapshot?.nativeContent || {}),
+      questionPaths: {
+        ...(snapshot?.nativeContent?.questionPaths || {}),
+        ...questionPaths
+      }
+    }
+  }
+}
 
 async function ensureDir(target: string) {
   await fsp.mkdir(target, { recursive: true })
@@ -178,6 +197,8 @@ abstract class BaseWorkspaceStore {
   abstract savePackProgress(progressPath: string, progress: any): Promise<void>
   abstract listManifest(workspacePath: string): Promise<string[]>
   abstract getPackFile(workspacePath: string, relativePath: string): Promise<PackFileResult>
+  abstract materializeWorkspace(workspacePath: string): Promise<string>
+  abstract replaceWorkspaceFromLocalDirectory(workspacePath: string, directory: string): Promise<void>
   abstract deleteWorkspace(workspacePath: string): Promise<void>
   abstract finalizeImportedWorkspace(sessionRow: any, packId: string): Promise<{ workspacePath: string, questionCount: number, packName: string }>
   abstract importWorkspaceFromLocalDirectory(directory: string, targetPrefixOrPath: string): Promise<{ questionCount: number, packName: string }>
@@ -240,6 +261,18 @@ class LocalWorkspaceStore extends BaseWorkspaceStore {
   async getPackFile(workspacePath: string, relativePath: string) {
     const absolutePath = safeResolveWorkspaceFile(workspacePath, relativePath)
     return { kind: 'path', absolutePath }
+  }
+
+  async materializeWorkspace(workspacePath: string) {
+    const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'quail-ultra-live-workspace-'))
+    await fsp.cp(workspacePath, tempRoot, { recursive: true })
+    return tempRoot
+  }
+
+  async replaceWorkspaceFromLocalDirectory(workspacePath: string, directory: string) {
+    await ensureDir(path.dirname(workspacePath))
+    await fsp.rm(workspacePath, { recursive: true, force: true })
+    await fsp.cp(directory, workspacePath, { recursive: true })
   }
 
   async deleteWorkspace(workspacePath: string) {
@@ -308,6 +341,35 @@ class BlobWorkspaceStore extends BaseWorkspaceStore {
   async loadPack(packRow: any, blockToOpen: string) {
     const workspacePath = packRow.workspace_path
     const override = packRow.progress_override_path
+    const nativeManifest = await this.readBlobJson(`${workspacePath}/${NATIVE_QBANK_MANIFEST}`)
+    if (nativeManifest?.format === NATIVE_QBANK_FORMAT) {
+      const snapshot = await this.readBlobJson(`${workspacePath}/${NATIVE_QBANK_INFO_SNAPSHOT}`)
+      if (!snapshot) {
+        throw new Error('Native Study Pack is missing generated qbank metadata in blob storage.')
+      }
+      const progressSource = override || workspacePath
+      let progress = await this.readBlobJson(`${progressSource}/progress.json`)
+      if (!progress && override) {
+        progress = {
+          blockhist: {},
+          tagbuckets: createTagBuckets(snapshot.index, snapshot.tagnames)
+        }
+        await this.writeBlobJson(`${override}/progress.json`, progress)
+      }
+      if (!progress) {
+        throw new Error('Native Study Pack is missing progress metadata in blob storage.')
+      }
+      const qbankinfo = {
+        ...withNativeQuestionPaths(snapshot, nativeManifest),
+        progress,
+        path: `/api/study-packs/${packRow.id}/file`,
+        revision: packRow.revision,
+        blockToOpen: blockToOpen || ''
+      }
+      normalizeProgress(qbankinfo.progress, qbankinfo)
+      return { qbankinfo }
+    }
+
     const index = await this.readBlobJson(`${workspacePath}/index.json`)
     const tagnames = await this.readBlobJson(`${workspacePath}/tagnames.json`)
     const choices = await this.readBlobJson(`${workspacePath}/choices.json`)
@@ -351,8 +413,9 @@ class BlobWorkspaceStore extends BaseWorkspaceStore {
   }
 
   async initProgressOverride(workspacePath: string, progressPath: string) {
-    const index = await this.readBlobJson(`${workspacePath}/index.json`)
-    const tagnames = await this.readBlobJson(`${workspacePath}/tagnames.json`)
+    const snapshot = await this.readBlobJson(`${workspacePath}/${NATIVE_QBANK_INFO_SNAPSHOT}`)
+    const index = snapshot?.index || (await this.readBlobJson(`${workspacePath}/index.json`))
+    const tagnames = snapshot?.tagnames || (await this.readBlobJson(`${workspacePath}/tagnames.json`))
     if (!index || !tagnames) {
       throw new Error('System pack is missing metadata for progress override.')
     }
@@ -396,6 +459,15 @@ class BlobWorkspaceStore extends BaseWorkspaceStore {
       stream: Readable.fromWeb(blob.stream),
       contentType: blob.blob.contentType || 'application/octet-stream'
     }
+  }
+
+  async materializeWorkspace(workspacePath: string) {
+    return this.materializeImportPrefixToTemp(workspacePath)
+  }
+
+  async replaceWorkspaceFromLocalDirectory(workspacePath: string, directory: string) {
+    await removeBlobPrefix(workspacePath)
+    await uploadDirectoryToBlob(workspacePath, directory)
   }
 
   async deleteWorkspace(workspacePath: string) {
@@ -469,6 +541,35 @@ class RailwayWorkspaceStore extends BaseWorkspaceStore {
   async loadPack(packRow: any, blockToOpen: string) {
     const workspacePath = packRow.workspace_path
     const override = packRow.progress_override_path
+    const nativeManifest = await readS3Json(`${workspacePath}/${NATIVE_QBANK_MANIFEST}`)
+    if (nativeManifest?.format === NATIVE_QBANK_FORMAT) {
+      const snapshot = await readS3Json(`${workspacePath}/${NATIVE_QBANK_INFO_SNAPSHOT}`)
+      if (!snapshot) {
+        throw new Error('Native Study Pack is missing generated qbank metadata in Railway bucket storage.')
+      }
+      const progressSource = override || workspacePath
+      let progress = await readS3Json(`${progressSource}/progress.json`)
+      if (!progress && override) {
+        progress = {
+          blockhist: {},
+          tagbuckets: createTagBuckets(snapshot.index, snapshot.tagnames)
+        }
+        await writeS3Json(`${override}/progress.json`, progress)
+      }
+      if (!progress) {
+        throw new Error('Native Study Pack is missing progress metadata in Railway bucket storage.')
+      }
+      const qbankinfo = {
+        ...withNativeQuestionPaths(snapshot, nativeManifest),
+        progress,
+        path: `/api/study-packs/${packRow.id}/file`,
+        revision: packRow.revision,
+        blockToOpen: blockToOpen || ''
+      }
+      normalizeProgress(qbankinfo.progress, qbankinfo)
+      return { qbankinfo }
+    }
+
     const index = await readS3Json(`${workspacePath}/index.json`)
     const tagnames = await readS3Json(`${workspacePath}/tagnames.json`)
     const choices = await readS3Json(`${workspacePath}/choices.json`)
@@ -508,8 +609,9 @@ class RailwayWorkspaceStore extends BaseWorkspaceStore {
   }
 
   async initProgressOverride(workspacePath: string, progressPath: string) {
-    const index = await readS3Json(`${workspacePath}/index.json`)
-    const tagnames = await readS3Json(`${workspacePath}/tagnames.json`)
+    const snapshot = await readS3Json(`${workspacePath}/${NATIVE_QBANK_INFO_SNAPSHOT}`)
+    const index = snapshot?.index || (await readS3Json(`${workspacePath}/index.json`))
+    const tagnames = snapshot?.tagnames || (await readS3Json(`${workspacePath}/tagnames.json`))
     if (!index || !tagnames) {
       throw new Error('System pack is missing metadata for progress override.')
     }
@@ -535,6 +637,15 @@ class RailwayWorkspaceStore extends BaseWorkspaceStore {
       stream: file.stream,
       contentType: file.contentType
     }
+  }
+
+  async materializeWorkspace(workspacePath: string) {
+    return materializeS3PrefixToTemp(workspacePath)
+  }
+
+  async replaceWorkspaceFromLocalDirectory(workspacePath: string, directory: string) {
+    await deleteS3Prefix(workspacePath)
+    await uploadDirectoryToS3(workspacePath, directory)
   }
 
   async deleteWorkspace(workspacePath: string) {

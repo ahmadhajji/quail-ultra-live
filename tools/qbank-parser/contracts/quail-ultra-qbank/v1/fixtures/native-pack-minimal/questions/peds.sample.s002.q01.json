@@ -1,0 +1,103 @@
+{
+  "id": "peds.sample.s002.q01",
+  "schemaVersion": 1,
+  "status": "ready",
+  "source": {
+    "documentId": "peds-sample",
+    "documentTitle": "Pediatrics Fixture Slides",
+    "slideNumber": 2,
+    "questionIndex": 1,
+    "sourceGroupId": "peds-sample:2",
+    "comments": []
+  },
+  "tags": {
+    "rotation": "Pediatrics",
+    "subject": "Neonatology",
+    "system": "Hematology",
+    "topic": "Neonatal jaundice",
+    "custom": ["fixture"]
+  },
+  "stem": {
+    "blocks": [
+      { "type": "paragraph", "text": "A neonate develops jaundice at 18 hours of life. Total bilirubin is rising quickly." },
+      { "type": "paragraph", "text": "What is the next best step?" }
+    ]
+  },
+  "choices": [
+    { "id": "A", "label": "A", "displayOrder": 1, "originalOrder": 1, "text": [{ "type": "paragraph", "text": "Routine outpatient follow-up" }], "textHash": "fixture-q02-a" },
+    { "id": "B", "label": "B", "displayOrder": 2, "originalOrder": 2, "text": [{ "type": "paragraph", "text": "Oral iron supplementation" }], "textHash": "fixture-q02-b" },
+    { "id": "C", "label": "C", "displayOrder": 3, "originalOrder": 3, "text": [{ "type": "paragraph", "text": "Start phototherapy and evaluate for hemolysis" }], "textHash": "fixture-q02-c" },
+    { "id": "D", "label": "D", "displayOrder": 4, "originalOrder": 4, "text": [{ "type": "paragraph", "text": "Delay treatment until 72 hours of life" }], "textHash": "fixture-q02-d" }
+  ],
+  "answerKey": {
+    "correctChoiceId": "C",
+    "source": "slide answer key",
+    "confidence": 0.96,
+    "reviewStatus": "approved"
+  },
+  "explanation": {
+    "correct": [
+      { "type": "paragraph", "text": "Jaundice in the first 24 hours is pathologic and requires prompt treatment and evaluation." },
+      { "type": "media", "mediaId": "q02.explanation.nomogram", "caption": "Treatment threshold example from the explanation material." }
+    ],
+    "incorrect": {
+      "A": [{ "type": "paragraph", "text": "Early jaundice should not be managed with routine follow-up alone." }],
+      "B": [{ "type": "paragraph", "text": "Iron does not treat neonatal hyperbilirubinemia." }],
+      "D": [{ "type": "paragraph", "text": "Delaying treatment increases risk of bilirubin neurotoxicity." }]
+    },
+    "educationalObjective": [
+      { "type": "paragraph", "text": "Identify pathologic neonatal jaundice and initiate treatment promptly." }
+    ],
+    "references": ["fixture-source"]
+  },
+  "media": [
+    {
+      "id": "q02.explanation.nomogram",
+      "path": "media/q02-explanation-nomogram.svg",
+      "mimeType": "image/svg+xml",
+      "role": "explanation",
+      "sha256": "fixture-q02-explanation-nomogram",
+      "width": 640,
+      "height": 360
+    }
+  ],
+  "quality": {
+    "parserConfidence": 0.96,
+    "validationStatus": "passed",
+    "reviewStatus": "approved",
+    "warnings": [],
+    "errors": [],
+    "factCheck": {
+      "status": "confirmed",
+      "note": "Fixture fact check.",
+      "sources": ["fixture-source"],
+      "model": "fixture"
+    }
+  },
+  "ai": {
+    "extractionModel": "fixture",
+    "formatterModel": "fixture",
+    "promptVersion": "fixture",
+    "schemaVersion": "1",
+    "inputHash": "fixture-q02-input",
+    "outputHash": "fixture-q02-output",
+    "cacheKeys": ["fixture-q02"],
+    "cost": {
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "estimatedUsd": 0
+    }
+  },
+  "dedupe": {
+    "fingerprint": "peds-sample:jaundice",
+    "relatedQuestionIds": [],
+    "conflictStatus": "none"
+  },
+  "integrity": {
+    "sourceHash": "fixture-q02-source",
+    "contentHash": "fixture-q02-content",
+    "mediaHashes": {
+      "q02.explanation.nomogram": "fixture-q02-explanation-nomogram"
+    }
+  }
+}

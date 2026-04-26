@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { AdminUser, AppSettings, InviteCreationResult, InviteRecord, LibraryPackSummary, PackProgressSummary, QbankInfo, StudyPackSummary, User } from '../types/domain'
+import type { AdminUser, AppSettings, InviteCreationResult, InviteRecord, LibraryPackSummary, NativePackContent, NativePackDiff, NativeQuestionSummary, PackProgressSummary, QbankInfo, StudyPackSummary, User } from '../types/domain'
 
 const userSchema = z.object({
   id: z.string(),
@@ -117,6 +117,13 @@ const progressSchema = z.object({
 })
 
 export const qbankInfoSchema = z.object({
+  format: z.enum(['legacy', 'native']).optional(),
+  nativeContent: z.object({
+    format: z.string(),
+    schemaVersion: z.number(),
+    manifestPath: z.string(),
+    questionPaths: z.record(z.string(), z.string()).default({})
+  }).optional(),
   index: z.record(z.string(), z.record(z.string(), z.string())),
   tagnames: z.object({
     tagnames: z.record(z.string(), z.string())
@@ -229,3 +236,67 @@ export const packProgressSummarySchema = z.object({
   unusedCount: z.number(),
   incorrectCount: z.number()
 }).transform((value): PackProgressSummary => value)
+
+export const nativeQuestionSummarySchema = z.object({
+  id: z.string(),
+  path: z.string().default(''),
+  status: z.enum(['draft', 'ready', 'blocked', 'deprecated']),
+  titlePreview: z.string().default(''),
+  contentHash: z.string().default(''),
+  correctChoiceId: z.string().default(''),
+  tags: z.record(z.string(), z.unknown()).default({}),
+  source: z.record(z.string(), z.unknown()).default({}),
+  parserConfidence: z.number().nullable().default(null),
+  reviewStatus: z.string().default(''),
+  validationStatus: z.string().default(''),
+  warnings: z.array(z.string()).default([]),
+  changeSummary: z.string().default(''),
+  replacesQuestionId: z.string().default('')
+}).transform((value): NativeQuestionSummary => value)
+
+export const nativePackDiffSchema = z.object({
+  targetPackId: z.string().default(''),
+  incomingPackId: z.string().default(''),
+  currentRevision: z.number().default(0),
+  incomingRevision: z.number().default(0),
+  activeQuestionCount: z.number().default(0),
+  totalQuestionCount: z.number().default(0),
+  added: z.array(nativeQuestionSummarySchema).default([]),
+  changed: z.array(nativeQuestionSummarySchema).default([]),
+  unchanged: z.array(nativeQuestionSummarySchema).default([]),
+  deprecated: z.array(nativeQuestionSummarySchema).default([]),
+  blocked: z.array(nativeQuestionSummarySchema).default([]),
+  removed: z.array(nativeQuestionSummarySchema).default([]),
+  warnings: z.array(z.string()).default([]),
+  errors: z.array(z.string()).default([]),
+  canPublish: z.boolean().default(false)
+}).transform((value): NativePackDiff => value)
+
+export const nativePackContentSchema = z.object({
+  pack: libraryPackSchema,
+  native: z.boolean(),
+  error: z.string().optional(),
+  manifest: z.object({
+    packId: z.string(),
+    title: z.string(),
+    revision: z.object({
+      number: z.number(),
+      hash: z.string(),
+      previousHash: z.string().optional()
+    }),
+    validation: z.object({
+      status: z.string(),
+      errors: z.array(z.string()),
+      warnings: z.array(z.string()),
+      blockedQuestionCount: z.number()
+    }),
+    activeQuestionCount: z.number(),
+    totalQuestionCount: z.number()
+  }).optional(),
+  validation: z.object({
+    ok: z.boolean(),
+    errors: z.array(z.string()),
+    warnings: z.array(z.string())
+  }).optional(),
+  questions: z.array(nativeQuestionSummarySchema).optional()
+}).transform((value): NativePackContent => value)

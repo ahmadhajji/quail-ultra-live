@@ -1,0 +1,56 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# Environment variables
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Output files (user data)
+output/**
+!output/.gitkeep
+!output/extracted_images/
+!output/extracted_images/.gitkeep
+
+# Parser inputs and generated deliverables
+data/**
+!data/.gitkeep
+deliverables/
+
+# Extracted images
+data/extracted/
+
+# Google credentials (sensitive)
+credentials.json
+token.json
+
+# Temporary files
+*.tmp
+*.temp
+archives/
+!archives/
+archives/*
+!archives/.gitkeep
+token.json.bak.*
+stats/cumulative.json
+
+# Packaging artifacts
+build/
+dist/
+*.egg-info/
+*.spec

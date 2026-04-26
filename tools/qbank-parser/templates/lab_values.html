@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab Values Reference</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      padding: 12px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    h1 {
+      font-size: 18px;
+      color: #4fc3f7;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+    #search {
+      width: 100%;
+      padding: 10px 14px;
+      font-size: 14px;
+      border: 1px solid #3d3d5c;
+      border-radius: 8px;
+      background: #252545;
+      color: #fff;
+      margin-bottom: 12px;
+    }
+    #search:focus { outline: none; border-color: #4fc3f7; }
+    #search::placeholder { color: #888; }
+    .category {
+      background: #252545;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      overflow: hidden;
+    }
+    .category-header {
+      background: #3d3d5c;
+      padding: 10px 14px;
+      font-weight: 600;
+      color: #4fc3f7;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .category-header:hover { background: #4a4a6a; }
+    .category-header::after {
+      content: '▼';
+      font-size: 10px;
+      transition: transform 0.2s;
+    }
+    .category.collapsed .category-header::after { transform: rotate(-90deg); }
+    .category.collapsed .category-content { display: none; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 8px 10px;
+      text-align: left;
+      border-bottom: 1px solid #3d3d5c;
+    }
+    th {
+      background: #1a1a2e;
+      color: #888;
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+    tr:hover { background: #2a2a4a; }
+    tr.hidden { display: none; }
+    .test-name { color: #fff; font-weight: 500; }
+    .value { color: #81c784; }
+    .unit { color: #aaa; font-size: 12px; }
+    .no-results {
+      text-align: center;
+      padding: 20px;
+      color: #888;
+      display: none;
+    }
+    .source {
+      text-align: center;
+      color: #666;
+      font-size: 11px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #3d3d5c;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔬 Lab Values Reference</h1>
+  <input type="text" id="search" placeholder="Search (e.g., sodium, hemoglobin, TSH...)">
+  
+  <div id="categories">
+    <!-- General Chemistry -->
+    <div class="category">
+      <div class="category-header">General Chemistry</div>
+      <div class="category-content">
+        <table>
+          <tr><th>Test</th><th>Reference Range</th></tr>
+          <tr><td class="test-name">Sodium (Na+)</td><td><span class="value">136-145</span> <span class="unit">mEq/L</span></td></tr>
+          <tr><td class="test-name">Potassium (K+)</td><td><span class="value">3.5-5.0</span> <span class="unit">mEq/L</span></td></tr>
+          <tr><td class="test-name">Chloride (Cl-)</td><td><span class="value">98-106</span> <span class="unit">mEq/L</span></td></tr>
+          <tr><td class="test-name">Bicarbonate (HCO3-)</td><td><span class="value">22-28</span> <span class="unit">mEq/L</span></td></tr>
+          <tr><td class="test-name">BUN (Urea Nitrogen)</td><td><span class="value">7-20</span> <span class="unit">mg/dL</span></td></tr>
+          <tr><td class="test-name">Creatinine</td><td><span class="value">0.6-1.2</span> <span class="unit">mg/dL</span></td></tr>
+          <tr><td class="test-name">Glucose (fasting)</td><td><span class="value">70-100</span> <span class="unit">mg/dL</span></td></tr>
+          <tr><td class="test-name">Calcium (Ca2+)</td><td><span class="value">8.5-10.5</span> <span class="unit">mg/dL</span></td></tr>
+          <tr><td class="test-name">Ionized Calcium</td><td><span class="value">4.5-5.6</span> <span class="unit">mg/dL</span></td></tr>
+          <tr><td class="test-name">Magnesium (Mg2+)</td><td><span class="value">1.5-2.5</span> <span class="unit">mg/dL</span></td></tr>
+          <tr><td class="test-name">Phosphorus (inorganic)</td><td><span class="value">2.5-4.5</span> <span class="unit">mg/dL</span></td></tr>
+          <tr><td class="test-name">Uric Acid</td><td><span class="value">3.0-8.0</span> <span class="unit">mg/dL</span></td></tr>
+          <tr><td class="test-name">Osmolality (serum)</td><td><span class="value">280-295</span> <span class="unit">mOsm/kg</span></td></tr>
+          <tr><td class="test-name">Anion Gap</td><td><span class="value">8-12</span> <span class="unit">mEq/L</span></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- Hepatic -->
+    <div class="category">
+      <div class="category-header">Hepatic / Liver Function</div>
+      <div class="category-content">
+        <table>
+          <tr><th>Test</th><th>Reference Range</th></tr>
+          <tr><td class="test-name">ALT (SGPT)</td><td><span class="value">7-56</span> <span class="unit">U/L</span></td></tr>
+          <tr><td class="test-name">AST (SGOT)</td><td><span class="value">10-40</span> <span class="unit">U/L</span></td></tr>
+          <tr><td class="test-name">Alkaline Phosphatase (ALP)</td><td><span class="value">44-147</span> <span class="unit">U/L</span></td></tr>
+          <tr><td class="test-name">GGT (γ-Glutamyl Transferase)</td><td><span class="value">9-48</span> <span class="unit">U/L</span></td></tr>
+          <tr><td class="test-name">Bilirubin, Total</td><td><span class="value">0.1-1.2</span> <span class="unit">mg/dL</span></td></tr>
+          <tr><td class="test-name">Bilirubin, Direct</td><td><span class="value">0.0-0.3</span> <span class="unit">mg/dL</span></td></tr>
+          <tr><td class="test-name">Albumin</td><td><span class="value">3.5-5.0</span> <span class="unit">g/dL</span></td></tr>
+          <tr><td class="test-name">Total Protein</td><td><span class="value">6.0-8.0</span> <span class="unit">g/dL</span></td></tr>
+          <tr><td class="test-name">Globulin</td><td><span class="value">2.0-3.5</span> <span class="unit">g/dL</span></td></tr>
+          <tr><td class="test-name">Ammonia</td><td><span class="value">15-45</span> <span class="unit">µg/dL</span></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- Hematologic -->
+    <div class="category">
+      <div class="category-header">Hematologic (CBC)</div>
+      <div class="category-content">
+        <table>
+          <tr><th>Test</th><th>Reference Range</th></tr>
+          <tr><td class="test-name">Hemoglobin (Hgb) - Male</td><td><span class="value">13.5-17.5</span> <span class="unit">g/dL</span></td></tr>
+          <tr><td class="test-name">Hemoglobin (Hgb) - Female</td><td><span class="value">12.0-16.0</span> <span class="unit">g/dL</span></td></tr>
+          <tr><td class="test-name">Hematocrit (Hct) - Male</td><td><span class="value">41-53</span> <span class="unit">%</span></td></tr>
+          <tr><td class="test-name">Hematocrit (Hct) - Female</td><td><span class="value">36-46</span> <span class="unit">%</span></td></tr>
+          <tr><td class="test-name">RBC Count - Male</td><td><span class="value">4.5-5.5</span> <span class="unit">×10⁶/µL</span></td></tr>
+          <tr><td class="test-name">RBC Count - Female</td><td><span class="value">4.0-5.0</span> <span class="unit">×10⁶/µL</span></td></tr>
+          <tr><td class="test-name">WBC Count</td><td><span class="value">4,500-11,000</span> <span class="unit">/µL</span></td></tr>
+          <tr><td class="test-name">Platelet Count</td><td><span class="value">150,000-400,000</span> <span class="unit">/µL</span></td></tr>
+          <tr><td class="test-name">MCV</td><td><span class="value">80-100</span> <span class="unit">fL</span></td></tr>
+          <tr><td class="test-name">MCH</td><td><span class="value">27-33</span> <span class="unit">pg</span></td></tr>
+          <tr><td class="test-name">MCHC</td><td><span class="value">32-36</span> <span class="unit">g/dL</span></td></tr>
+          <tr><td class="test-name">RDW</td><td><span class="value">11.5-14.5</span> <span class="unit">%</span></td></tr>
+          <tr><td class="test-name">Reticulocyte Count</td><td><span class="value">0.5-2.5</span> <span class="unit">%</span></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- WBC Differential -->
+    <div class="category">
+      <div class="category-header">WBC Differential</div>
+      <div class="category-content">
+        <table>
+          <tr><th>Test</th><th>Reference Range</th></tr>
+          <tr><td class="test-name">Neutrophils</td><td><span class="value">40-70</span> <span class="unit">%</span></td></tr>
+          <tr><td class="test-name">Lymphocytes</td><td><span class="value">20-40</span> <span class="unit">%</span></td></tr>
+          <tr><td class="test-name">Monocytes</td><td><span class="value">2-8</span> <span class="unit">%</span></td></tr>
+          <tr><td class="test-name">Eosinophils</td><td><span class="value">1-4</span> <span class="unit">%</span></td></tr>
+          <tr><td class="test-name">Basophils</td><td><span class="value">0-1</span> <span class="unit">%</span></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- Coagulation -->
+    <div class="category">
+      <div class="category-header">Coagulation</div>
+      <div class="category-content">
+        <table>
+          <tr><th>Test</th><th>Reference Range</th></tr>
+          <tr><td class="test-name">PT (Prothrombin Time)</td><td><span class="value">11-13</span> <span class="unit">seconds</span></td></tr>
+          <tr><td class="test-name">INR</td><td><span class="value">0.9-1.1</span> <span class="unit">(ratio)</span></td></tr>
+          <tr><td class="test-name">PTT (Partial Thromboplastin)</td><td><span class="value">25-35</span> <span class="unit">seconds</span></td></tr>
+          <tr><td class="test-name">Thrombin Time</td><td><span class="value">14-19</span> <span class="unit">seconds</span></td></tr>
+          <tr><td class="test-name">Bleeding Time</td><td><span class="value">2-7</span> <span class="unit">minutes</span></td></tr>
+          <tr><td class="test-name">Fibrinogen</td><td><span class="value">200-400</span> <span class="unit">mg/dL</span></td></tr>
+          <tr><td class="test-name">D-Dimer</td><td><span class="value">&lt;0.5</span> <span class="unit">µg/mL</span></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- Lipid Panel -->
+    <div class="category">
+      <div class="category-header">Lipid Panel</div>
+      <div class="category-content">
+        <table>
+          <tr><th>Test</th><th>Reference Range</th></tr>
+          <tr><td class="test-name">Total Cholesterol</td><td><span class="value">&lt;200</span> <span class="unit">mg/dL (desirable)</span></td></tr>
+          <tr><td class="test-name">LDL Cholesterol</td><td><span class="value">&lt;100</span> <span class="unit">mg/dL (optimal)</span></td></tr>
+          <tr><td class="test-name">HDL Cholesterol</td><td><span class="value">&gt;40</span> <span class="unit">mg/dL</span></td></tr>
+          <tr><td class="test-name">Triglycerides</td><td><span class="value">&lt;150</span> <span class="unit">mg/dL</span></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- ABG -->
+    <div class="category">
+      <div class="category-header">Arterial Blood Gas (ABG)</div>
+      <div class="category-content">
+        <table>
+          <tr><th>Test</th><th>Reference Range</th></tr>
+          <tr><td class="test-name">pH</td><td><span class="value">7.35-7.45</span> <span class="unit"></span></td></tr>
+          <tr><td class="test-name">PaCO₂</td><td><span class="value">35-45</span> <span class="unit">mmHg</span></td></tr>
+          <tr><td class="test-name">PaO₂</td><td><span class="value">80-100</span> <span class="unit">mmHg</span></td></tr>
+          <tr><td class="test-name">HCO₃⁻</td><td><span class="value">22-26</span> <span class="unit">mEq/L</span></td></tr>
+          <tr><td class="test-name">O₂ Saturation</td><td><span class="value">95-100</span> <span class="unit">%</span></td></tr>
+          <tr><td class="test-name">Base Excess</td><td><span class="value">-2 to +2</span> <span class="unit">mEq/L</span></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- Endocrine/Thyroid -->
+    <div class="category">
+      <div class="category-header">Endocrine / Thyroid</div>
+      <div class="category-content">
+        <table>
+          <tr><th>Test</th><th>Reference Range</th></tr>
+          <tr><td class="test-name">TSH</td><td><span class="value">0.5-5.0</span> <span class="unit">µU/mL</span></td></tr>
+          <tr><td class="test-name">Free T4</td><td><span class="value">0.7-1.9</span> <span class="unit">ng/dL</span></td></tr>
+          <tr><td class="test-name">Total T4</td><td><span class="value">5-12</span> <span class="unit">µg/dL</span></td></tr>
+          <tr><td class="test-name">Total T3</td><td><span class="value">80-180</span> <span class="unit">ng/dL</span></td></tr>
+          <tr><td class="test-name">Cortisol (8 AM)</td><td><span class="value">5-23</span> <span class="unit">µg/dL</span></td></tr>
+          <tr><td class="test-name">ACTH</td><td><span class="value">10-60</span> <span class="unit">pg/mL</span></td></tr>
+          <tr><td class="test-name">FSH - Male</td><td><span class="value">1-12</span> <span class="unit">mIU/mL</span></td></tr>
+          <tr><td class="test-name">FSH - Female (follicular)</td><td><span class="value">3-10</span> <span class="unit">mIU/mL</span></td></tr>
+          <tr><td class="test-name">LH - Male</td><td><span class="value">2-12</span> <span class="unit">mIU/mL</span></td></tr>
+          <tr><td class="test-name">LH - Female (follicular)</td><td><span class="value">2-15</span> <span class="unit">mIU/mL</span></td></tr>
+          <tr><td class="test-name">Prolactin</td><td><span class="value">&lt;20</span> <span class="unit">ng/mL</span></td></tr>
+          <tr><td class="test-name">Growth Hormone (fasting)</td><td><span class="value">&lt;5</span> <span class="unit">ng/mL</span></td></tr>
+          <tr><td class="test-name">PTH (intact)</td><td><span class="value">10-65</span> <span class="unit">pg/mL</span></td></tr>
+          <tr><td class="test-name">Vitamin D (25-OH)</td><td><span class="value">30-100</span> <span class="unit">ng/mL</span></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- Iron Studies -->
+    <div class="category">
+      <div class="category-header">Iron Studies</div>
+      <div class="category-content">
+        <table>
+          <tr><th>Test</th><th>Reference Range</th></tr>
+          <tr><td class="test-name">Serum Iron</td><td><span class="value">60-170</span> <span class="unit">µg/dL</span></td></tr>
+          <tr><td class="test-name">TIBC</td><td><span class="value">250-370</span> <span class="unit">µg/dL</span></td></tr>
+          <tr><td class="test-name">Transferrin Saturation</td><td><span class="value">20-50</span> <span class="unit">%</span></td></tr>
+          <tr><td class="test-name">Ferritin - Male</td><td><span class="value">12-300</span> <span class="unit">ng/mL</span></td></tr>
+          <tr><td class="test-name">Ferritin - Female</td><td><span class="value">12-150</span> <span class="unit">ng/mL</span></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- Cardiac -->
+    <div class="category">
+      <div class="category-header">Cardiac Markers</div>
+      <div class="category-content">
+        <table>
+          <tr><th>Test</th><th>Reference Range</th></tr>
+          <tr><td class="test-name">Troponin I</td><td><span class="value">&lt;0.04</span> <span class="unit">ng/mL</span></td></tr>
+          <tr><td class="test-name">Troponin T</td><td><span class="value">&lt;0.01</span> <span class="unit">ng/mL</span></td></tr>
+          <tr><td class="test-name">CK-MB</td><td><span class="value">&lt;5</span> <span class="unit">ng/mL</span></td></tr>
+          <tr><td class="test-name">CK (Total)</td><td><span class="value">30-200</span> <span class="unit">U/L</span></td></tr>
+          <tr><td class="test-name">LDH</td><td><span class="value">140-280</span> <span class="unit">U/L</span></td></tr>
+          <tr><td class="test-name">BNP</td><td><span class="value">&lt;100</span> <span class="unit">pg/mL</span></td></tr>
+          <tr><td class="test-name">NT-proBNP</td><td><span class="value">&lt;300</span> <span class="unit">pg/mL</span></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- Pancreatic -->
+    <div class="category">
+      <div class="category-header">Pancreatic Enzymes</div>
+      <div class="category-content">
+        <table>
+          <tr><th>Test</th><th>Reference Range</th></tr>
+          <tr><td class="test-name">Amylase</td><td><span class="value">25-125</span> <span class="unit">U/L</span></td></tr>
+          <tr><td class="test-name">Lipase</td><td><span class="value">10-140</span> <span class="unit">U/L</span></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- CSF -->
+    <div class="category">
+      <div class="category-header">Cerebrospinal Fluid (CSF)</div>
+      <div class="category-content">
+        <table>
+          <tr><th>Test</th><th>Reference Range</th></tr>
+          <tr><td class="test-name">Opening Pressure</td><td><span class="value">70-180</span> <span class="unit">mm H₂O</span></td></tr>
+          <tr><td class="test-name">Glucose</td><td><span class="value">40-70</span> <span class="unit">mg/dL</span></td></tr>
+          <tr><td class="test-name">Protein</td><td><span class="value">15-45</span> <span class="unit">mg/dL</span></td></tr>
+          <tr><td class="test-name">WBC Count</td><td><span class="value">0-5</span> <span class="unit">cells/µL</span></td></tr>
+          <tr><td class="test-name">RBC Count</td><td><span class="value">0</span> <span class="unit">cells/µL</span></td></tr>
+          <tr><td class="test-name">Chloride</td><td><span class="value">118-132</span> <span class="unit">mEq/L</span></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- Urinalysis -->
+    <div class="category">
+      <div class="category-header">Urinalysis</div>
+      <div class="category-content">
+        <table>
+          <tr><th>Test</th><th>Reference Range</th></tr>
+          <tr><td class="test-name">pH</td><td><span class="value">4.5-8.0</span> <span class="unit"></span></td></tr>
+          <tr><td class="test-name">Specific Gravity</td><td><span class="value">1.005-1.030</span> <span class="unit"></span></td></tr>
+          <tr><td class="test-name">Osmolality</td><td><span class="value">50-1200</span> <span class="unit">mOsm/kg</span></td></tr>
+          <tr><td class="test-name">Protein</td><td><span class="value">Negative</span> <span class="unit"></span></td></tr>
+          <tr><td class="test-name">Glucose</td><td><span class="value">Negative</span> <span class="unit"></span></td></tr>
+          <tr><td class="test-name">Ketones</td><td><span class="value">Negative</span> <span class="unit"></span></td></tr>
+          <tr><td class="test-name">Blood</td><td><span class="value">Negative</span> <span class="unit"></span></td></tr>
+          <tr><td class="test-name">Leukocyte Esterase</td><td><span class="value">Negative</span> <span class="unit"></span></td></tr>
+          <tr><td class="test-name">Nitrites</td><td><span class="value">Negative</span> <span class="unit"></span></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- Immunoglobulins -->
+    <div class="category collapsed">
+      <div class="category-header">Immunoglobulins</div>
+      <div class="category-content">
+        <table>
+          <tr><th>Test</th><th>Reference Range</th></tr>
+          <tr><td class="test-name">IgG</td><td><span class="value">700-1600</span> <span class="unit">mg/dL</span></td></tr>
+          <tr><td class="test-name">IgA</td><td><span class="value">70-400</span> <span class="unit">mg/dL</span></td></tr>
+          <tr><td class="test-name">IgM</td><td><span class="value">40-230</span> <span class="unit">mg/dL</span></td></tr>
+          <tr><td class="test-name">IgE</td><td><span class="value">&lt;100</span> <span class="unit">IU/mL</span></td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="no-results" id="noResults">No matching lab values found.</div>
+  
+  <div class="source">Reference: NBME USMLE Laboratory Values</div>
+
+  <script>
+    // Toggle category collapse
+    document.querySelectorAll('.category-header').forEach(header => {
+      header.addEventListener('click', () => {
+        header.parentElement.classList.toggle('collapsed');
+      });
+    });
+
+    // Search functionality
+    const searchInput = document.getElementById('search');
+    const categories = document.querySelectorAll('.category');
+    const noResults = document.getElementById('noResults');
+
+    searchInput.addEventListener('input', function() {
+      const query = this.value.toLowerCase().trim();
+      let hasResults = false;
+
+      categories.forEach(category => {
+        const rows = category.querySelectorAll('tbody tr, table tr:not(:first-child)');
+        let categoryHasMatch = false;
+
+        rows.forEach(row => {
+          const text = row.textContent.toLowerCase();
+          if (query === '' || text.includes(query)) {
+            row.classList.remove('hidden');
+            categoryHasMatch = true;
+          } else {
+            row.classList.add('hidden');
+          }
+        });
+
+        if (categoryHasMatch) {
+          category.style.display = '';
+          category.classList.remove('collapsed');
+          hasResults = true;
+        } else {
+          category.style.display = 'none';
+        }
+      });
+
+      noResults.style.display = hasResults ? 'none' : 'block';
+    });
+  </script>
+</body>
+</html>

@@ -8,6 +8,7 @@ RUN npm ci
 COPY server ./server
 COPY shared ./shared
 COPY frontend ./frontend
+COPY contracts ./contracts
 COPY tsconfig.json tsconfig.server.json tsconfig.worker.json ./
 
 RUN npm run build
