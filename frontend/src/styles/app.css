@@ -863,6 +863,44 @@ body.q-shell {
   gap: 24px;
 }
 
+.footer-warning-wrap {
+  position: relative;
+}
+
+.footer-warning-btn {
+  align-items: center;
+  background: none;
+  border: none;
+  color: #f6c90e;
+  cursor: pointer;
+  display: flex;
+  opacity: 0.85;
+  padding: 4px;
+}
+
+.footer-warning-btn:hover,
+.footer-warning-btn.open {
+  opacity: 1;
+}
+
+.footer-warning-popover {
+  background: #1e293b;
+  border: 1px solid #f6c90e;
+  border-radius: 6px;
+  bottom: calc(100% + 8px);
+  color: #f1f5f9;
+  font-size: 12px;
+  left: 50%;
+  line-height: 1.5;
+  max-width: 260px;
+  padding: 8px 10px;
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: normal;
+  width: max-content;
+  z-index: 200;
+}
+
 .footer-timer {
   display: flex;
   align-items: center;
