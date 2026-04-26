@@ -25,11 +25,8 @@ Quail Ultra Live is a web-first Quail fork for USMLE-style question solving.
 
 ## QBank Compatibility
 
-- This app must stay aligned with the qbank parser/exporter repo so generated banks remain compatible.
-- Local parser repo: `/Users/ahmadhajji/.gemini/antigravity/scratch/qbank-parser`
-- GitHub parser repo: `https://github.com/ahmadhajji/qbank-parser`
-- Source of truth for the folder structure and accepted qbank format in this repo: `docs/qbank-format.md`
-- Parser-side note: `qbank-parser/docs/quail-ultra-live-qbank-delta.md` is a delta/backlog document, not the final standard.
+- The parser is embedded in this repo as `tools/qbank-parser` (v2, Python-based).
+- Source of truth for the folder structure and accepted qbank format: `docs/qbank-format.md`
 - Any change to import rules, qbank parsing, metadata expectations, or rendered question/explanation behavior should be checked against the parser output contract as well as the app.
 
 ## Workflow
