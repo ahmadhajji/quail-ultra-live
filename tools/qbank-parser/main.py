@@ -331,6 +331,50 @@ def _run_native_export_from_extracted(args: argparse.Namespace) -> bool:
     return True
 
 
+def _run_v2_pipeline(args: argparse.Namespace) -> bool:
+    """Run the simplified v2 pipeline (Stages 1+2 land in PR 2; Stages 3+4 in PR 3+4)."""
+    if not args.pptx_file and not args.google_slides_link:
+        _print("[red]--v2 requires either a PPTX file or --google-slides-link[/red]")
+        return False
+    if not args.rotation:
+        _print("[red]--v2 requires --rotation (no inference; e.g. --rotation Pediatrics)[/red]")
+        return False
+
+    from app.v2_pipeline import V2RunOptions, run_v2_stages_1_and_2
+
+    opts = V2RunOptions(
+        google_slides_link=args.google_slides_link or "",
+        google_slides_id=args.google_slides_id or "",
+        pptx_path=args.pptx_file or "",
+        rotation=args.rotation,
+        pack_id=args.pack_id or "qbank",
+        title=args.title or (f"{args.rotation} QBank" if args.rotation else ""),
+        output_dir=Path(args.native_pack_dir) if args.native_pack_dir else OUTPUT_DIR,
+        api_key=OPENAI_API_KEY,
+    )
+
+    try:
+        result = run_v2_stages_1_and_2(opts)
+    except Exception as exc:
+        _print(f"[red]v2 pipeline failed:[/red] {exc}")
+        return False
+
+    _print(
+        f"[bold green]v2 Stages 1+2 complete:[/bold green] {result.metadata['slide_count']} slides, "
+        f"{len(result.detected_questions)} questions detected, "
+        f"{result.stats.ai_calls} AI calls "
+        f"({result.stats.prompt_tokens + result.stats.completion_tokens} tokens), "
+        f"{result.stats.cache_hits} cache hits, "
+        f"{result.stats.duration_seconds:.1f}s"
+    )
+    if result.stage2_errors:
+        _print(f"[yellow]Stage 2 errors on {len(result.stage2_errors)} slides:[/yellow]")
+        for slide_num, msg in sorted(result.stage2_errors.items()):
+            _print(f"  • slide {slide_num}: {msg}")
+    _print("[dim]Stages 3 (USMLE rewrite) and 4 (native pack export) land in PR 3 + PR 4.[/dim]")
+    return True
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="QBank Parser - Extract and format medical questions from Google Slides",
@@ -470,6 +514,12 @@ Examples:
         help="Save extraction progress every N processed slides",
     )
     parser.add_argument("--rotation", type=str, default="", help="Rotation label for native pack title/tags when available")
+    parser.add_argument(
+        "--v2",
+        action="store_true",
+        help="Run the simplified v2 pipeline (extract -> detect -> rewrite -> native pack). "
+        "Will become default once promoted; see docs/v2-migration-kill-list.md.",
+    )
     parser.add_argument("--slide-range", type=str, default=None, help="Only process this inclusive slide range before AI calls, e.g. 1-15")
     parser.add_argument("--max-slides", type=int, default=None, help="Hard cap on selected slides before AI calls")
     parser.add_argument("--max-questions", type=int, default=None, help="Hard cap on extracted/exported questions where practical")
@@ -523,6 +573,12 @@ Examples:
 
     if args.status:
         check_status()
+        return
+
+    if args.v2:
+        ok = _run_v2_pipeline(args)
+        if not ok:
+            sys.exit(1)
         return
 
     if args.all_time_stats:
