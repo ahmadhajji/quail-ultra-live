@@ -499,6 +499,79 @@ def _save_rewrite_cache(path: Path, cache: dict[str, dict]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Stage 4 — Native pack export
+# ---------------------------------------------------------------------------
+
+
+def _rewritten_to_legacy_dict(question: RewrittenQuestion) -> dict[str, Any]:
+    """Translate a v2 RewrittenQuestion into the legacy USMLEQuestion dict format
+    that export_native_quail_qbank consumes.
+    """
+    return {
+        "question_id": question.question_id,
+        "original_slide_number": question.slide_number,
+        "original_question_index": question.question_index,
+        "slide_number": question.slide_number,
+        "question_index": question.question_index,
+        "question_stem": question.stem,
+        "question": "",
+        "choices": dict(question.choices),
+        "correct_answer": question.correct_answer,
+        "correct_answer_explanation": question.correct_explanation,
+        "incorrect_explanations": dict(question.incorrect_explanations),
+        "educational_objective": question.educational_objective,
+        "tags": {"rotation": question.rotation, "topic": question.topic},
+        "images": list(question.stem_image_paths),
+        "explanation_images": list(question.explanation_image_paths),
+        "comments": list(question.comments),
+        "deck_id": question.deck_id,
+        "source_slide_path": question.source_slide_path,
+        "warnings": list(question.warnings),
+        "extraction_classification": "accepted",
+        "review_status": "approved",
+        "fact_check": {},
+    }
+
+
+def stage4_export(
+    rewritten_questions: list[RewrittenQuestion],
+    opts: V2RunOptions,
+    *,
+    export_fn: Callable[..., Any] | None = None,
+) -> Any:
+    """Export rewritten questions as a Quail Ultra native pack.
+
+    Returns the NativeQuailExportSummary from the existing exporter.
+    `export_fn` may be injected for testing.
+    """
+    if export_fn is None:
+        from export.native_quail_export import export_native_quail_qbank as _export_fn
+
+        export_fn = _export_fn
+
+    output_dir = Path(opts.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    legacy_payload = {
+        "questions": [_rewritten_to_legacy_dict(q) for q in rewritten_questions],
+    }
+    intermediate_path = output_dir / "v2_export_input.json"
+    intermediate_path.write_text(
+        json.dumps(legacy_payload, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+    pack_dir = output_dir / "packs" / (opts.pack_id or "qbank")
+
+    summary = export_fn(
+        source_json=intermediate_path,
+        output_dir=pack_dir,
+        pack_id=opts.pack_id or "qbank",
+        title=opts.title or (f"{opts.rotation} QBank" if opts.rotation else None),
+    )
+    return summary
+
+
+# ---------------------------------------------------------------------------
 # Top-level orchestrators
 # ---------------------------------------------------------------------------
 
@@ -514,6 +587,7 @@ class V2RunResult:
     stage2_errors: dict[int, str]
     stage3_errors: dict[str, str]
     stats: V2RunStats
+    pack_summary: Any = None
 
 
 def run_v2_stages_1_and_2(opts: V2RunOptions) -> V2RunResult:
@@ -543,8 +617,12 @@ def run_v2_stages_1_and_2(opts: V2RunOptions) -> V2RunResult:
     )
 
 
-def run_v2_pipeline(opts: V2RunOptions) -> V2RunResult:
-    """Run all four v2 stages end-to-end (Stage 4 lands in PR 4)."""
+def run_v2_pipeline(
+    opts: V2RunOptions,
+    *,
+    export_fn: Callable[..., Any] | None = None,
+) -> V2RunResult:
+    """Run all four v2 stages end-to-end."""
     started = time.monotonic()
     stats = V2RunStats()
 
@@ -554,6 +632,14 @@ def run_v2_pipeline(opts: V2RunOptions) -> V2RunResult:
     # Filter out detection errors before sending to rewrite
     healthy_detected = [q for q in detected if q.status != "error" and not q.error]
     rewritten, stage3_errors = stage3_rewrite(healthy_detected, opts, stats)
+
+    pack_summary = None
+    if rewritten:
+        try:
+            pack_summary = stage4_export(rewritten, opts, export_fn=export_fn)
+        except Exception as exc:
+            logger.exception("Stage 4 native pack export failed: %s", exc)
+            stage3_errors["__stage4_export__"] = str(exc)
 
     stats.duration_seconds = time.monotonic() - started
     stats_path = Path(opts.output_dir) / "v2_run_stats.json"
@@ -570,4 +656,5 @@ def run_v2_pipeline(opts: V2RunOptions) -> V2RunResult:
         stage2_errors=stage2_errors,
         stage3_errors=stage3_errors,
         stats=stats,
+        pack_summary=pack_summary,
     )

@@ -418,6 +418,21 @@ class _StubDetectAdapter:
         )
 
 
+def _stub_pack_export_fn():
+    """Drop-in for export_native_quail_qbank that just records the call."""
+    calls = []
+
+    def _fn(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(
+            output_dir=str(kwargs.get("output_dir")),
+            qa_report_markdown=None,
+        )
+
+    _fn.calls = calls  # type: ignore[attr-defined]
+    return _fn
+
+
 def test_run_v2_pipeline_end_to_end_smoke(tmp_path):
     pptx = tmp_path / "deck.pptx"
     pptx.write_bytes(b"fake")
@@ -427,18 +442,21 @@ def test_run_v2_pipeline_end_to_end_smoke(tmp_path):
         SlideContent(slide_number=2, texts=["Q2?"], speaker_notes="n", images=[]),
     ]
     screenshots = [str(tmp_path / "shot1.png"), str(tmp_path / "shot2.png")]
+    export_fn = _stub_pack_export_fn()
 
     opts = V2RunOptions(
         pptx_path=str(pptx),
         output_dir=out,
         rotation="Pediatrics",
+        pack_id="test-peds",
+        title="Peds Smoke",
         api_key="sk-test",
         parse_pptx_fn=lambda *a, **kw: slide_contents,
         pptx_to_images_fn=lambda *a, **kw: screenshots,
         detect_adapter=_StubDetectAdapter(),
         rewrite_adapter=_StubRewriteAdapter(),
     )
-    result = run_v2_pipeline(opts)
+    result = run_v2_pipeline(opts, export_fn=export_fn)
     assert len(result.raw_slides) == 2
     assert len(result.detected_questions) == 2
     assert len(result.rewritten_questions) == 2
@@ -448,5 +466,143 @@ def test_run_v2_pipeline_end_to_end_smoke(tmp_path):
     assert result.stats.detect_calls == 2
     assert result.stats.rewrite_calls == 2
     assert (out / "rewritten_questions.json").exists()
+    assert result.pack_summary is not None
+    assert (out / "v2_export_input.json").exists()
+    payload = json.loads((out / "v2_export_input.json").read_text())
+    assert len(payload["questions"]) == 2
+    assert payload["questions"][0]["tags"]["rotation"] == "Pediatrics"
+    assert export_fn.calls[0]["pack_id"] == "test-peds"
+    assert export_fn.calls[0]["title"] == "Peds Smoke"
     stats_blob = json.loads((out / "v2_run_stats.json").read_text())
     assert stats_blob["rewrite_calls"] == 2
+
+
+def test_stage4_real_exporter_produces_native_pack(tmp_path):
+    """Integration test: invoke the real export_native_quail_qbank and verify pack files."""
+    from app.v2_pipeline import stage4_export
+
+    out = tmp_path / "out"
+    out.mkdir()
+    rewritten = [
+        RewrittenQuestion(
+            deck_id="deck-int",
+            slide_number=1,
+            question_index=1,
+            stem=(
+                "A 5-year-old boy presents with episodic wheezing and nighttime cough. "
+                "He has a history of eczema."
+            ),
+            choices={
+                "A": "Asthma",
+                "B": "Viral upper respiratory infection",
+                "C": "Bacterial pneumonia",
+                "D": "Gastroesophageal reflux disease",
+            },
+            correct_answer="A",
+            correct_explanation="The episodic wheezing strongly suggests asthma.",
+            incorrect_explanations={
+                "B": "URI rarely causes nighttime wheezing.",
+                "C": "Bacterial pneumonia presents with focal findings and fever.",
+                "D": "GERD does not cause expiratory wheezing.",
+            },
+            educational_objective="Recognize the clinical features of pediatric asthma.",
+            rotation="Pediatrics",
+            topic="Respiratory",
+        )
+    ]
+    summary = stage4_export(
+        rewritten,
+        V2RunOptions(
+            pptx_path="x",
+            output_dir=out,
+            rotation="Pediatrics",
+            pack_id="int-test",
+            title="Integration Test",
+            api_key="sk-test",
+        ),
+    )
+    pack_dir = out / "packs" / "int-test"
+    assert pack_dir.exists()
+    manifest_path = pack_dir / "quail-ultra-pack.json"
+    assert manifest_path.exists()
+    manifest = json.loads(manifest_path.read_text())
+    assert manifest["packId"] == "int-test"
+    assert manifest["title"] == "Integration Test"
+    assert len(manifest["questionIndex"]) == 1
+    # Validate the per-question file actually exists and has the expected fields
+    question_relpath = manifest["questionIndex"][0]["path"]
+    question_file = pack_dir / question_relpath
+    assert question_file.exists()
+    qdata = json.loads(question_file.read_text())
+    # Educational objective is a list of content blocks
+    edu_blocks = qdata["explanation"]["educationalObjective"]
+    assert isinstance(edu_blocks, list) and edu_blocks
+    assert any(block.get("text", "").strip() for block in edu_blocks)
+    # Tags carried through correctly
+    assert qdata["tags"]["rotation"] == "Pediatrics"
+    assert qdata["tags"]["topic"] == "Respiratory"
+    # Correct choice id should be one of the choice IDs (post-randomization)
+    correct_id = qdata["answerKey"]["correctChoiceId"]
+    choice_ids = {choice["id"] for choice in qdata["choices"]}
+    assert correct_id in choice_ids
+    # Every non-correct choice has an explanation in `explanation.incorrect`
+    incorrect_map = qdata["explanation"]["incorrect"]
+    non_correct_ids = choice_ids - {correct_id}
+    for choice_id in non_correct_ids:
+        assert choice_id in incorrect_map
+        blocks = incorrect_map[choice_id]
+        assert isinstance(blocks, list) and blocks
+        assert any(block.get("text", "").strip() for block in blocks)
+    # Correct explanation is a non-empty list of blocks
+    correct_blocks = qdata["explanation"]["correct"]
+    assert isinstance(correct_blocks, list) and correct_blocks
+    assert summary is not None
+
+
+def test_stage4_translates_rewritten_to_legacy_dict(tmp_path):
+    from app.v2_pipeline import _rewritten_to_legacy_dict, stage4_export
+
+    out = tmp_path / "out"
+    out.mkdir()
+    rewritten = [
+        RewrittenQuestion(
+            deck_id="d",
+            slide_number=1,
+            question_index=1,
+            stem="Polished stem",
+            choices={"A": "alpha", "B": "beta", "C": "gamma", "D": "delta"},
+            correct_answer="A",
+            correct_explanation="A is correct",
+            incorrect_explanations={"B": "B wrong", "C": "C wrong", "D": "D wrong"},
+            educational_objective="Know alpha",
+            rotation="Pediatrics",
+            topic="Test",
+        )
+    ]
+    legacy = _rewritten_to_legacy_dict(rewritten[0])
+    assert legacy["question_id"] == "1"
+    assert legacy["original_slide_number"] == 1
+    assert legacy["question_stem"] == "Polished stem"
+    assert legacy["correct_answer"] == "A"
+    assert legacy["tags"]["rotation"] == "Pediatrics"
+    assert legacy["tags"]["topic"] == "Test"
+    assert legacy["correct_answer_explanation"] == "A is correct"
+    assert legacy["educational_objective"] == "Know alpha"
+
+    export_fn = _stub_pack_export_fn()
+    summary = stage4_export(
+        rewritten,
+        V2RunOptions(
+            pptx_path="x",
+            output_dir=out,
+            rotation="Pediatrics",
+            pack_id="test-pack",
+            title="Test Pack",
+            api_key="sk-test",
+        ),
+        export_fn=export_fn,
+    )
+    assert summary is not None
+    assert export_fn.calls[0]["pack_id"] == "test-pack"
+    assert export_fn.calls[0]["title"] == "Test Pack"
+    assert (out / "v2_export_input.json").exists()

@@ -376,7 +376,14 @@ def _run_v2_pipeline(args: argparse.Namespace) -> bool:
         _print(f"[yellow]Stage 3 errors on {len(result.stage3_errors)} questions:[/yellow]")
         for qid, msg in sorted(result.stage3_errors.items()):
             _print(f"  • {qid}: {msg}")
-    _print("[dim]Stage 4 (native pack export) lands in PR 4.[/dim]")
+    if result.pack_summary is not None:
+        _print(
+            f"[bold green]Native Quail Ultra pack ready:[/bold green] "
+            f"{getattr(result.pack_summary, 'output_dir', '<unknown>')}"
+        )
+        qa_report = getattr(result.pack_summary, "qa_report_markdown", None)
+        if qa_report:
+            _print(f"  • QA report: {qa_report}")
     return True
 
 
