@@ -240,6 +240,7 @@ def _question_to_native(
     output_dir: Path,
     images_dir: Path,
     source_json_dir: Path,
+    source_tag: str | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], int]:
     choices = sanitize_choice_map(question.get("choices", {}))
     if not isinstance(choices, dict) or len(choices) < 2:
@@ -345,13 +346,16 @@ def _question_to_native(
         copied_count += int(copied)
 
     tags = question.get("tags", {}) if isinstance(question.get("tags", {}), dict) else {}
-    native_tags = {
+    _source_material = str(tags.get("source_material", "") or "") or (source_tag or "")
+    native_tags: dict[str, Any] = {
         "rotation": str(tags.get("rotation", question.get("rotation", "Untagged")) or "Untagged"),
         "subject": str(tags.get("subject", tags.get("discipline", "")) or ""),
         "system": str(tags.get("system", "") or ""),
         "topic": str(tags.get("topic", tags.get("system", tags.get("discipline", "Untagged"))) or "Untagged"),
         "custom": [str(item) for item in tags.get("custom", [])] if isinstance(tags.get("custom"), list) else [],
     }
+    if _source_material:
+        native_tags["source_material"] = _source_material
 
     fact_check = question.get("fact_check", {}) if isinstance(question.get("fact_check", {}), dict) else {}
     confidence = question.get("confidence", question.get("parser_confidence", 100))
@@ -560,6 +564,7 @@ def export_native_quail_qbank(
     only_new: bool = False,
     only_failed: bool = False,
     reprocess_question: str | None = None,
+    source_tag: str | None = None,
     logger: Callable[[str], None] | None = None,
 ) -> NativeQuailExportSummary:
     logger_fn = logger or _default_logger
@@ -668,6 +673,7 @@ def export_native_quail_qbank(
                 output_dir=target_dir,
                 images_dir=images_path,
                 source_json_dir=source_json_dir,
+                source_tag=source_tag,
             )
         except Exception as exc:
             excluded.append(

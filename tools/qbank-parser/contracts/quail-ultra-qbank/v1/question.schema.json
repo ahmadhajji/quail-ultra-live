@@ -198,6 +198,7 @@
         "system": { "type": "string" },
         "topic": { "type": "string", "minLength": 1 },
         "subtopic": { "type": "string" },
+        "source_material": { "type": "string" },
         "custom": {
           "type": "array",
           "items": { "type": "string" }

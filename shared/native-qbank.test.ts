@@ -60,7 +60,8 @@ describe('native qbank contract validation', () => {
       '0': 'Rotation',
       '1': 'Subject',
       '2': 'System',
-      '3': 'Topic'
+      '3': 'Topic',
+      '4': 'Source Material'
     })
     expect(qbankinfo.choices['peds.sample.s001.q01']).toEqual({
       options: ['A', 'B', 'C', 'D'],

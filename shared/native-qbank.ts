@@ -408,7 +408,8 @@ async function loadNativeWorkspaceData(workspaceDir: string) {
       '0': 'Rotation',
       '1': 'Subject',
       '2': 'System',
-      '3': 'Topic'
+      '3': 'Topic',
+      '4': 'Source Material'
     }
   }
   const index: Record<string, Record<string, string>> = {}
@@ -432,7 +433,8 @@ async function loadNativeWorkspaceData(workspaceDir: string) {
         '0': String(tags.rotation || validation.manifest.rotation || 'Untagged'),
         '1': String(tags.subject || 'Untagged'),
         '2': String(tags.system || 'Untagged'),
-        '3': String(tags.topic || 'Untagged')
+        '3': String(tags.topic || 'Untagged'),
+        '4': String(tags.source_material || 'Untagged')
       }
     }
     const orderedChoices = [...(question?.choices ?? [])]
