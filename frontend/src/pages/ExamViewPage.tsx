@@ -221,6 +221,7 @@ export function ExamViewPage() {
   const [fullscreenActive, setFullscreenActive] = useState(Boolean(document.fullscreenElement))
   const [timerLabel, setTimerLabel] = useState('Time Used')
   const [timerText, setTimerText] = useState('0:00:00')
+  const [warningOpen, setWarningOpen] = useState(false)
   const [uiPrefs, updateUiPrefs, resetUiPrefs] = useUiPreferences()
   const examUiMode = useMemo<'v2'>(() => 'v2', [])
   const filteredLabSections = useMemo(() => {
@@ -1632,20 +1633,6 @@ export function ExamViewPage() {
               ) : (
                 <div ref={questionBodyRef} className="exam-question-body exam-reading-scale" dangerouslySetInnerHTML={{ __html: questionHtml }} />
               )}
-              {showCaution ? (
-                <div className="alert alert-warning mt-3" role="alert">
-                  {factCheck?.status && ['disputed', 'unresolved'].includes(factCheck.status) ? (
-                    <p className="mb-2"><strong>Fact-check:</strong> {factCheck.note || `Question marked as ${factCheck.status}.`}</p>
-                  ) : null}
-                  {warningList.length > 0 ? (
-                    <ul className="mb-0 pl-3">
-                      {warningList.map((warning) => (
-                        <li key={warning}>{warning}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              ) : null}
             </section>
 
             <section className="exam-section exam-answer-section">
@@ -1752,20 +1739,6 @@ export function ExamViewPage() {
                   </button>
                 ) : null}
               </div>
-              {factCheck?.status && ['disputed', 'unresolved'].includes(factCheck.status) ? (
-                <div className="alert alert-warning mt-3" role="alert">
-                  <p className="mb-2"><strong>Fact-check:</strong> {factCheck.note || `Question marked as ${factCheck.status}.`}</p>
-                  {factCheck.sources?.length ? (
-                    <ul className="mb-0 pl-3">
-                      {factCheck.sources.map((source) => (
-                        <li key={source}>
-                          <a href={source} target="_blank" rel="noreferrer">{source}</a>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              ) : null}
               {isNativePack ? (
                 <div ref={explanationBodyRef} className="exam-explanation-body exam-reading-scale">
                   {nativeQuestion ? <NativeQuestionExplanation question={nativeQuestion} basePath={qbankPath} /> : null}
@@ -1790,6 +1763,23 @@ export function ExamViewPage() {
             <div className="footer-sync">
               <SyncStatusPill />
             </div>
+            {showCaution ? (
+              <div className="footer-warning-wrap">
+                <button
+                  type="button"
+                  className={`footer-warning-btn${warningOpen ? ' open' : ''}`}
+                  aria-label="Question has warnings — click for details"
+                  onClick={() => setWarningOpen(v => !v)}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+                </button>
+                {warningOpen ? (
+                  <div className="footer-warning-popover" role="status">
+                    This question needs review. Check the source slide — do not rely on the AI-generated content alone.
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <div className="footer-right">
