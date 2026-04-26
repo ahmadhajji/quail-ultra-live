@@ -7,22 +7,20 @@ import { localStore } from '../lib/store'
 import { usePackPage } from '../lib/usePackPage'
 import type { QbankInfo } from '../types/domain'
 
-type PoolSetting = 'btn-qpool-unused' | 'btn-qpool-incorrects' | 'btn-qpool-flagged' | 'btn-qpool-all' | 'btn-qpool-custom'
+type PoolBucket = 'unused' | 'incorrects' | 'flagged' | 'all'
 
-const qpoolSettingToBucket: Record<PoolSetting, 'unused' | 'incorrects' | 'flagged' | 'all' | 'custom'> = {
-  'btn-qpool-unused': 'unused',
-  'btn-qpool-incorrects': 'incorrects',
-  'btn-qpool-flagged': 'flagged',
-  'btn-qpool-all': 'all',
-  'btn-qpool-custom': 'custom'
+const bucketLabels: Record<PoolBucket, string> = {
+  unused: 'Unused',
+  incorrects: 'Incorrects',
+  flagged: 'Flagged',
+  all: 'All',
 }
 
-const qpoolSummaryCopy: Record<PoolSetting, [string, string]> = {
-  'btn-qpool-unused': ['Unused questions', 'The pool starts with unseen items only, which is closest to a fresh first pass through the bank.'],
-  'btn-qpool-incorrects': ['Incorrect questions', 'This block focuses on questions you previously missed, which is useful for targeted remediation.'],
-  'btn-qpool-flagged': ['Flagged questions', 'Only manually flagged questions are eligible, making this block a curated revisit set.'],
-  'btn-qpool-all': ['All questions', 'Every question in the bank can be pulled into the block, subject to any active filters.'],
-  'btn-qpool-custom': ['Custom question IDs', 'This block is driven by the IDs you pasted, which is useful for recreating specific sets or checklists.']
+const bucketDescriptions: Record<PoolBucket, string> = {
+  unused: 'The pool includes unseen items only, closest to a fresh first pass through the bank.',
+  incorrects: 'The pool includes questions you previously missed, useful for targeted remediation.',
+  flagged: 'The pool includes only manually flagged questions, a curated revisit set.',
+  all: 'Every question in the bank can be pulled into the block, subject to any active filters.',
 }
 
 const tutorModeSummary: [string, string] = ['Tutor mode', 'Submit each question individually and reveal the explanation immediately after you lock the answer.']
@@ -140,15 +138,38 @@ function countForSubtag(
   qbankinfo: QbankInfo,
   tag: string,
   subtag: string,
-  poolSetting: PoolSetting
+  poolChecked: Set<PoolBucket>
 ): number {
-  return qbankinfo.progress.tagbuckets[tag]?.[subtag]?.[qpoolSettingToBucket[poolSetting] as 'unused' | 'incorrects' | 'flagged' | 'all']?.length ?? 0
+  const bucket = qbankinfo.progress.tagbuckets[tag]?.[subtag]
+  if (!bucket) return 0
+  const ids = new Set<string>()
+  for (const b of poolChecked) {
+    for (const id of (bucket[b] ?? [])) ids.add(id)
+  }
+  return ids.size
+}
+
+function getInitialPoolChecked(): Set<PoolBucket> {
+  const stored = localStore.getString('pool-buckets')
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored) as PoolBucket[]
+      if (Array.isArray(parsed) && parsed.length > 0) return new Set(parsed)
+    } catch { /* ignore */ }
+  }
+  // migrate from old single-select format
+  const old = localStore.getString('qpool-setting')
+  if (old === 'btn-qpool-incorrects') return new Set<PoolBucket>(['incorrects'])
+  if (old === 'btn-qpool-flagged') return new Set<PoolBucket>(['flagged'])
+  if (old === 'btn-qpool-all') return new Set<PoolBucket>(['all'])
+  return new Set<PoolBucket>(['unused'])
 }
 
 export function NewBlockPage() {
   const { loading, user, packId, packName, qbankinfo } = usePackPage()
   const [mode] = useState<'tutor'>(getStoredMode())
-  const [qpoolSetting, setQpoolSetting] = useState<PoolSetting>((localStore.getString('qpool-setting') as PoolSetting | undefined) ?? 'btn-qpool-unused')
+  const [poolChecked, setPoolChecked] = useState<Set<PoolBucket>>(getInitialPoolChecked)
+  const [customMode, setCustomMode] = useState(localStore.get<boolean>('pool-custom') ?? false)
   const [customIds, setCustomIds] = useState(localStore.getString('custom-ids-setting') ?? '')
   const [numQuestionsText, setNumQuestionsText] = useState(String(localStore.get<number>('numq-setting') ?? ''))
   const [timePerQuestionText, setTimePerQuestionText] = useState(String(localStore.get<number>('timeperq-setting') ?? ''))
@@ -162,8 +183,12 @@ export function NewBlockPage() {
   }, [mode])
 
   useEffect(() => {
-    localStore.set('qpool-setting', qpoolSetting)
-  }, [qpoolSetting])
+    localStore.set('pool-buckets', JSON.stringify([...poolChecked]))
+  }, [poolChecked])
+
+  useEffect(() => {
+    localStore.set('pool-custom', customMode)
+  }, [customMode])
 
   useEffect(() => {
     localStore.set('custom-ids-setting', customIds)
@@ -257,8 +282,7 @@ export function NewBlockPage() {
     if (!qbankinfo) {
       return { qlist: [], tagschosenstr: '', allsubtagsenabled: true, error: '' }
     }
-    const poolToUse = qpoolSettingToBucket[qpoolSetting]
-    if (poolToUse === 'custom') {
+    if (customMode) {
       const parsed = parseCustomIds(qbankinfo, customIds)
       return {
         qlist: parsed.qlist,
@@ -274,7 +298,7 @@ export function NewBlockPage() {
 
     tags.forEach((tag, index) => {
       tagschosenstr += `<b><u>${tag}:</u></b> `
-      let tagqlist: string[] = []
+      const tagIdSet = new Set<string>()
       const useAllSubtags = allSubtagsMap[tag] ?? true
       if (useAllSubtags) {
         tagschosenstr += 'All Subtags, '
@@ -282,18 +306,24 @@ export function NewBlockPage() {
         allSubtagsEnabled = false
       }
       ;(subtags[tag] ?? []).forEach((subtag) => {
-        const subtagqlist = qbankinfo.progress.tagbuckets[tag]?.[subtag]?.[poolToUse] ?? []
+        const subtagIds = new Set<string>()
+        for (const bucket of poolChecked) {
+          for (const id of (qbankinfo.progress.tagbuckets[tag]?.[subtag]?.[bucket] ?? [])) {
+            subtagIds.add(id)
+          }
+        }
         if (useAllSubtags || selectedSubtagsMap[tag]?.[subtag]) {
-          tagqlist = tagqlist.concat(subtagqlist)
+          for (const id of subtagIds) tagIdSet.add(id)
           if (!useAllSubtags) {
             tagschosenstr += `${subtag}, `
           }
         }
       })
+      const tagqlist = [...tagIdSet]
       if (index === 0) {
         qlist = tagqlist
       } else {
-        qlist = qlist.filter((qid) => tagqlist.includes(qid))
+        qlist = qlist.filter((qid) => tagIdSet.has(qid))
       }
       tagschosenstr += '<br />'
     })
@@ -304,7 +334,7 @@ export function NewBlockPage() {
       allsubtagsenabled: allSubtagsEnabled,
       error: ''
     }
-  }, [allSubtagsMap, customIds, qbankinfo, qpoolSetting, selectedSubtagsMap, subtags, tags])
+  }, [allSubtagsMap, customIds, customMode, poolChecked, qbankinfo, selectedSubtagsMap, subtags, tags])
 
   if (loading || !qbankinfo) {
     return (
@@ -315,10 +345,20 @@ export function NewBlockPage() {
   }
 
   const selectedNumQuestions = filterInt(numQuestionsText)
-  const selectedTimePerQuestion = filterInt(timePerQuestionText)
-  const selectedPoolSummary = qpoolSummaryCopy[qpoolSetting]
-  const showTagFilters = !(qpoolSetting === 'btn-qpool-custom' || (tags.length === 1 && (subtags[tags[0]!] ?? []).length === 1))
+  const showTagFilters = !customMode && !(tags.length === 1 && (subtags[tags[0]!] ?? []).length === 1)
   const isAllTags = tags.every((tag) => allSubtagsMap[tag] ?? true)
+
+  const poolSummaryTitle = customMode
+    ? 'Custom question IDs'
+    : poolChecked.size === 0
+      ? 'No pool selected'
+      : [...poolChecked].map((b) => bucketLabels[b]).join(' + ')
+
+  const poolSummaryCopy = customMode
+    ? 'This block is driven by the IDs you pasted, which is useful for recreating specific sets or checklists.'
+    : poolChecked.size === 0
+      ? 'Select at least one pool type above to build a block.'
+      : [...poolChecked].map((b) => bucketDescriptions[b]).join(' ')
 
   return (
     <AppShell
@@ -356,27 +396,52 @@ export function NewBlockPage() {
                 </div>
               </div>
               <div className="q-panel-body">
-                <div className="q-segmented" role="group">
-                  {([
-                    ['btn-qpool-unused', 'Unused', poolBadgeCounts.unused],
-                    ['btn-qpool-incorrects', 'Incorrects', poolBadgeCounts.incorrects],
-                    ['btn-qpool-flagged', 'Flagged', poolBadgeCounts.flagged],
-                    ['btn-qpool-all', 'All', poolBadgeCounts.all],
-                    ['btn-qpool-custom', 'Custom IDs', undefined]
-                  ] as const).map(([key, label, count]) => (
-                    <button
-                      key={key}
-                      className={`btn ${qpoolSetting === key ? 'btn-primary' : 'btn-light'}`}
-                      type="button"
-                      onClick={() => setQpoolSetting(key)}
-                    >
-                      {label}
-                      {typeof count === 'number' ? <span className="q-count-pill">{count}</span> : null}
-                    </button>
-                  ))}
+                <div className="q-pool-options">
+                  {(['unused', 'incorrects', 'flagged', 'all'] as PoolBucket[]).map((bucket) => {
+                    const isChecked = !customMode && poolChecked.has(bucket)
+                    return (
+                      <label
+                        key={bucket}
+                        className={`q-pool-option${isChecked ? ' checked' : ''}${customMode ? ' disabled' : ''}`}
+                        htmlFor={`pool-${bucket}`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="q-filter-checkbox"
+                          id={`pool-${bucket}`}
+                          checked={isChecked}
+                          disabled={customMode}
+                          onChange={(e) => {
+                            const next = new Set(poolChecked)
+                            if (e.target.checked) {
+                              next.add(bucket)
+                            } else {
+                              next.delete(bucket)
+                            }
+                            if (next.size > 0) setPoolChecked(next)
+                          }}
+                        />
+                        <span className="q-filter-title">{bucketLabels[bucket]}</span>
+                        <span className="q-count-pill">{poolBadgeCounts[bucket]}</span>
+                      </label>
+                    )
+                  })}
+                  <label
+                    className={`q-pool-option${customMode ? ' checked' : ''}`}
+                    htmlFor="pool-custom"
+                  >
+                    <input
+                      type="checkbox"
+                      className="q-filter-checkbox"
+                      id="pool-custom"
+                      checked={customMode}
+                      onChange={(e) => setCustomMode(e.target.checked)}
+                    />
+                    <span className="q-filter-title">Custom IDs</span>
+                  </label>
                 </div>
 
-                {qpoolSetting === 'btn-qpool-custom' ? (
+                {customMode ? (
                   <div className="mt-3">
                     <p className="q-helper-copy mb-2">Paste question IDs separated by commas. Grouping rules still apply when related questions must stay together.</p>
                     <textarea
@@ -493,7 +558,7 @@ export function NewBlockPage() {
                                   <span className="q-filter-label">
                                     <span className="q-filter-title">{subtag}</span>
                                   </span>
-                                  <span className="q-count-pill">{countForSubtag(qbankinfo, tag, subtag, qpoolSetting)}</span>
+                                  <span className="q-count-pill">{countForSubtag(qbankinfo, tag, subtag, poolChecked)}</span>
                                 </label>
                               ))}
                             </div>
@@ -599,8 +664,8 @@ export function NewBlockPage() {
                     <span>{tutorModeSummary[1]}</span>
                   </div>
                   <div className="q-summary-item">
-                    <strong>{selectedPoolSummary[0]}</strong>
-                    <span>{selectedPoolSummary[1]}</span>
+                    <strong>{poolSummaryTitle}</strong>
+                    <span>{poolSummaryCopy}</span>
                   </div>
                   <div className="q-summary-item">
                     <strong>{available.tagschosenstr && !available.allsubtagsenabled ? 'Filtered subject mix' : 'All subjects included'}</strong>
