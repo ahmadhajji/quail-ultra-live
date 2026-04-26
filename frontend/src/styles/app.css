@@ -378,6 +378,40 @@ body.q-shell {
 .q-segmented .btn-light {
 }
 
+.q-pool-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.q-pool-option {
+  align-items: center;
+  background: var(--q-surface);
+  border: 1px solid var(--q-border);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 14px;
+  transition: border-color 0.15s, background 0.15s;
+  user-select: none;
+}
+
+.q-pool-option.checked {
+  background: var(--q-blue-soft);
+  border-color: var(--q-blue);
+}
+
+.q-pool-option.checked .q-filter-title {
+  color: var(--q-blue-strong);
+}
+
+.q-pool-option.disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
 .q-form-grid {
   display: grid;
   gap: 16px;
