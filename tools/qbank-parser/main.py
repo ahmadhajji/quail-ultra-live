@@ -340,7 +340,7 @@ def _run_v2_pipeline(args: argparse.Namespace) -> bool:
         _print("[red]--v2 requires --rotation (no inference; e.g. --rotation Pediatrics)[/red]")
         return False
 
-    from app.v2_pipeline import V2RunOptions, run_v2_stages_1_and_2
+    from app.v2_pipeline import V2RunOptions, run_v2_pipeline
 
     opts = V2RunOptions(
         google_slides_link=args.google_slides_link or "",
@@ -354,14 +354,15 @@ def _run_v2_pipeline(args: argparse.Namespace) -> bool:
     )
 
     try:
-        result = run_v2_stages_1_and_2(opts)
+        result = run_v2_pipeline(opts)
     except Exception as exc:
         _print(f"[red]v2 pipeline failed:[/red] {exc}")
         return False
 
     _print(
-        f"[bold green]v2 Stages 1+2 complete:[/bold green] {result.metadata['slide_count']} slides, "
+        f"[bold green]v2 pipeline complete:[/bold green] {result.metadata['slide_count']} slides, "
         f"{len(result.detected_questions)} questions detected, "
+        f"{len(result.rewritten_questions)} questions rewritten, "
         f"{result.stats.ai_calls} AI calls "
         f"({result.stats.prompt_tokens + result.stats.completion_tokens} tokens), "
         f"{result.stats.cache_hits} cache hits, "
@@ -371,7 +372,11 @@ def _run_v2_pipeline(args: argparse.Namespace) -> bool:
         _print(f"[yellow]Stage 2 errors on {len(result.stage2_errors)} slides:[/yellow]")
         for slide_num, msg in sorted(result.stage2_errors.items()):
             _print(f"  • slide {slide_num}: {msg}")
-    _print("[dim]Stages 3 (USMLE rewrite) and 4 (native pack export) land in PR 3 + PR 4.[/dim]")
+    if result.stage3_errors:
+        _print(f"[yellow]Stage 3 errors on {len(result.stage3_errors)} questions:[/yellow]")
+        for qid, msg in sorted(result.stage3_errors.items()):
+            _print(f"  • {qid}: {msg}")
+    _print("[dim]Stage 4 (native pack export) lands in PR 4.[/dim]")
     return True
 
 

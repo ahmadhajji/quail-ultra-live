@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from domain.models import DetectedQuestion, RawSlide, SlideContent
+from domain.models import DetectedQuestion, RawSlide, RewrittenQuestion, SlideContent
 from providers.v2.openai_detect import (
     DEFAULT_DETECT_MODEL,
     DEFAULT_DETECT_REASONING_EFFORT,
@@ -29,10 +29,18 @@ from providers.v2.openai_detect import (
     DetectionResult,
     OpenAIDetectAdapter,
 )
+from providers.v2.openai_rewrite import (
+    DEFAULT_REWRITE_MODEL,
+    DEFAULT_REWRITE_REASONING_EFFORT,
+    REWRITE_PROMPT_VERSION,
+    OpenAIRewriteAdapter,
+    RewriteResult,
+)
 
 logger = logging.getLogger(__name__)
 
 MAX_DETECT_INFLIGHT = 8
+MAX_REWRITE_INFLIGHT = 8
 MAX_COMMENTS_PER_SLIDE = 25
 
 
@@ -55,7 +63,10 @@ class V2RunOptions:
     api_key: str = ""
     detect_model: str = DEFAULT_DETECT_MODEL
     detect_reasoning_effort: str = DEFAULT_DETECT_REASONING_EFFORT
+    rewrite_model: str = DEFAULT_REWRITE_MODEL
+    rewrite_reasoning_effort: str = DEFAULT_REWRITE_REASONING_EFFORT
     max_detect_inflight: int = MAX_DETECT_INFLIGHT
+    max_rewrite_inflight: int = MAX_REWRITE_INFLIGHT
     use_cache: bool = True
     # Optional injected dependencies (for testing).
     parse_pptx_fn: Callable[[str | Path, Path], list[SlideContent]] | None = None
@@ -63,24 +74,57 @@ class V2RunOptions:
     google_download_fn: Callable[[str, Path], Path] | None = None
     fetch_comments_fn: Callable[[str], Any] | None = None
     detect_adapter: OpenAIDetectAdapter | None = None
+    rewrite_adapter: OpenAIRewriteAdapter | None = None
 
 
 @dataclass
 class V2RunStats:
     """Cost + usage stats for the run. One JSON line at end of run."""
 
-    ai_calls: int = 0
-    prompt_tokens: int = 0
-    completion_tokens: int = 0
-    cache_hits: int = 0
+    detect_calls: int = 0
+    detect_prompt_tokens: int = 0
+    detect_completion_tokens: int = 0
+    detect_cache_hits: int = 0
+    rewrite_calls: int = 0
+    rewrite_prompt_tokens: int = 0
+    rewrite_completion_tokens: int = 0
+    rewrite_cache_hits: int = 0
+    rewrite_failures: int = 0
     duration_seconds: float = 0.0
 
+    # Backwards-compatible aggregates used by older tests + code paths
+    @property
+    def ai_calls(self) -> int:
+        return self.detect_calls + self.rewrite_calls
+
+    @property
+    def prompt_tokens(self) -> int:
+        return self.detect_prompt_tokens + self.rewrite_prompt_tokens
+
+    @property
+    def completion_tokens(self) -> int:
+        return self.detect_completion_tokens + self.rewrite_completion_tokens
+
+    @property
+    def cache_hits(self) -> int:
+        return self.detect_cache_hits + self.rewrite_cache_hits
+
     def merge_usage(self, prompt: int, completion: int) -> None:
-        self.prompt_tokens += int(prompt or 0)
-        self.completion_tokens += int(completion or 0)
+        # Legacy helper used by stage2_detect — count toward detection bucket.
+        self.detect_prompt_tokens += int(prompt or 0)
+        self.detect_completion_tokens += int(completion or 0)
 
     def to_dict(self) -> dict:
         return {
+            "detect_calls": self.detect_calls,
+            "detect_prompt_tokens": self.detect_prompt_tokens,
+            "detect_completion_tokens": self.detect_completion_tokens,
+            "detect_cache_hits": self.detect_cache_hits,
+            "rewrite_calls": self.rewrite_calls,
+            "rewrite_prompt_tokens": self.rewrite_prompt_tokens,
+            "rewrite_completion_tokens": self.rewrite_completion_tokens,
+            "rewrite_cache_hits": self.rewrite_cache_hits,
+            "rewrite_failures": self.rewrite_failures,
             "ai_calls": self.ai_calls,
             "prompt_tokens": self.prompt_tokens,
             "completion_tokens": self.completion_tokens,
@@ -297,11 +341,11 @@ def stage2_detect(
 
             if result is None:
                 # Cache hit
-                stats.cache_hits += 1
+                stats.detect_cache_hits += 1
                 detected.extend(questions)
                 continue
 
-            stats.ai_calls += 1
+            stats.detect_calls += 1
             stats.merge_usage(result.usage.prompt_tokens, result.usage.completion_tokens)
             if result.error:
                 errors[processed_slide.slide_number] = result.error
@@ -346,7 +390,116 @@ def _save_cache(path: Path, cache: dict[str, list[dict]]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Top-level orchestrator (Stages 1 + 2 only — Stage 3 + 4 land in PR 3 + PR 4)
+# Stage 3 — USMLE rewrite (rotation-specific, quality tier)
+# ---------------------------------------------------------------------------
+
+
+def stage3_rewrite(
+    detected_questions: list[DetectedQuestion],
+    opts: V2RunOptions,
+    stats: V2RunStats,
+) -> tuple[list[RewrittenQuestion], dict[str, str]]:
+    """Run Stage 3 rewrite across all detected questions in parallel.
+
+    Returns rewritten questions + per-question errors. Questions that fail
+    the validation gate are skipped and tracked in errors.
+    """
+    if not opts.rotation:
+        raise ValueError("V2RunOptions.rotation is required for Stage 3")
+
+    adapter = opts.rewrite_adapter or OpenAIRewriteAdapter(
+        api_key=opts.api_key,
+        model_name=opts.rewrite_model,
+        reasoning_effort=opts.rewrite_reasoning_effort,
+    )
+
+    cache_path = Path(opts.output_dir) / "v2_stage3_cache.json"
+    cache: dict[str, dict] = _load_rewrite_cache(cache_path) if opts.use_cache else {}
+
+    rewritten: list[RewrittenQuestion] = []
+    errors: dict[str, str] = {}
+    cache_writes = 0
+
+    def _process(detected: DetectedQuestion):
+        cache_key = _stage3_cache_key(
+            detected, adapter.model_name, REWRITE_PROMPT_VERSION, opts.rotation
+        )
+        if opts.use_cache and cache_key in cache:
+            cached = RewrittenQuestion.from_dict(cache[cache_key])
+            return detected, None, cached
+        result = adapter.rewrite(detected, opts.rotation)
+        return detected, result, result.question
+
+    with ThreadPoolExecutor(max_workers=opts.max_rewrite_inflight) as pool:
+        futures = {pool.submit(_process, q): q for q in detected_questions}
+        for future in as_completed(futures):
+            detected = futures[future]
+            try:
+                processed_detected, result, question = future.result()
+            except Exception as exc:
+                errors[detected.question_id] = str(exc)
+                continue
+
+            if result is None and question is not None:
+                # Cache hit
+                stats.rewrite_cache_hits += 1
+                rewritten.append(question)
+                continue
+
+            assert result is not None
+            stats.rewrite_calls += 1
+            stats.rewrite_prompt_tokens += int(result.usage.prompt_tokens or 0)
+            stats.rewrite_completion_tokens += int(result.usage.completion_tokens or 0)
+            if result.error or question is None:
+                stats.rewrite_failures += 1
+                errors[processed_detected.question_id] = result.error or "rewrite produced no question"
+                continue
+            cache_key = _stage3_cache_key(
+                processed_detected,
+                adapter.model_name,
+                REWRITE_PROMPT_VERSION,
+                opts.rotation,
+            )
+            cache[cache_key] = question.to_dict()
+            cache_writes += 1
+            rewritten.append(question)
+
+    if opts.use_cache and cache_writes > 0:
+        _save_rewrite_cache(cache_path, cache)
+
+    rewritten.sort(key=lambda q: (q.slide_number, q.question_index))
+
+    rewritten_path = Path(opts.output_dir) / "rewritten_questions.json"
+    rewritten_path.write_text(
+        json.dumps([q.to_dict() for q in rewritten], indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return rewritten, errors
+
+
+def _stage3_cache_key(
+    detected: DetectedQuestion, model_name: str, prompt_version: str, rotation: str
+) -> str:
+    payload = f"{detected.content_hash()}|{model_name}|{prompt_version}|{rotation}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _load_rewrite_cache(path: Path) -> dict[str, dict]:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _save_rewrite_cache(path: Path, cache: dict[str, dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(cache, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Top-level orchestrators
 # ---------------------------------------------------------------------------
 
 
@@ -356,13 +509,15 @@ class V2RunResult:
 
     raw_slides: list[RawSlide]
     detected_questions: list[DetectedQuestion]
+    rewritten_questions: list[RewrittenQuestion]
     metadata: dict[str, Any]
     stage2_errors: dict[int, str]
+    stage3_errors: dict[str, str]
     stats: V2RunStats
 
 
 def run_v2_stages_1_and_2(opts: V2RunOptions) -> V2RunResult:
-    """Run Stages 1 and 2 of the v2 pipeline. PRs 3+4 add Stages 3+4."""
+    """Run Stages 1 and 2 of the v2 pipeline. Used by `--v2` until Stages 3+4 land."""
     started = time.monotonic()
     stats = V2RunStats()
 
@@ -380,7 +535,39 @@ def run_v2_stages_1_and_2(opts: V2RunOptions) -> V2RunResult:
     return V2RunResult(
         raw_slides=raw_slides,
         detected_questions=detected,
+        rewritten_questions=[],
         metadata=metadata,
         stage2_errors=errors,
+        stage3_errors={},
+        stats=stats,
+    )
+
+
+def run_v2_pipeline(opts: V2RunOptions) -> V2RunResult:
+    """Run all four v2 stages end-to-end (Stage 4 lands in PR 4)."""
+    started = time.monotonic()
+    stats = V2RunStats()
+
+    raw_slides, metadata = stage1_raw_extract(opts)
+    detected, stage2_errors = stage2_detect(raw_slides, opts, stats)
+
+    # Filter out detection errors before sending to rewrite
+    healthy_detected = [q for q in detected if q.status != "error" and not q.error]
+    rewritten, stage3_errors = stage3_rewrite(healthy_detected, opts, stats)
+
+    stats.duration_seconds = time.monotonic() - started
+    stats_path = Path(opts.output_dir) / "v2_run_stats.json"
+    stats_path.write_text(
+        json.dumps(stats.to_dict(), indent=2),
+        encoding="utf-8",
+    )
+
+    return V2RunResult(
+        raw_slides=raw_slides,
+        detected_questions=detected,
+        rewritten_questions=rewritten,
+        metadata=metadata,
+        stage2_errors=stage2_errors,
+        stage3_errors=stage3_errors,
         stats=stats,
     )
