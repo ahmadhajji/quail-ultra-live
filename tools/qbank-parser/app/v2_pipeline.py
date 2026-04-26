@@ -59,6 +59,7 @@ class V2RunOptions:
     rotation: str = ""
     pack_id: str = "qbank"
     title: str = ""
+    source_tag: str = ""
     output_dir: Path = field(default_factory=lambda: Path("output"))
     api_key: str = ""
     detect_model: str = DEFAULT_DETECT_MODEL
@@ -567,6 +568,7 @@ def stage4_export(
         output_dir=pack_dir,
         pack_id=opts.pack_id or "qbank",
         title=opts.title or (f"{opts.rotation} QBank" if opts.rotation else None),
+        source_tag=opts.source_tag or None,
     )
     return summary
 

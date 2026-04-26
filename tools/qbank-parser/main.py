@@ -321,6 +321,7 @@ def _run_native_export_from_extracted(args: argparse.Namespace) -> bool:
             only_new=args.only_new,
             only_failed=args.only_failed,
             reprocess_question=args.reprocess_question,
+            source_tag=args.source_tag or None,
         )
     except Exception as exc:
         _print(f"[red]Native export failed:[/red] {exc}")
@@ -349,6 +350,7 @@ def _run_v2_pipeline(args: argparse.Namespace) -> bool:
         rotation=args.rotation,
         pack_id=args.pack_id or "qbank",
         title=args.title or (f"{args.rotation} QBank" if args.rotation else ""),
+        source_tag=args.source_tag or "",
         output_dir=Path(args.native_pack_dir) if args.native_pack_dir else OUTPUT_DIR,
         api_key=OPENAI_API_KEY,
     )
@@ -526,6 +528,7 @@ Examples:
         help="Save extraction progress every N processed slides",
     )
     parser.add_argument("--rotation", type=str, default="", help="Rotation label for native pack title/tags when available")
+    parser.add_argument("--source-tag", type=str, default="", dest="source_tag", help="Source material label applied to every question (e.g. 'IDUs' or 'PreTest Pediatrics 13th Edition')")
     parser.add_argument(
         "--v2",
         action="store_true",
