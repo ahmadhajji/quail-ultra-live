@@ -1,0 +1,47 @@
+{
+  "id": "bad.q01",
+  "schemaVersion": 1,
+  "status": "ready",
+  "source": {
+    "documentId": "invalid",
+    "documentTitle": "Invalid",
+    "slideNumber": 1,
+    "questionIndex": 1
+  },
+  "tags": {
+    "rotation": "Pediatrics",
+    "topic": "Invalid"
+  },
+  "stem": {
+    "blocks": [
+      { "type": "paragraph", "text": "This question intentionally has no answerKey." }
+    ]
+  },
+  "choices": [
+    { "id": "A", "displayOrder": 1, "text": [{ "type": "paragraph", "text": "Alpha" }] },
+    { "id": "B", "displayOrder": 2, "text": [{ "type": "paragraph", "text": "Bravo" }] }
+  ],
+  "explanation": {
+    "correct": [
+      { "type": "paragraph", "text": "Invalid fixture." }
+    ]
+  },
+  "media": [],
+  "quality": {
+    "parserConfidence": 0,
+    "validationStatus": "failed",
+    "reviewStatus": "pending",
+    "warnings": [],
+    "errors": ["Missing answerKey."]
+  },
+  "ai": {},
+  "dedupe": {
+    "fingerprint": "invalid",
+    "relatedQuestionIds": [],
+    "conflictStatus": "none"
+  },
+  "integrity": {
+    "sourceHash": "invalid-source",
+    "contentHash": "invalid-content"
+  }
+}

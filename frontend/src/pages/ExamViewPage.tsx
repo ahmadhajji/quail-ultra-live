@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fetchQuestionAssets, extractChoiceLabels, prefetchImagesFromHtml, prefetchQuestionAssets, rewriteAssetPaths, stripChoicesFromQuestionDisplay } from '../lib/qbank-html'
+import { fetchNativeQuestion, getNativeChoiceLabels, prefetchNativeQuestion, prefetchNativeQuestionMedia, type NativeQuestion } from '../lib/native-qbank'
 import { getHighlightDoc, getQuestionNote, setHighlightDocTarget, setQuestionNote } from '../lib/annotations'
 import { addToBucket, isInBucket, removeFromBucket } from '../lib/progress'
 import { syncProgress } from '../lib/api'
@@ -24,6 +25,7 @@ import { ExamShellV2 } from '../components/exam/ExamShellV2'
 import { FloatingWindow } from '../components/FloatingWindow'
 import { ImageInspector, type ImageInspectorItem } from '../components/ImageInspector'
 import { SyncStatusPill } from '../components/SyncStatusPill'
+import { NativeQuestionExplanation, NativeQuestionStem } from '../components/exam/NativeQuestionContent'
 import type { Mode, QbankInfo, SyncProgressOptions } from '../types/domain'
 
 function modeLabel(mode: Mode): string {
@@ -199,8 +201,9 @@ export function ExamViewPage() {
   const [selectedQnum, setSelectedQnum] = useState(0)
   const [questionHtml, setQuestionHtml] = useState('')
   const [explanationHtml, setExplanationHtml] = useState('')
+  const [nativeQuestion, setNativeQuestion] = useState<NativeQuestion | null>(null)
   const [choiceLabels, setChoiceLabels] = useState<Record<string, string>>({})
-  const [sourceSlideOpen, setSourceSlideOpen] = useState(false)
+  const [qidDropdownOpen, setQidDropdownOpen] = useState(false)
   const [selectedMarker, setSelectedMarker] = useState<MarkerKey>('yellow')
   const [noteText, setNoteText] = useState('')
   const [activeTool, setActiveTool] = useState<ExamToolKey | null>(null)
@@ -218,6 +221,7 @@ export function ExamViewPage() {
   const [fullscreenActive, setFullscreenActive] = useState(Boolean(document.fullscreenElement))
   const [timerLabel, setTimerLabel] = useState('Time Used')
   const [timerText, setTimerText] = useState('0:00:00')
+  const [warningOpen, setWarningOpen] = useState(false)
   const [uiPrefs, updateUiPrefs, resetUiPrefs] = useUiPreferences()
   const examUiMode = useMemo<'v2'>(() => 'v2', [])
   const filteredLabSections = useMemo(() => {
@@ -258,6 +262,8 @@ export function ExamViewPage() {
   const currentAnswer = block?.answers[selectedQnum] ?? ''
   const currentQuestionFlagged = Boolean(qbankinfo && isInBucket(qbankinfo.progress, qbankinfo, currentQid, 'flagged'))
   const qbankPath = qbankinfo?.path ?? ''
+  const isNativePack = qbankinfo?.format === 'native'
+  const nativeQuestionPath = isNativePack && currentQid ? qbankinfo?.nativeContent?.questionPaths?.[currentQid] ?? '' : ''
   const explanationVisible = Boolean(block && currentState && (block.complete || (block.mode === 'tutor' && currentState.revealed)))
   const tutorReviewReady = Boolean(block && !block.complete && block.mode === 'tutor' && block.blockqlist.every((_, index) => block.questionStates[index]?.submitted))
   const showBottomNextButton = Boolean(block && (block.mode !== 'tutor' || block.complete || currentState?.submitted))
@@ -839,6 +845,33 @@ export function ExamViewPage() {
       return
     }
     let cancelled = false
+
+    setQuestionHtml('')
+    setExplanationHtml('')
+    setNativeQuestion(null)
+
+    if (isNativePack) {
+      void fetchNativeQuestion(qbankPath, currentQid, nativeQuestionPath)
+        .then((question) => {
+          if (cancelled) {
+            return
+          }
+          const contentHash = question.integrity?.contentHash ?? question.id
+          setNativeQuestion(question)
+          setChoiceLabels({ ...getNativeChoiceLabels(question), ...metadataChoiceLabels })
+          setQuestionHtml(`native:${question.id}:${contentHash}:stem`)
+          setExplanationHtml(`native:${question.id}:${contentHash}:explanation`)
+          prefetchNativeQuestionMedia(qbankPath, question)
+        })
+        .catch((error) => {
+          window.alert(error instanceof Error ? error.message : 'Unable to load native question content.')
+        })
+
+      return () => {
+        cancelled = true
+      }
+    }
+
     void fetchQuestionAssets(qbankPath, currentQid)
       .then(({ questionHtml, explanationHtml }) => {
         if (cancelled) {
@@ -862,7 +895,7 @@ export function ExamViewPage() {
     return () => {
       cancelled = true
     }
-  }, [currentQid, qbankPath, selectedQnum, syncedSelectedQnum])
+  }, [currentQid, isNativePack, nativeQuestionPath, qbankPath, selectedQnum, syncedSelectedQnum])
 
   // Build a stable, memoized list of neighbor qids to prefetch. Using a joined
   // key keeps the effect below from re-firing on every unrelated rerender
@@ -893,6 +926,20 @@ export function ExamViewPage() {
     let cancelled = false
     const qids = prefetchNeighborKey.split('|').filter(Boolean)
     for (const qid of qids) {
+      if (isNativePack) {
+        const questionPath = qbankinfo?.nativeContent?.questionPaths?.[qid] ?? ''
+        prefetchNativeQuestion(qbankPath, qid, questionPath)
+        void fetchNativeQuestion(qbankPath, qid, questionPath)
+          .then((question) => {
+            if (!cancelled) {
+              prefetchNativeQuestionMedia(qbankPath, question)
+            }
+          })
+          .catch(() => {
+            // Prefetch failures are non-fatal; the on-demand fetch will retry.
+          })
+        continue
+      }
       prefetchQuestionAssets(qbankPath, qid)
       // Also warm images once the HTML is in the cache. Because
       // `fetchQuestionAssets` memoizes by (basePath, qid) in production, this
@@ -913,7 +960,7 @@ export function ExamViewPage() {
     return () => {
       cancelled = true
     }
-  }, [prefetchNeighborKey, qbankPath])
+  }, [isNativePack, prefetchNeighborKey, qbankPath, qbankinfo?.nativeContent?.questionPaths])
 
   useEffect(() => {
     if (!questionHtml) {
@@ -1392,7 +1439,23 @@ export function ExamViewPage() {
             </button>
             <div className="exam-question-context">
               <span className="context-item">Item {selectedQnum + 1} of {numQuestions}</span>
-              <span className="context-id">Question Id: {currentQid}</span>
+              <div className="context-id-wrap">
+                <button
+                  type="button"
+                  className="context-id-btn"
+                  aria-haspopup="true"
+                  aria-expanded={qidDropdownOpen}
+                  onClick={() => setQidDropdownOpen((v) => !v)}
+                  onBlur={(e) => { if (!e.currentTarget.parentElement?.contains(e.relatedTarget as Node)) setQidDropdownOpen(false) }}
+                >
+                  Question Id
+                </button>
+                {qidDropdownOpen ? (
+                  <div className="context-id-dropdown" role="tooltip">
+                    <span className="context-id-value">{currentQid}</span>
+                  </div>
+                ) : null}
+              </div>
             </div>
             <button
               id="btn-flagged"
@@ -1563,31 +1626,16 @@ export function ExamViewPage() {
         <section className="exam-panel exam-panel-continuous">
           <div ref={scrollRef} id="continuousScroll" className="exam-scroll exam-scroll-continuous">
             <section className="exam-section">
-              <div ref={questionBodyRef} className="exam-question-body exam-reading-scale" dangerouslySetInnerHTML={{ __html: questionHtml }} />
-              {showCaution ? (
-                <div className="alert alert-warning mt-3" role="alert">
-                  {factCheck?.status && ['disputed', 'unresolved'].includes(factCheck.status) ? (
-                    <p className="mb-2"><strong>Fact-check:</strong> {factCheck.note || `Question marked as ${factCheck.status}.`}</p>
-                  ) : null}
-                  {warningList.length > 0 ? (
-                    <ul className="mb-0 pl-3">
-                      {warningList.map((warning) => (
-                        <li key={warning}>{warning}</li>
-                      ))}
-                    </ul>
-                  ) : null}
+              {isNativePack ? (
+                <div ref={questionBodyRef} className="exam-question-body exam-reading-scale">
+                  {nativeQuestion ? <NativeQuestionStem question={nativeQuestion} basePath={qbankPath} /> : null}
                 </div>
-              ) : null}
+              ) : (
+                <div ref={questionBodyRef} className="exam-question-body exam-reading-scale" dangerouslySetInnerHTML={{ __html: questionHtml }} />
+              )}
             </section>
 
             <section className="exam-section exam-answer-section">
-              {sourceSlideAsset ? (
-                <div className="mb-3">
-                  <button className="btn btn-outline-secondary btn-sm" type="button" onClick={() => setSourceSlideOpen(true)}>
-                    Source Slide
-                  </button>
-                </div>
-              ) : null}
               <div className="exam-choices-container exam-reading-scale">
                 <div className="exam-choice-list">
                   {displayChoices.map((choice) => {
@@ -1685,27 +1733,19 @@ export function ExamViewPage() {
                     {block.mode === 'tutor' ? 'Submit the current question to reveal the explanation.' : 'Explanation hidden until you end the block and enter review mode.'}
                   </p>
                 )}
-                {sourceSlideAsset ? (
-                  <button className="btn btn-outline-secondary btn-sm exam-explanation-source-btn" type="button" onClick={() => setSourceSlideOpen(true)}>
+                {sourceSlideAsset && explanationVisible ? (
+                  <button className="btn btn-outline-secondary btn-sm exam-explanation-source-btn" type="button" onClick={() => setInspectorItem({ src: sourceSlideAsset, alt: 'Source Slide' })}>
                     Source Slide
                   </button>
                 ) : null}
               </div>
-              {factCheck?.status && ['disputed', 'unresolved'].includes(factCheck.status) ? (
-                <div className="alert alert-warning mt-3" role="alert">
-                  <p className="mb-2"><strong>Fact-check:</strong> {factCheck.note || `Question marked as ${factCheck.status}.`}</p>
-                  {factCheck.sources?.length ? (
-                    <ul className="mb-0 pl-3">
-                      {factCheck.sources.map((source) => (
-                        <li key={source}>
-                          <a href={source} target="_blank" rel="noreferrer">{source}</a>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
+              {isNativePack ? (
+                <div ref={explanationBodyRef} className="exam-explanation-body exam-reading-scale">
+                  {nativeQuestion ? <NativeQuestionExplanation question={nativeQuestion} basePath={qbankPath} /> : null}
                 </div>
-              ) : null}
-              <div ref={explanationBodyRef} className="exam-explanation-body exam-reading-scale" dangerouslySetInnerHTML={{ __html: explanationHtml }} />
+              ) : (
+                <div ref={explanationBodyRef} className="exam-explanation-body exam-reading-scale" dangerouslySetInnerHTML={{ __html: explanationHtml }} />
+              )}
             </section>
           </div>
         </section>
@@ -1723,6 +1763,23 @@ export function ExamViewPage() {
             <div className="footer-sync">
               <SyncStatusPill />
             </div>
+            {showCaution ? (
+              <div className="footer-warning-wrap">
+                <button
+                  type="button"
+                  className={`footer-warning-btn${warningOpen ? ' open' : ''}`}
+                  aria-label="Question has warnings — click for details"
+                  onClick={() => setWarningOpen(v => !v)}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+                </button>
+                {warningOpen ? (
+                  <div className="footer-warning-popover" role="status">
+                    This question needs review. Check the source slide — do not rely on the AI-generated content alone.
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <div className="footer-right">
@@ -2068,23 +2125,6 @@ export function ExamViewPage() {
           >
             Clear All
           </button>
-        </div>
-      ) : null}
-      {sourceSlideOpen && sourceSlideAsset ? (
-        <div className="modal d-block" tabIndex={-1} role="dialog" aria-modal="true">
-          <div className="modal-dialog modal-xl modal-dialog-centered" role="document">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Source Slide</h5>
-                <button type="button" className="close" aria-label="Close source slide" onClick={() => setSourceSlideOpen(false)}>
-                  <span aria-hidden="true">&times;</span>
-                </button>
-              </div>
-              <div className="modal-body text-center">
-                <img src={sourceSlideAsset} alt="Source slide" style={{ maxWidth: '100%', maxHeight: '75vh' }} />
-              </div>
-            </div>
-          </div>
         </div>
       ) : null}
       <ImageInspector open={Boolean(inspectorItem)} item={inspectorItem} onClose={() => setInspectorItem(null)} />

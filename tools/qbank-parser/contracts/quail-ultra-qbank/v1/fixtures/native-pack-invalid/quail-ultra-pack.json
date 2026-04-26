@@ -1,0 +1,47 @@
+{
+  "format": "quail-ultra-qbank",
+  "schemaVersion": 1,
+  "packId": "invalid-native-pack",
+  "title": "Invalid Native Pack",
+  "createdAt": "2026-04-24T00:00:00Z",
+  "updatedAt": "2026-04-24T00:00:00Z",
+  "producer": {
+    "name": "fixture",
+    "version": "fixture",
+    "schemaChecksum": "fixture-v1"
+  },
+  "revision": {
+    "number": 1,
+    "hash": "invalid-fixture"
+  },
+  "questionIndex": [
+    {
+      "id": "bad.q01",
+      "path": "questions/bad.q01.json",
+      "status": "ready",
+      "tags": {
+        "rotation": "Pediatrics",
+        "topic": "Invalid"
+      },
+      "contentHash": "invalid",
+      "answerSummary": {
+        "correctChoiceId": "Z",
+        "choices": [
+          { "id": "A", "label": "A", "displayOrder": 1 },
+          { "id": "B", "label": "B", "displayOrder": 2 }
+        ]
+      }
+    }
+  ],
+  "tagIndex": {
+    "rotation": ["Pediatrics"],
+    "topic": ["Invalid"]
+  },
+  "mediaIndex": [],
+  "validation": {
+    "status": "failed",
+    "errors": ["Invalid fixture intentionally omits answerKey from the question file."],
+    "warnings": [],
+    "blockedQuestionCount": 1
+  }
+}

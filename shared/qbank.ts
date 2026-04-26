@@ -3,7 +3,20 @@ const fs = require('fs')
 const fsp = require('fs/promises')
 const path = require('path')
 const sanitizeHtml = require('sanitize-html')
-const { createTagBuckets, normalizeProgress } = require('./progress')
+let progressHelpers
+let nativeQbankHelpers
+try {
+  progressHelpers = require('./progress')
+} catch (_error) {
+  progressHelpers = require('./progress.ts')
+}
+try {
+  nativeQbankHelpers = require('./native-qbank')
+} catch (_error) {
+  nativeQbankHelpers = require('./native-qbank.ts')
+}
+const { createTagBuckets, normalizeProgress } = progressHelpers
+const { NATIVE_QBANK_MANIFEST, hasNativeQbankManifest, loadNativeWorkspaceData } = nativeQbankHelpers
 
 async function exists(targetPath) {
   try {
@@ -109,6 +122,10 @@ async function ensureMetadataFiles(workspaceDir) {
 }
 
 async function loadWorkspaceData(workspaceDir) {
+  if (await hasNativeQbankManifest(workspaceDir)) {
+    return loadNativeWorkspaceData(workspaceDir)
+  }
+
   await ensureMetadataFiles(workspaceDir)
 
   const index = await readJson(path.join(workspaceDir, 'index.json'))
@@ -190,7 +207,7 @@ async function findWorkspaceRoot(importDir) {
     return entry.name
   })
 
-  if (files.includes('index.json') || files.some(function isQuestionFile(file) { return file.endsWith('-q.html') })) {
+  if (files.includes(NATIVE_QBANK_MANIFEST) || files.includes('index.json') || files.some(function isQuestionFile(file) { return file.endsWith('-q.html') })) {
     return importDir
   }
 

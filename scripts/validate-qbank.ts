@@ -4,6 +4,7 @@ const fs = require('fs')
 const fsp = require('fs/promises')
 const path = require('path')
 const { findWorkspaceRoot, readJson } = require('../shared/qbank')
+const { NATIVE_QBANK_MANIFEST, hasNativeQbankManifest, validateNativeQbankDirectory } = require('../shared/native-qbank')
 
 async function exists(targetPath) {
   try {
@@ -82,6 +83,46 @@ async function main() {
 
   const workspaceInput = path.resolve(process.cwd(), requestedPath)
   const workspaceRoot = await findWorkspaceRoot(workspaceInput)
+  if (await hasNativeQbankManifest(workspaceRoot)) {
+    const result = await validateNativeQbankDirectory(workspaceRoot)
+
+    console.log(`QBank root: ${workspaceRoot}`)
+    console.log(`Format: ${NATIVE_QBANK_MANIFEST}`)
+    console.log(`Questions: ${result.questionCount}`)
+    console.log(`Errors: ${result.errors.length}`)
+    console.log(`Warnings: ${result.warnings.length}`)
+
+    if (result.errors.length > 0) {
+      console.log('\nErrors:')
+      for (const error of result.errors) {
+        console.log(`- ${error}`)
+      }
+    }
+
+    if (result.warnings.length > 0) {
+      console.log('\nWarnings:')
+      for (const warning of result.warnings) {
+        console.log(`- ${warning}`)
+      }
+    }
+
+    console.log('\nJSON Summary:')
+    console.log(JSON.stringify({
+      workspaceRoot,
+      format: 'native',
+      questionCount: result.questionCount,
+      errorCount: result.errors.length,
+      warningCount: result.warnings.length,
+      errors: result.errors,
+      warnings: result.warnings
+    }, null, 2))
+
+    if (!result.ok) {
+      process.exit(1)
+    }
+    return
+  }
+
   const entries = await fsp.readdir(workspaceRoot, { withFileTypes: true })
   const files = entries.filter((entry) => entry.isFile()).map((entry) => entry.name)
 

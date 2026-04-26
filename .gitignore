@@ -17,3 +17,5 @@ tmp/
 *.db
 *.db-shm
 *.db-wal
+.snapshots/
+unify-theme-universal-dark-mode-subtle-skeuomorphism.md

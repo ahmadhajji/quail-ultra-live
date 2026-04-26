@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculator</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            padding: 15px;
+            min-height: 100vh;
+        }
+
+        .calculator {
+            max-width: 280px;
+            margin: 0 auto;
+            background: #252545;
+            border-radius: 16px;
+            padding: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        #display {
+            width: 100%;
+            height: 60px;
+            background: #1a1a2e;
+            border: none;
+            border-radius: 10px;
+            color: #4fc3f7;
+            font-size: 28px;
+            text-align: right;
+            padding: 10px 15px;
+            margin-bottom: 10px;
+            font-family: 'SF Mono', 'Monaco', monospace;
+        }
+
+        #display:focus {
+            outline: 2px solid #4fc3f7;
+        }
+
+        .memory-display {
+            text-align: right;
+            padding: 5px 15px;
+            color: #888;
+            font-size: 12px;
+            height: 20px;
+        }
+
+        .buttons {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        }
+
+        button {
+            height: 50px;
+            font-size: 18px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-family: inherit;
+        }
+
+        button:hover {
+            transform: scale(1.05);
+        }
+
+        button:active {
+            transform: scale(0.95);
+        }
+
+        .num {
+            background: #3d3d5c;
+            color: #fff;
+        }
+
+        .num:hover {
+            background: #4a4a6a;
+        }
+
+        .op {
+            background: #4fc3f7;
+            color: #1a1a2e;
+            font-weight: bold;
+        }
+
+        .op:hover {
+            background: #81d4fa;
+        }
+
+        .func {
+            background: #5c5c7a;
+            color: #e0e0e0;
+            font-size: 14px;
+        }
+
+        .func:hover {
+            background: #6a6a8a;
+        }
+
+        .clear {
+            background: #e57373;
+            color: #fff;
+        }
+
+        .clear:hover {
+            background: #ef5350;
+        }
+
+        .equals {
+            background: #81c784;
+            color: #1a1a2e;
+            font-weight: bold;
+        }
+
+        .equals:hover {
+            background: #a5d6a7;
+        }
+
+        .memory {
+            background: #455a64;
+            color: #b0bec5;
+            font-size: 12px;
+        }
+
+        .memory:hover {
+            background: #546e7a;
+        }
+
+        .span-2 {
+            grid-column: span 2;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="calculator">
+        <div class="memory-display" id="memoryDisplay"></div>
+        <input type="text" id="display" value="0" readonly>
+
+        <div class="buttons">
+            <!-- Memory Row -->
+            <button class="memory" onclick="memoryClear()">MC</button>
+            <button class="memory" onclick="memoryRecall()">MR</button>
+            <button class="memory" onclick="memoryAdd()">M+</button>
+            <button class="memory" onclick="memorySubtract()">M−</button>
+
+            <!-- Function Row 1 -->
+            <button class="func" onclick="appendToDisplay('Math.sqrt(')">√</button>
+            <button class="func" onclick="appendToDisplay('**2')">x²</button>
+            <button class="func" onclick="appendToDisplay('1/')">1/x</button>
+            <button class="clear" onclick="clearDisplay()">C</button>
+
+            <!-- Function Row 2 -->
+            <button class="func" onclick="appendToDisplay('Math.sin(')">sin</button>
+            <button class="func" onclick="appendToDisplay('Math.cos(')">cos</button>
+            <button class="func" onclick="appendToDisplay('Math.tan(')">tan</button>
+            <button class="op" onclick="appendToDisplay('/')">&divide;</button>
+
+            <!-- Function Row 3 -->
+            <button class="func" onclick="appendToDisplay('Math.log10(')">log</button>
+            <button class="func" onclick="appendToDisplay('Math.log(')">ln</button>
+            <button class="func" onclick="appendToDisplay('Math.PI')">π</button>
+            <button class="op" onclick="appendToDisplay('*')">&times;</button>
+
+            <!-- Number Rows -->
+            <button class="num" onclick="appendToDisplay('7')">7</button>
+            <button class="num" onclick="appendToDisplay('8')">8</button>
+            <button class="num" onclick="appendToDisplay('9')">9</button>
+            <button class="op" onclick="appendToDisplay('-')">−</button>
+
+            <button class="num" onclick="appendToDisplay('4')">4</button>
+            <button class="num" onclick="appendToDisplay('5')">5</button>
+            <button class="num" onclick="appendToDisplay('6')">6</button>
+            <button class="op" onclick="appendToDisplay('+')">+</button>
+
+            <button class="num" onclick="appendToDisplay('1')">1</button>
+            <button class="num" onclick="appendToDisplay('2')">2</button>
+            <button class="num" onclick="appendToDisplay('3')">3</button>
+            <button class="equals" onclick="calculate()">=</button>
+
+            <button class="num" onclick="appendToDisplay('0')">0</button>
+            <button class="num" onclick="appendToDisplay('.')">.</button>
+            <button class="num" onclick="appendToDisplay('(')">(</button>
+            <button class="num" onclick="appendToDisplay(')')">)</button>
+        </div>
+    </div>
+
+    <script>
+        let display = document.getElementById('display');
+        let memoryDisplay = document.getElementById('memoryDisplay');
+        let memory = 0;
+        let hasResult = false;
+
+        function appendToDisplay(value) {
+            if (hasResult && !isNaN(value)) {
+                display.value = value;
+                hasResult = false;
+            } else if (display.value === '0' && !isNaN(value)) {
+                display.value = value;
+            } else {
+                display.value += value;
+            }
+            hasResult = false;
+        }
+
+        function clearDisplay() {
+            display.value = '0';
+            hasResult = false;
+        }
+
+        function tokenizeExpression(expression) {
+            let tokens = [];
+            let i = 0;
+            while (i < expression.length) {
+                let ch = expression[i];
+                if (/\s/.test(ch)) {
+                    i += 1;
+                    continue;
+                }
+                if (ch === '*' && expression[i + 1] === '*') {
+                    tokens.push('**');
+                    i += 2;
+                    continue;
+                }
+                if (/[+\-*/()%]/.test(ch)) {
+                    tokens.push(ch);
+                    i += 1;
+                    continue;
+                }
+                if (/\d|\./.test(ch)) {
+                    let start = i;
+                    i += 1;
+                    while (i < expression.length && /[\d.]/.test(expression[i])) i += 1;
+                    let numberToken = expression.slice(start, i);
+                    if (!/^\d*\.?\d+$/.test(numberToken)) {
+                        throw new Error('Invalid number');
+                    }
+                    tokens.push(numberToken);
+                    continue;
+                }
+                if (/[A-Za-z_]/.test(ch)) {
+                    let start = i;
+                    i += 1;
+                    while (i < expression.length && /[A-Za-z0-9_]/.test(expression[i])) i += 1;
+                    tokens.push(expression.slice(start, i));
+                    continue;
+                }
+                throw new Error('Unsupported character');
+            }
+            return tokens;
+        }
+
+        function safeEvaluateExpression(expression) {
+            let normalized = expression
+                .replace(/Math\./g, '')
+                .replace(/\u2212/g, '-');
+
+            let tokens = tokenizeExpression(normalized);
+            let index = 0;
+
+            function peek() {
+                return tokens[index];
+            }
+
+            function consume(expected = null) {
+                let token = tokens[index];
+                if (expected !== null && token !== expected) {
+                    throw new Error('Unexpected token');
+                }
+                index += 1;
+                return token;
+            }
+
+            function parseExpression() {
+                return parseAddSub();
+            }
+
+            function parseAddSub() {
+                let value = parseMulDivMod();
+                while (peek() === '+' || peek() === '-') {
+                    let op = consume();
+                    let rhs = parseMulDivMod();
+                    value = op === '+' ? value + rhs : value - rhs;
+                }
+                return value;
+            }
+
+            function parseMulDivMod() {
+                let value = parsePower();
+                while (peek() === '*' || peek() === '/' || peek() === '%') {
+                    let op = consume();
+                    let rhs = parsePower();
+                    if (op === '*') value *= rhs;
+                    else if (op === '/') value /= rhs;
+                    else value %= rhs;
+                }
+                return value;
+            }
+
+            function parsePower() {
+                let value = parseUnary();
+                if (peek() === '**') {
+                    consume('**');
+                    let exponent = parsePower();
+                    value = Math.pow(value, exponent);
+                }
+                return value;
+            }
+
+            function parseUnary() {
+                if (peek() === '+') {
+                    consume('+');
+                    return parseUnary();
+                }
+                if (peek() === '-') {
+                    consume('-');
+                    return -parseUnary();
+                }
+                return parsePrimary();
+            }
+
+            function parsePrimary() {
+                let token = peek();
+                if (token === undefined) {
+                    throw new Error('Unexpected end');
+                }
+                if (token === '(') {
+                    consume('(');
+                    let value = parseExpression();
+                    consume(')');
+                    return value;
+                }
+                if (/^\d*\.?\d+$/.test(token)) {
+                    consume();
+                    return parseFloat(token);
+                }
+                if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(token)) {
+                    let identifier = consume();
+                    if (identifier === 'PI') {
+                        return Math.PI;
+                    }
+                    if (peek() !== '(') {
+                        throw new Error('Unsupported identifier');
+                    }
+                    consume('(');
+                    let arg = parseExpression();
+                    consume(')');
+                    if (identifier === 'sqrt') return Math.sqrt(arg);
+                    if (identifier === 'sin') return Math.sin(arg);
+                    if (identifier === 'cos') return Math.cos(arg);
+                    if (identifier === 'tan') return Math.tan(arg);
+                    if (identifier === 'log10') return Math.log10(arg);
+                    if (identifier === 'log') return Math.log(arg);
+                    throw new Error('Unsupported function');
+                }
+                throw new Error('Invalid expression');
+            }
+
+            let result = parseExpression();
+            if (index !== tokens.length) {
+                throw new Error('Unexpected trailing token');
+            }
+            return result;
+        }
+
+        function calculate() {
+            try {
+                let expression = display.value;
+                // Close any unclosed parentheses
+                let openParens = (expression.match(/\(/g) || []).length;
+                let closeParens = (expression.match(/\)/g) || []).length;
+                expression += ')'.repeat(openParens - closeParens);
+
+                let result = safeEvaluateExpression(expression);
+                if (isNaN(result) || !isFinite(result)) {
+                    display.value = 'Error';
+                } else {
+                    // Round to avoid floating point issues
+                    display.value = Math.round(result * 1000000000) / 1000000000;
+                }
+                hasResult = true;
+            } catch (e) {
+                display.value = 'Error';
+                hasResult = true;
+            }
+        }
+
+        function memoryClear() {
+            memory = 0;
+            updateMemoryDisplay();
+        }
+
+        function memoryRecall() {
+            if (display.value === '0' || hasResult) {
+                display.value = memory;
+            } else {
+                display.value += memory;
+            }
+        }
+
+        function memoryAdd() {
+            try {
+                let current = parseFloat(display.value) || 0;
+                memory += current;
+                updateMemoryDisplay();
+            } catch (e) { }
+        }
+
+        function memorySubtract() {
+            try {
+                let current = parseFloat(display.value) || 0;
+                memory -= current;
+                updateMemoryDisplay();
+            } catch (e) { }
+        }
+
+        function updateMemoryDisplay() {
+            memoryDisplay.textContent = memory !== 0 ? 'M: ' + memory : '';
+        }
+
+        // Keyboard support
+        document.addEventListener('keydown', function (e) {
+            if (e.key >= '0' && e.key <= '9') appendToDisplay(e.key);
+            else if (e.key === '+') appendToDisplay('+');
+            else if (e.key === '-') appendToDisplay('-');
+            else if (e.key === '*') appendToDisplay('*');
+            else if (e.key === '/') appendToDisplay('/');
+            else if (e.key === '.') appendToDisplay('.');
+            else if (e.key === '(' || e.key === ')') appendToDisplay(e.key);
+            else if (e.key === 'Enter') calculate();
+            else if (e.key === 'Escape' || e.key === 'c' || e.key === 'C') clearDisplay();
+            else if (e.key === 'Backspace') {
+                if (display.value.length > 1) {
+                    display.value = display.value.slice(0, -1);
+                } else {
+                    display.value = '0';
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>
