@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -396,3 +398,334 @@ class USMLEQuestion:
                     md_parts.append(f"**{author}:** {content}\n\n")
 
         return "".join(md_parts)
+
+
+# ---------------------------------------------------------------------------
+# v2 pipeline models
+#
+# Built for the simplified 4-stage pipeline (raw extract -> detect -> rewrite ->
+# native pack). Lives alongside the old ExtractedQuestion / USMLEQuestion until
+# the migration is complete (see docs/v2-migration-kill-list.md), at which
+# point the old models are deleted.
+# ---------------------------------------------------------------------------
+
+
+def _stable_hash(payload: dict) -> str:
+    """Deterministic SHA-256 hash of a dict payload (sorted keys, no whitespace)."""
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+@dataclass
+class RawSlide:
+    """All raw content extracted from a single slide. No AI involvement.
+
+    Stage 1 output. Used as input to Stage 2 (detection).
+    """
+
+    slide_number: int
+    deck_id: str = ""
+    text_blocks: list[str] = field(default_factory=list)
+    speaker_notes: str = ""
+    highlighted_texts: list[str] = field(default_factory=list)
+    potential_correct_answer: str = ""
+    image_paths: list[str] = field(default_factory=list)
+    slide_screenshot_path: str = ""
+    comments: list[dict] = field(default_factory=list)
+
+    def content_hash(self) -> str:
+        """Stable hash of content fields used by Stage 2 cache key.
+
+        Excludes path-dependent fields (image_paths, slide_screenshot_path)
+        so the same slide content hashes the same regardless of where files
+        live on disk.
+        """
+        return _stable_hash(
+            {
+                "slide_number": self.slide_number,
+                "text_blocks": self.text_blocks,
+                "speaker_notes": self.speaker_notes,
+                "highlighted_texts": self.highlighted_texts,
+                "potential_correct_answer": self.potential_correct_answer,
+                "image_count": len(self.image_paths),
+                "comment_contents": [c.get("content", "") for c in self.comments],
+            }
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "slide_number": self.slide_number,
+            "deck_id": self.deck_id,
+            "text_blocks": self.text_blocks,
+            "speaker_notes": self.speaker_notes,
+            "highlighted_texts": self.highlighted_texts,
+            "potential_correct_answer": self.potential_correct_answer,
+            "image_paths": self.image_paths,
+            "slide_screenshot_path": self.slide_screenshot_path,
+            "comments": self.comments,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "RawSlide":
+        return cls(
+            slide_number=data.get("slide_number", 0),
+            deck_id=data.get("deck_id", ""),
+            text_blocks=data.get("text_blocks", []),
+            speaker_notes=data.get("speaker_notes", ""),
+            highlighted_texts=data.get("highlighted_texts", []),
+            potential_correct_answer=data.get("potential_correct_answer", ""),
+            image_paths=data.get("image_paths", []),
+            slide_screenshot_path=data.get("slide_screenshot_path", ""),
+            comments=data.get("comments", []),
+        )
+
+
+DetectionStatus = Literal["ok", "needs_review", "error"]
+
+
+@dataclass
+class DetectedQuestion:
+    """A question identified from a slide by Stage 2 detection.
+
+    Carries forward source provenance (speaker notes, comments, slide path)
+    into Stage 3 so the rewrite has the same authoritative context.
+    """
+
+    deck_id: str
+    slide_number: int
+    question_index: int = 1
+    question_id: str = ""
+
+    # Detected content (may be messy; Stage 3 rewrites it)
+    stem_text: str = ""
+    choices: dict = field(default_factory=dict)
+    correct_answer: str = ""
+    explanation_hint: str = ""
+
+    # Media classification (preserved into Stage 3)
+    stem_image_paths: list[str] = field(default_factory=list)
+    explanation_image_paths: list[str] = field(default_factory=list)
+
+    # Authoritative context carried forward
+    source_slide_path: str = ""
+    speaker_notes: str = ""
+    comments: list[dict] = field(default_factory=list)
+    highlighted_texts: list[str] = field(default_factory=list)
+
+    # Quality signals
+    confidence: int = 0
+    status: DetectionStatus = "ok"
+    detection_warnings: list[str] = field(default_factory=list)
+    error: str = ""
+
+    # Provenance (for debugging and cache invalidation)
+    detect_model: str = ""
+    detect_prompt_version: str = ""
+
+    def __post_init__(self):
+        if not self.question_id:
+            if self.question_index > 1:
+                self.question_id = f"{self.slide_number}.{self.question_index}"
+            else:
+                self.question_id = str(self.slide_number)
+
+    def content_hash(self) -> str:
+        """Stable hash for Stage 3 cache key.
+
+        Includes only inputs that change the rewrite output. Excludes
+        confidence/warnings/status which are downstream-only signals.
+        """
+        return _stable_hash(
+            {
+                "stem_text": self.stem_text,
+                "choices": self.choices,
+                "correct_answer": self.correct_answer,
+                "explanation_hint": self.explanation_hint,
+                "speaker_notes": self.speaker_notes,
+                "comments": [c.get("content", "") for c in self.comments],
+                "highlighted_texts": self.highlighted_texts,
+                "stem_image_count": len(self.stem_image_paths),
+                "explanation_image_count": len(self.explanation_image_paths),
+            }
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "deck_id": self.deck_id,
+            "slide_number": self.slide_number,
+            "question_index": self.question_index,
+            "question_id": self.question_id,
+            "stem_text": self.stem_text,
+            "choices": self.choices,
+            "correct_answer": self.correct_answer,
+            "explanation_hint": self.explanation_hint,
+            "stem_image_paths": self.stem_image_paths,
+            "explanation_image_paths": self.explanation_image_paths,
+            "source_slide_path": self.source_slide_path,
+            "speaker_notes": self.speaker_notes,
+            "comments": self.comments,
+            "highlighted_texts": self.highlighted_texts,
+            "confidence": self.confidence,
+            "status": self.status,
+            "detection_warnings": self.detection_warnings,
+            "error": self.error,
+            "detect_model": self.detect_model,
+            "detect_prompt_version": self.detect_prompt_version,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "DetectedQuestion":
+        status = data.get("status", "ok")
+        if status not in ("ok", "needs_review", "error"):
+            status = "ok"
+        return cls(
+            deck_id=data.get("deck_id", ""),
+            slide_number=data.get("slide_number", 0),
+            question_index=data.get("question_index", 1),
+            question_id=data.get("question_id", ""),
+            stem_text=data.get("stem_text", ""),
+            choices=data.get("choices", {}),
+            correct_answer=data.get("correct_answer", ""),
+            explanation_hint=data.get("explanation_hint", ""),
+            stem_image_paths=data.get("stem_image_paths", []),
+            explanation_image_paths=data.get("explanation_image_paths", []),
+            source_slide_path=data.get("source_slide_path", ""),
+            speaker_notes=data.get("speaker_notes", ""),
+            comments=data.get("comments", []),
+            highlighted_texts=data.get("highlighted_texts", []),
+            confidence=data.get("confidence", 0),
+            status=status,
+            detection_warnings=data.get("detection_warnings", []),
+            error=data.get("error", ""),
+            detect_model=data.get("detect_model", ""),
+            detect_prompt_version=data.get("detect_prompt_version", ""),
+        )
+
+
+@dataclass
+class RewrittenQuestion:
+    """A fully USMLE-rewritten question ready for native pack export.
+
+    Stage 3 output. Stage 4 transforms this into the native pack JSON
+    contract via export/native_quail_export.py.
+    """
+
+    deck_id: str
+    slide_number: int
+    question_index: int = 1
+    question_id: str = ""
+
+    # Final clean content
+    stem: str = ""
+    choices: dict = field(default_factory=dict)
+    correct_answer: str = ""
+
+    # Rich explanation
+    correct_explanation: str = ""
+    incorrect_explanations: dict = field(default_factory=dict)
+    educational_objective: str = ""
+
+    # Tags
+    rotation: str = ""
+    topic: str = ""
+
+    # Media
+    stem_image_paths: list[str] = field(default_factory=list)
+    explanation_image_paths: list[str] = field(default_factory=list)
+    source_slide_path: str = ""
+
+    # Provenance carried forward
+    comments: list[dict] = field(default_factory=list)
+
+    # Quality
+    warnings: list[str] = field(default_factory=list)
+    error: str = ""
+
+    # Provenance for debugging
+    detect_model: str = ""
+    rewrite_model: str = ""
+    rewrite_prompt_version: str = ""
+
+    def __post_init__(self):
+        if not self.question_id:
+            if self.question_index > 1:
+                self.question_id = f"{self.slide_number}.{self.question_index}"
+            else:
+                self.question_id = str(self.slide_number)
+
+    def is_complete(self) -> bool:
+        """True when the question has all fields required by the native pack."""
+        if self.error:
+            return False
+        if not self.stem.strip():
+            return False
+        if len(self.choices) < 4 or len(self.choices) > 5:
+            return False
+        if not all(str(text).strip() for text in self.choices.values()):
+            return False
+        if self.correct_answer not in self.choices:
+            return False
+        if not self.correct_explanation.strip():
+            return False
+        if not self.educational_objective.strip():
+            return False
+        # Every non-correct choice must have an incorrect explanation
+        for letter in self.choices:
+            if letter == self.correct_answer:
+                continue
+            if not str(self.incorrect_explanations.get(letter, "")).strip():
+                return False
+        if not self.rotation.strip() or not self.topic.strip():
+            return False
+        return True
+
+    def to_dict(self) -> dict:
+        return {
+            "deck_id": self.deck_id,
+            "slide_number": self.slide_number,
+            "question_index": self.question_index,
+            "question_id": self.question_id,
+            "stem": self.stem,
+            "choices": self.choices,
+            "correct_answer": self.correct_answer,
+            "correct_explanation": self.correct_explanation,
+            "incorrect_explanations": self.incorrect_explanations,
+            "educational_objective": self.educational_objective,
+            "rotation": self.rotation,
+            "topic": self.topic,
+            "stem_image_paths": self.stem_image_paths,
+            "explanation_image_paths": self.explanation_image_paths,
+            "source_slide_path": self.source_slide_path,
+            "comments": self.comments,
+            "warnings": self.warnings,
+            "error": self.error,
+            "detect_model": self.detect_model,
+            "rewrite_model": self.rewrite_model,
+            "rewrite_prompt_version": self.rewrite_prompt_version,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "RewrittenQuestion":
+        return cls(
+            deck_id=data.get("deck_id", ""),
+            slide_number=data.get("slide_number", 0),
+            question_index=data.get("question_index", 1),
+            question_id=data.get("question_id", ""),
+            stem=data.get("stem", ""),
+            choices=data.get("choices", {}),
+            correct_answer=data.get("correct_answer", ""),
+            correct_explanation=data.get("correct_explanation", ""),
+            incorrect_explanations=data.get("incorrect_explanations", {}),
+            educational_objective=data.get("educational_objective", ""),
+            rotation=data.get("rotation", ""),
+            topic=data.get("topic", ""),
+            stem_image_paths=data.get("stem_image_paths", []),
+            explanation_image_paths=data.get("explanation_image_paths", []),
+            source_slide_path=data.get("source_slide_path", ""),
+            comments=data.get("comments", []),
+            warnings=data.get("warnings", []),
+            error=data.get("error", ""),
+            detect_model=data.get("detect_model", ""),
+            rewrite_model=data.get("rewrite_model", ""),
+            rewrite_prompt_version=data.get("rewrite_prompt_version", ""),
+        )
