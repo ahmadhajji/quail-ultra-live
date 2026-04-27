@@ -18,6 +18,8 @@ const api = vi.hoisted(() => ({
   listAdminUsers: vi.fn(),
   listInvites: vi.fn(),
   listLibraryPacks: vi.fn(),
+  listQuestionReports: vi.fn(),
+  listSupportTickets: vi.fn(),
   listUserPacks: vi.fn(),
   promoteToLibrary: vi.fn(),
   publishNativePackRevision: vi.fn(),
@@ -44,6 +46,8 @@ describe('AdminPage', () => {
     api.listAdminUsers.mockResolvedValue([{ id: 'admin-1', username: 'admin', email: '', role: 'admin', status: 'active', createdAt: 'now', updatedAt: 'now', packCount: 1 }])
     api.listInvites.mockResolvedValue([])
     api.listLibraryPacks.mockResolvedValue([{ id: 'system-1', name: 'Pediatrics', description: '', questionCount: 2, createdAt: 'now', updatedAt: 'now' }])
+    api.listQuestionReports.mockResolvedValue([])
+    api.listSupportTickets.mockResolvedValue([])
   })
 
   it('loads native pack content from the Content tab', async () => {

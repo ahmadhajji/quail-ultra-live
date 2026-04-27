@@ -255,6 +255,27 @@ export interface PackProgressSummary {
   incorrectCount: number
 }
 
+export interface SupportTicket {
+  id: string
+  userId: string
+  subject: string
+  category: string
+  message: string
+  createdAt: string
+  username: string
+}
+
+export interface QuestionReport {
+  id: string
+  packId: string
+  questionId: string
+  userId: string
+  category: string
+  message: string
+  createdAt: string
+  username: string
+}
+
 export type NativeQuestionStatus = 'draft' | 'ready' | 'blocked' | 'deprecated'
 
 export interface NativeQuestionSummary {

@@ -22,7 +22,7 @@ import {
 import { buildPasswordHash, comparePassword, createInviteToken, createRepository, hashInviteToken } from './repository'
 import { createPresignedUpload } from './s3'
 import { copyBlobPrefix, createWorkspaceStore } from './workspace-store'
-import { isEmailConfigured, sendInviteEmail } from './email'
+import { isEmailConfigured, sendInviteEmail, sendSupportEmail, sendQuestionReportEmail } from './email'
 import { legacyPageRedirectTarget, routePathFor } from './routes'
 import { findWorkspaceRoot, loadWorkspaceData } from '../shared/qbank'
 import { NATIVE_QBANK_MANIFEST, validateNativeQbankDirectory } from '../shared/native-qbank'
@@ -1551,6 +1551,69 @@ export async function createApp() {
     res.json({ ok: true })
   }))
 
+  app.post('/api/support/submit', requireAuth, asyncRoute(async function submitSupportTicket(req: any, res: any) {
+    const { subject, category, message } = req.body ?? {}
+    if (typeof subject !== 'string' || subject.trim().length === 0 || subject.trim().length > 200) {
+      return jsonError(res, 400, 'Subject must be 1–200 characters.')
+    }
+    const validCategories = ['bug', 'feedback', 'question']
+    if (!validCategories.includes(category)) {
+      return jsonError(res, 400, 'Invalid category.')
+    }
+    if (typeof message !== 'string' || message.trim().length === 0 || message.trim().length > 2000) {
+      return jsonError(res, 400, 'Message must be 1–2000 characters.')
+    }
+    const id = crypto.randomUUID()
+    const createdAt = new Date().toISOString()
+    await repository.createSupportTicket({ id, userId: req.user.id, subject: subject.trim(), category, message: message.trim(), createdAt })
+    let emailSent = false
+    if (isEmailConfigured()) {
+      void sendSupportEmail('ahmad2003.hajji@gmail.com', subject.trim(), category, message.trim(), req.user.username).then((sent) => {
+        emailSent = sent
+      }).catch((error) => {
+        console.warn('Failed to send support email:', error)
+      })
+    }
+    res.status(201).json({ ok: true, emailSent })
+  }))
+
+  app.get('/api/admin/support-tickets', requireAuth, asyncRoute(async function listSupportTicketsRoute(req: any, res: any) {
+    if (req.user.role !== 'admin') {
+      return jsonError(res, 403, 'Forbidden')
+    }
+    const tickets = await repository.listSupportTickets()
+    res.json({ tickets })
+  }))
+
+  app.post('/api/study-packs/:packId/questions/:qid/report', requireAuth, asyncRoute(async function reportQuestion(req: any, res: any) {
+    const { packId, qid } = req.params
+    const { category, message = '' } = req.body ?? {}
+    const validCategories = ['wrong-answer-key', 'typo-stem', 'bad-explanation', 'other']
+    if (!validCategories.includes(category)) {
+      return jsonError(res, 400, 'Invalid category.')
+    }
+    if (typeof message === 'string' && message.length > 2000) {
+      return jsonError(res, 400, 'Message must be 2000 characters or fewer.')
+    }
+    const id = crypto.randomUUID()
+    const createdAt = new Date().toISOString()
+    await repository.createQuestionReport({ id, packId, questionId: qid, userId: req.user.id, category, message: (message || '').trim(), createdAt })
+    if (isEmailConfigured()) {
+      void sendQuestionReportEmail('ahmad2003.hajji@gmail.com', packId, qid, category, (message || '').trim(), req.user.username).catch((error) => {
+        console.warn('Failed to send question report email:', error)
+      })
+    }
+    res.status(201).json({ ok: true })
+  }))
+
+  app.get('/api/admin/question-reports', requireAuth, asyncRoute(async function listQuestionReportsRoute(req: any, res: any) {
+    if (req.user.role !== 'admin') {
+      return jsonError(res, 403, 'Forbidden')
+    }
+    const reports = await repository.listQuestionReports()
+    res.json({ reports })
+  }))
+
   app.use(function apiErrorHandler(error: any, req: any, res: any, next: any) {
     if (!req.path.startsWith('/api/')) {
       return next(error)
@@ -1570,7 +1633,7 @@ export async function createApp() {
     res.sendFile(path.join(DIST_DIR, 'index.html'))
   })
 
-  app.get('/:page(overview|newblock|previousblocks|examview|admin|library)', function spaPages(_req: any, res: any) {
+  app.get('/:page(overview|newblock|previousblocks|examview|admin|library|support)', function spaPages(_req: any, res: any) {
     res.sendFile(path.join(DIST_DIR, 'index.html'))
   })
 

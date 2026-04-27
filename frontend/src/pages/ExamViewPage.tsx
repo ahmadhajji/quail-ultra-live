@@ -26,6 +26,7 @@ import { FloatingWindow } from '../components/FloatingWindow'
 import { ImageInspector, type ImageInspectorItem } from '../components/ImageInspector'
 import { SyncStatusPill } from '../components/SyncStatusPill'
 import { NativeQuestionExplanation, NativeQuestionStem } from '../components/exam/NativeQuestionContent'
+import { ReportQuestionModal } from '../components/ReportQuestionModal'
 import type { Mode, QbankInfo, SyncProgressOptions } from '../types/domain'
 
 function modeLabel(mode: Mode): string {
@@ -222,6 +223,7 @@ export function ExamViewPage() {
   const [timerLabel, setTimerLabel] = useState('Time Used')
   const [timerText, setTimerText] = useState('0:00:00')
   const [warningOpen, setWarningOpen] = useState(false)
+  const [reportModalOpen, setReportModalOpen] = useState(false)
   const [uiPrefs, updateUiPrefs, resetUiPrefs] = useUiPreferences()
   const examUiMode = useMemo<'v2'>(() => 'v2', [])
   const filteredLabSections = useMemo(() => {
@@ -1783,6 +1785,16 @@ export function ExamViewPage() {
           </div>
 
           <div className="footer-right">
+            {currentQid ? (
+              <button
+                className="btn btn-footer-tool"
+                type="button"
+                onClick={() => setReportModalOpen(true)}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+                <span>Report</span>
+              </button>
+            ) : null}
             {!block.complete ? (
               <button
                 className="btn btn-footer-tool"
@@ -2128,6 +2140,12 @@ export function ExamViewPage() {
         </div>
       ) : null}
       <ImageInspector open={Boolean(inspectorItem)} item={inspectorItem} onClose={() => setInspectorItem(null)} />
+      <ReportQuestionModal
+        open={reportModalOpen}
+        packId={packId}
+        questionId={currentQid}
+        onClose={() => setReportModalOpen(false)}
+      />
     </>
   )
 }
