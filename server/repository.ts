@@ -112,6 +112,10 @@ export interface AppRepository {
     updatedAt: string
   }): Promise<void>
   deleteSystemPack(systemPackId: string): Promise<void>
+  createSupportTicket(input: { id: string; userId: string; subject: string; category: string; message: string; createdAt: string }): Promise<void>
+  listSupportTickets(): Promise<any[]>
+  createQuestionReport(input: { id: string; packId: string; questionId: string; userId: string; category: string; message: string; createdAt: string }): Promise<void>
+  listQuestionReports(): Promise<any[]>
 }
 
 abstract class BaseRepository implements AppRepository {
@@ -147,6 +151,10 @@ abstract class BaseRepository implements AppRepository {
   abstract createSystemPack(input: any): Promise<void>
   abstract updateSystemPack(systemPackId: string, input: any): Promise<void>
   abstract deleteSystemPack(systemPackId: string): Promise<void>
+  abstract createSupportTicket(input: { id: string; userId: string; subject: string; category: string; message: string; createdAt: string }): Promise<void>
+  abstract listSupportTickets(): Promise<any[]>
+  abstract createQuestionReport(input: { id: string; packId: string; questionId: string; userId: string; category: string; message: string; createdAt: string }): Promise<void>
+  abstract listQuestionReports(): Promise<any[]>
 
   async countUsers(): Promise<number> {
     return (await this.listUsers()).length
@@ -228,6 +236,23 @@ class LocalRepository extends BaseRepository {
         workspace_path TEXT NOT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS support_tickets (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL DEFAULT '',
+        subject TEXT NOT NULL DEFAULT '',
+        category TEXT NOT NULL DEFAULT '',
+        message TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS question_reports (
+        id TEXT PRIMARY KEY,
+        pack_id TEXT NOT NULL DEFAULT '',
+        question_id TEXT NOT NULL DEFAULT '',
+        user_id TEXT NOT NULL DEFAULT '',
+        category TEXT NOT NULL DEFAULT '',
+        message TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
       );
     `)
     // Lazily add progress_override_path to study_packs for existing installs.
@@ -528,6 +553,30 @@ class LocalRepository extends BaseRepository {
   async deleteSystemPack(systemPackId: string) {
     this.db.prepare('DELETE FROM system_packs WHERE id = ?').run(systemPackId)
   }
+
+  async createSupportTicket(input: { id: string; userId: string; subject: string; category: string; message: string; createdAt: string }) {
+    this.db.prepare(
+      'INSERT INTO support_tickets (id, user_id, subject, category, message, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(input.id, input.userId, input.subject, input.category, input.message, input.createdAt)
+  }
+
+  async listSupportTickets() {
+    return this.db.prepare(
+      'SELECT st.id, st.user_id, st.subject, st.category, st.message, st.created_at, COALESCE(u.username, \'\') AS username FROM support_tickets st LEFT JOIN users u ON u.id = st.user_id ORDER BY st.created_at DESC'
+    ).all()
+  }
+
+  async createQuestionReport(input: { id: string; packId: string; questionId: string; userId: string; category: string; message: string; createdAt: string }) {
+    this.db.prepare(
+      'INSERT INTO question_reports (id, pack_id, question_id, user_id, category, message, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(input.id, input.packId, input.questionId, input.userId, input.category, input.message, input.createdAt)
+  }
+
+  async listQuestionReports() {
+    return this.db.prepare(
+      'SELECT qr.id, qr.pack_id, qr.question_id, qr.user_id, qr.category, qr.message, qr.created_at, COALESCE(u.username, \'\') AS username FROM question_reports qr LEFT JOIN users u ON u.id = qr.user_id ORDER BY qr.created_at DESC'
+    ).all()
+  }
 }
 
 class CloudRepository extends BaseRepository {
@@ -613,6 +662,27 @@ class CloudRepository extends BaseRepository {
     // Lazily add progress_override_path for library packs.
     await this.sql.query(`
       ALTER TABLE study_packs ADD COLUMN IF NOT EXISTS progress_override_path TEXT NOT NULL DEFAULT ''
+    `)
+    await this.sql.query(`
+      CREATE TABLE IF NOT EXISTS support_tickets (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL DEFAULT '',
+        subject TEXT NOT NULL DEFAULT '',
+        category TEXT NOT NULL DEFAULT '',
+        message TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMPTZ NOT NULL
+      )
+    `)
+    await this.sql.query(`
+      CREATE TABLE IF NOT EXISTS question_reports (
+        id TEXT PRIMARY KEY,
+        pack_id TEXT NOT NULL DEFAULT '',
+        question_id TEXT NOT NULL DEFAULT '',
+        user_id TEXT NOT NULL DEFAULT '',
+        category TEXT NOT NULL DEFAULT '',
+        message TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMPTZ NOT NULL
+      )
     `)
     const existing = await this.sql.query('SELECT key FROM app_settings WHERE key = $1', ['registration_mode'])
     if (!existing[0]) {
@@ -850,6 +920,32 @@ class CloudRepository extends BaseRepository {
 
   async deleteSystemPack(systemPackId: string) {
     await this.sql.query('DELETE FROM system_packs WHERE id = $1', [systemPackId])
+  }
+
+  async createSupportTicket(input: { id: string; userId: string; subject: string; category: string; message: string; createdAt: string }) {
+    await this.sql.query(
+      'INSERT INTO support_tickets (id, user_id, subject, category, message, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
+      [input.id, input.userId, input.subject, input.category, input.message, input.createdAt]
+    )
+  }
+
+  async listSupportTickets() {
+    return this.sql.query(
+      "SELECT st.id, st.user_id, st.subject, st.category, st.message, st.created_at, COALESCE(u.username, '') AS username FROM support_tickets st LEFT JOIN users u ON u.id = st.user_id ORDER BY st.created_at DESC"
+    )
+  }
+
+  async createQuestionReport(input: { id: string; packId: string; questionId: string; userId: string; category: string; message: string; createdAt: string }) {
+    await this.sql.query(
+      'INSERT INTO question_reports (id, pack_id, question_id, user_id, category, message, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [input.id, input.packId, input.questionId, input.userId, input.category, input.message, input.createdAt]
+    )
+  }
+
+  async listQuestionReports() {
+    return this.sql.query(
+      "SELECT qr.id, qr.pack_id, qr.question_id, qr.user_id, qr.category, qr.message, qr.created_at, COALESCE(u.username, '') AS username FROM question_reports qr LEFT JOIN users u ON u.id = qr.user_id ORDER BY qr.created_at DESC"
+    )
   }
 }
 

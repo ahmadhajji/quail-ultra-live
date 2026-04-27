@@ -6,6 +6,7 @@ import { LibraryPage } from '../pages/LibraryPage'
 import { NewBlockPage } from '../pages/NewBlockPage'
 import { OverviewPage } from '../pages/OverviewPage'
 import { PreviousBlocksPage } from '../pages/PreviousBlocksPage'
+import { SupportPage } from '../pages/SupportPage'
 
 export function App() {
   return (
@@ -17,6 +18,7 @@ export function App() {
       <Route path="/newblock" element={<NewBlockPage />} />
       <Route path="/previousblocks" element={<PreviousBlocksPage />} />
       <Route path="/examview" element={<ExamViewPage />} />
+      <Route path="/support" element={<SupportPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

@@ -6,7 +6,7 @@ import type { User } from '../types/domain'
 
 const COLLAPSED_STORAGE_KEY = 'quail-sidebar-collapsed'
 
-export type SidebarPage = 'home' | 'library' | 'admin' | 'overview' | 'newblock' | 'previousblocks' | 'other'
+export type SidebarPage = 'home' | 'library' | 'admin' | 'support' | 'overview' | 'newblock' | 'previousblocks' | 'other'
 
 interface AppShellProps {
   user: User | null
@@ -169,6 +169,13 @@ export function AppShell({ user, active, packId, packName, title, rightSlot, chi
                   onClick={() => go('admin')}
                 />
               ) : null}
+              <NavItem
+                active={active === 'support'}
+                icon="?"
+                label="Support"
+                collapsed={effectiveCollapsed}
+                onClick={() => go('support')}
+              />
 
               {inPackContext ? (
                 <>

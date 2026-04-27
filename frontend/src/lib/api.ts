@@ -1009,4 +1009,32 @@ export function installOnlineSyncHandler(): void {
   })
 }
 
+export async function submitSupportTicket(subject: string, category: string, message: string): Promise<{ ok: boolean; emailSent: boolean }> {
+  const payload = await requestRaw('/api/support/submit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ subject, category, message })
+  })
+  return payload as { ok: boolean; emailSent: boolean }
+}
+
+export async function listSupportTickets(): Promise<import('../types/domain').SupportTicket[]> {
+  const payload = await requestRaw('/api/admin/support-tickets')
+  return (payload as { tickets: import('../types/domain').SupportTicket[] }).tickets
+}
+
+export async function submitQuestionReport(packId: string, questionId: string, category: string, message: string): Promise<{ ok: boolean }> {
+  const payload = await requestRaw(`/api/study-packs/${encodeURIComponent(packId)}/questions/${encodeURIComponent(questionId)}/report`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category, message })
+  })
+  return payload as { ok: boolean }
+}
+
+export async function listQuestionReports(): Promise<import('../types/domain').QuestionReport[]> {
+  const payload = await requestRaw('/api/admin/question-reports')
+  return (payload as { reports: import('../types/domain').QuestionReport[] }).reports
+}
+
 export { RequestError, showSyncBanner }

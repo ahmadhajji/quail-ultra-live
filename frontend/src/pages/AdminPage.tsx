@@ -15,6 +15,8 @@ import {
   listAdminUsers,
   listInvites,
   listLibraryPacks,
+  listQuestionReports,
+  listSupportTickets,
   listUserPacks,
   promoteToLibrary,
   publishNativePackRevision,
@@ -36,11 +38,13 @@ import type {
   NativePackDiff,
   NativeQuestionSummary,
   PackProgressSummary,
+  QuestionReport,
   StudyPackSummary,
+  SupportTicket,
   UserRole
 } from '../types/domain'
 
-type AdminTab = 'overview' | 'users' | 'invites' | 'library' | 'content' | 'settings'
+type AdminTab = 'overview' | 'users' | 'invites' | 'library' | 'content' | 'settings' | 'reports'
 
 interface CreateUserFormState {
   username: string
@@ -112,18 +116,24 @@ export function AdminPage() {
   const [selectedNativeQuestionId, setSelectedNativeQuestionId] = useState('')
   const [nativeQuestionDraft, setNativeQuestionDraft] = useState('')
   const [nativeQuestionSaving, setNativeQuestionSaving] = useState(false)
+  const [questionReports, setQuestionReports] = useState<QuestionReport[]>([])
+  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([])
 
   async function refreshAdminData(): Promise<void> {
-    const [nextSettings, nextUsers, nextInvites, nextLibrary] = await Promise.all([
+    const [nextSettings, nextUsers, nextInvites, nextLibrary, nextReports, nextTickets] = await Promise.all([
       getAppSettings(true),
       listAdminUsers(),
       listInvites(),
-      listLibraryPacks()
+      listLibraryPacks(),
+      listQuestionReports().catch(() => [] as QuestionReport[]),
+      listSupportTickets().catch(() => [] as SupportTicket[])
     ])
     setSettings(nextSettings)
     setUsers(nextUsers)
     setInvites(nextInvites)
     setLibraryPacks(nextLibrary)
+    setQuestionReports(nextReports)
+    setSupportTickets(nextTickets)
   }
 
   async function loadExpandedUserPacks(userId: string): Promise<void> {
@@ -251,7 +261,8 @@ export function AdminPage() {
           ['invites', 'Invites'],
           ['library', 'Library'],
           ['content', 'Content'],
-          ['settings', 'Settings']
+          ['settings', 'Settings'],
+          ['reports', 'Reports']
         ] as const).map(([key, label]) => (
           <button
             key={key}
@@ -975,6 +986,80 @@ export function AdminPage() {
                   Create User
                 </button>
               </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {tab === 'reports' ? (
+        <section className="q-admin-section">
+          <div className="q-panel mb-4">
+            <div className="q-panel-header"><p className="q-panel-title">Question Reports</p></div>
+            <div className="q-panel-body">
+              {questionReports.length === 0 ? (
+                <p className="text-muted mb-0">No question reports yet.</p>
+              ) : (
+                <div className="table-responsive">
+                  <table className="table table-hover table-sm">
+                    <thead>
+                      <tr>
+                        <th>User</th>
+                        <th>Category</th>
+                        <th>Question ID</th>
+                        <th>Pack ID</th>
+                        <th>Message</th>
+                        <th>Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {questionReports.map((r) => (
+                        <tr key={r.id}>
+                          <td>{r.username || r.userId}</td>
+                          <td><span className="badge bg-danger">{r.category}</span></td>
+                          <td><code style={{ fontSize: '0.75em' }}>{r.questionId}</code></td>
+                          <td><code style={{ fontSize: '0.75em' }}>{r.packId}</code></td>
+                          <td style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.message || '—'}</td>
+                          <td>{formatDate(r.createdAt)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="q-panel">
+            <div className="q-panel-header"><p className="q-panel-title">Support Tickets</p></div>
+            <div className="q-panel-body">
+              {supportTickets.length === 0 ? (
+                <p className="text-muted mb-0">No support tickets yet.</p>
+              ) : (
+                <div className="table-responsive">
+                  <table className="table table-hover table-sm">
+                    <thead>
+                      <tr>
+                        <th>User</th>
+                        <th>Category</th>
+                        <th>Subject</th>
+                        <th>Message</th>
+                        <th>Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {supportTickets.map((t) => (
+                        <tr key={t.id}>
+                          <td>{t.username || t.userId}</td>
+                          <td><span className="badge bg-secondary">{t.category}</span></td>
+                          <td>{t.subject}</td>
+                          <td style={{ maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.message}</td>
+                          <td>{formatDate(t.createdAt)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </section>

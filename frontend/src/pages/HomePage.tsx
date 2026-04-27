@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { beginFolderImport, cancelFolderImport, completeFolderImport, deleteStudyPack, exportStudyPackZip, getAuthConfig, getSession, importStudyPack, listStudyPacks, login, logout, register, uploadFolderImportBatch, uploadFolderImportDirect, uploadFolderImportPresigned, uploadZipImportDirect, uploadZipImportPresigned } from '../lib/api'
+import { localStore } from '../lib/store'
+import { TutorialModal } from '../components/TutorialModal'
 import { AppShell } from '../components/AppShell'
 import { Brand } from '../components/Brand'
 import { navigate } from '../lib/navigation'
@@ -72,11 +74,17 @@ export function HomePage() {
   const [folderFiles, setFolderFiles] = useState<FileList | null>(null)
   const [zipFile, setZipFile] = useState<File | undefined>()
   const [authConfig, setAuthConfig] = useState<AppSettings>({ registrationMode: 'invite-only' })
+  const [showTutorial, setShowTutorial] = useState(false)
 
   const inviteToken = useMemo(() => new URLSearchParams(window.location.search).get('invite') ?? '', [])
   const inviteModeEnabled = authConfig.registrationMode === 'invite-only'
   const registrationAvailable = inviteModeEnabled && Boolean(inviteToken)
   const uploadMode = authConfig.uploadMode ?? (authConfig.directBlobUploads ? 'vercel-blob' : 'multipart')
+
+  function handleDismissTutorial() {
+    localStore.set('has-seen-tutorial', true)
+    setShowTutorial(false)
+  }
 
   async function refreshSessionView(): Promise<void> {
     const [currentUser, currentConfig] = await Promise.all([
@@ -87,6 +95,9 @@ export function HomePage() {
     setAuthConfig(currentConfig)
     if (currentUser) {
       setPacks(await listStudyPacks())
+      if (!localStore.get<boolean>('has-seen-tutorial')) {
+        setShowTutorial(true)
+      }
     } else {
       setPacks([])
     }
@@ -423,6 +434,7 @@ export function HomePage() {
             </div>
           </section>
       </div>
+      <TutorialModal open={showTutorial} onDismiss={handleDismissTutorial} />
     </AppShell>
   )
 }
