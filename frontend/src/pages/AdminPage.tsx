@@ -125,8 +125,8 @@ export function AdminPage() {
       listAdminUsers(),
       listInvites(),
       listLibraryPacks(),
-      listQuestionReports().catch(() => [] as QuestionReport[]),
-      listSupportTickets().catch(() => [] as SupportTicket[])
+      Promise.resolve().then(() => listQuestionReports()).catch(() => [] as QuestionReport[]),
+      Promise.resolve().then(() => listSupportTickets()).catch(() => [] as SupportTicket[])
     ])
     setSettings(nextSettings)
     setUsers(nextUsers)
