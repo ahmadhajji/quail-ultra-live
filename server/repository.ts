@@ -33,6 +33,15 @@ type ImportSessionInput = {
   updatedAt?: string
 }
 
+type AnswerAnalyticsInput = {
+  systemPackId: string
+  questionId: string
+  userId: string
+  selectedChoice: string
+  correctChoice: string
+  answeredAt: string
+}
+
 export interface AppRepository {
   backend: 'local' | 'cloud'
   init(): Promise<void>
@@ -98,6 +107,7 @@ export interface AppRepository {
   deleteImportSession(sessionId: string): Promise<void>
   listSystemPacks(): Promise<any[]>
   getSystemPackById(systemPackId: string): Promise<any | null>
+  getSystemPackByWorkspacePath(workspacePath: string): Promise<any | null>
   createSystemPack(input: {
     id: string
     name: string
@@ -112,6 +122,9 @@ export interface AppRepository {
     updatedAt: string
   }): Promise<void>
   deleteSystemPack(systemPackId: string): Promise<void>
+  recordAnswerAnalytics(input: AnswerAnalyticsInput[]): Promise<void>
+  listAnswerDistribution(systemPackId: string, questionIds: string[], excludeUserId: string): Promise<any[]>
+  deleteAnswerAnalyticsForSystemPack(systemPackId: string): Promise<void>
   createSupportTicket(input: { id: string; userId: string; subject: string; category: string; message: string; createdAt: string }): Promise<void>
   listSupportTickets(): Promise<any[]>
   createQuestionReport(input: { id: string; packId: string; questionId: string; userId: string; category: string; message: string; createdAt: string }): Promise<void>
@@ -148,9 +161,13 @@ abstract class BaseRepository implements AppRepository {
   abstract deleteImportSession(sessionId: string): Promise<void>
   abstract listSystemPacks(): Promise<any[]>
   abstract getSystemPackById(systemPackId: string): Promise<any | null>
+  abstract getSystemPackByWorkspacePath(workspacePath: string): Promise<any | null>
   abstract createSystemPack(input: any): Promise<void>
   abstract updateSystemPack(systemPackId: string, input: any): Promise<void>
   abstract deleteSystemPack(systemPackId: string): Promise<void>
+  abstract recordAnswerAnalytics(input: AnswerAnalyticsInput[]): Promise<void>
+  abstract listAnswerDistribution(systemPackId: string, questionIds: string[], excludeUserId: string): Promise<any[]>
+  abstract deleteAnswerAnalyticsForSystemPack(systemPackId: string): Promise<void>
   abstract createSupportTicket(input: { id: string; userId: string; subject: string; category: string; message: string; createdAt: string }): Promise<void>
   abstract listSupportTickets(): Promise<any[]>
   abstract createQuestionReport(input: { id: string; packId: string; questionId: string; userId: string; category: string; message: string; createdAt: string }): Promise<void>
@@ -254,6 +271,19 @@ class LocalRepository extends BaseRepository {
         message TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS question_answer_analytics (
+        system_pack_id TEXT NOT NULL,
+        question_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        selected_choice TEXT NOT NULL,
+        correct_choice TEXT NOT NULL DEFAULT '',
+        answered_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (system_pack_id, question_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_question_answer_analytics_question
+        ON question_answer_analytics (system_pack_id, question_id);
     `)
     // Lazily add progress_override_path to study_packs for existing installs.
     // The plan specifies: user-uploaded packs keep progress in their workspace,
@@ -538,6 +568,12 @@ class LocalRepository extends BaseRepository {
     ).get(systemPackId) || null
   }
 
+  async getSystemPackByWorkspacePath(workspacePath: string) {
+    return this.db.prepare(
+      'SELECT id, name, description, question_count, workspace_path, created_at, updated_at FROM system_packs WHERE workspace_path = ?'
+    ).get(workspacePath) || null
+  }
+
   async createSystemPack(input: any) {
     this.db.prepare(`
       INSERT INTO system_packs (id, name, description, question_count, workspace_path, created_at, updated_at)
@@ -552,6 +588,60 @@ class LocalRepository extends BaseRepository {
 
   async deleteSystemPack(systemPackId: string) {
     this.db.prepare('DELETE FROM system_packs WHERE id = ?').run(systemPackId)
+  }
+
+  async recordAnswerAnalytics(input: AnswerAnalyticsInput[]) {
+    if (input.length === 0) {
+      return
+    }
+    const statement = this.db.prepare(`
+      INSERT OR IGNORE INTO question_answer_analytics (
+        system_pack_id, question_id, user_id, selected_choice, correct_choice, answered_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    this.db.exec('BEGIN')
+    try {
+      for (const item of input) {
+        const timestamp = nowIso()
+        statement.run(
+          item.systemPackId,
+          item.questionId,
+          item.userId,
+          item.selectedChoice,
+          item.correctChoice,
+          item.answeredAt,
+          timestamp,
+          timestamp
+        )
+      }
+      this.db.exec('COMMIT')
+    } catch (error) {
+      try {
+        this.db.exec('ROLLBACK')
+      } catch {
+        // Ignore rollback failures and surface the insert error.
+      }
+      throw error
+    }
+  }
+
+  async listAnswerDistribution(systemPackId: string, questionIds: string[], excludeUserId: string) {
+    const ids = [...new Set(questionIds.filter(Boolean))]
+    if (!systemPackId || ids.length === 0) {
+      return []
+    }
+    const placeholders = ids.map(() => '?').join(', ')
+    return this.db.prepare(`
+      SELECT question_id, selected_choice, COUNT(*) AS answer_count
+      FROM question_answer_analytics
+      WHERE system_pack_id = ? AND user_id != ? AND question_id IN (${placeholders})
+      GROUP BY question_id, selected_choice
+      ORDER BY question_id ASC, selected_choice ASC
+    `).all(systemPackId, excludeUserId, ...ids)
+  }
+
+  async deleteAnswerAnalyticsForSystemPack(systemPackId: string) {
+    this.db.prepare('DELETE FROM question_answer_analytics WHERE system_pack_id = ?').run(systemPackId)
   }
 
   async createSupportTicket(input: { id: string; userId: string; subject: string; category: string; message: string; createdAt: string }) {
@@ -683,6 +773,23 @@ class CloudRepository extends BaseRepository {
         message TEXT NOT NULL DEFAULT '',
         created_at TIMESTAMPTZ NOT NULL
       )
+    `)
+    await this.sql.query(`
+      CREATE TABLE IF NOT EXISTS question_answer_analytics (
+        system_pack_id TEXT NOT NULL,
+        question_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        selected_choice TEXT NOT NULL,
+        correct_choice TEXT NOT NULL DEFAULT '',
+        answered_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY (system_pack_id, question_id, user_id)
+      )
+    `)
+    await this.sql.query(`
+      CREATE INDEX IF NOT EXISTS idx_question_answer_analytics_question
+        ON question_answer_analytics (system_pack_id, question_id)
     `)
     const existing = await this.sql.query('SELECT key FROM app_settings WHERE key = $1', ['registration_mode'])
     if (!existing[0]) {
@@ -904,6 +1011,14 @@ class CloudRepository extends BaseRepository {
     return rows[0] || null
   }
 
+  async getSystemPackByWorkspacePath(workspacePath: string) {
+    const rows = await this.sql.query(
+      'SELECT id, name, description, question_count, workspace_path, created_at, updated_at FROM system_packs WHERE workspace_path = $1',
+      [workspacePath]
+    )
+    return rows[0] || null
+  }
+
   async createSystemPack(input: any) {
     await this.sql.query(`
       INSERT INTO system_packs (id, name, description, question_count, workspace_path, created_at, updated_at)
@@ -920,6 +1035,46 @@ class CloudRepository extends BaseRepository {
 
   async deleteSystemPack(systemPackId: string) {
     await this.sql.query('DELETE FROM system_packs WHERE id = $1', [systemPackId])
+  }
+
+  async recordAnswerAnalytics(input: AnswerAnalyticsInput[]) {
+    for (const item of input) {
+      const timestamp = nowIso()
+      await this.sql.query(`
+        INSERT INTO question_answer_analytics (
+          system_pack_id, question_id, user_id, selected_choice, correct_choice, answered_at, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (system_pack_id, question_id, user_id) DO NOTHING
+      `, [
+        item.systemPackId,
+        item.questionId,
+        item.userId,
+        item.selectedChoice,
+        item.correctChoice,
+        item.answeredAt,
+        timestamp,
+        timestamp
+      ])
+    }
+  }
+
+  async listAnswerDistribution(systemPackId: string, questionIds: string[], excludeUserId: string) {
+    const ids = [...new Set(questionIds.filter(Boolean))]
+    if (!systemPackId || ids.length === 0) {
+      return []
+    }
+    const placeholders = ids.map((_, index) => `$${index + 3}`).join(', ')
+    return this.sql.query(`
+      SELECT question_id, selected_choice, COUNT(*)::int AS answer_count
+      FROM question_answer_analytics
+      WHERE system_pack_id = $1 AND user_id != $2 AND question_id IN (${placeholders})
+      GROUP BY question_id, selected_choice
+      ORDER BY question_id ASC, selected_choice ASC
+    `, [systemPackId, excludeUserId, ...ids])
+  }
+
+  async deleteAnswerAnalyticsForSystemPack(systemPackId: string) {
+    await this.sql.query('DELETE FROM question_answer_analytics WHERE system_pack_id = $1', [systemPackId])
   }
 
   async createSupportTicket(input: { id: string; userId: string; subject: string; category: string; message: string; createdAt: string }) {

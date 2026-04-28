@@ -95,3 +95,78 @@ describe('local repository invite schema', () => {
     }
   })
 })
+
+describe('local repository answer analytics', () => {
+  afterEach(() => {
+    process.env = { ...originalEnv }
+    vi.resetModules()
+  })
+
+  it('stores only the first answer per user and excludes the requesting user from distributions', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'quail-answer-analytics-'))
+
+    try {
+      const { createRepository } = await loadRepository(tempDir)
+      const repository = createRepository()
+      await repository.init()
+      await repository.createSystemPack({
+        id: 'system-1',
+        name: 'Library Pack',
+        description: '',
+        questionCount: 1,
+        workspacePath: '/shared/library-pack',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z'
+      })
+
+      expect(await repository.getSystemPackByWorkspacePath('/shared/library-pack')).toMatchObject({ id: 'system-1' })
+      expect(await repository.getSystemPackByWorkspacePath('/private-pack')).toBeNull()
+
+      await repository.recordAnswerAnalytics([
+        {
+          systemPackId: 'system-1',
+          questionId: '101',
+          userId: 'peer-1',
+          selectedChoice: 'B',
+          correctChoice: 'B',
+          answeredAt: '2026-01-01T00:00:00.000Z'
+        },
+        {
+          systemPackId: 'system-1',
+          questionId: '101',
+          userId: 'peer-1',
+          selectedChoice: 'A',
+          correctChoice: 'B',
+          answeredAt: '2026-01-02T00:00:00.000Z'
+        },
+        {
+          systemPackId: 'system-1',
+          questionId: '101',
+          userId: 'peer-2',
+          selectedChoice: 'A',
+          correctChoice: 'B',
+          answeredAt: '2026-01-03T00:00:00.000Z'
+        },
+        {
+          systemPackId: 'system-1',
+          questionId: '101',
+          userId: 'viewer',
+          selectedChoice: 'C',
+          correctChoice: 'B',
+          answeredAt: '2026-01-04T00:00:00.000Z'
+        }
+      ])
+
+      expect(await repository.listAnswerDistribution('system-1', ['101'], 'viewer')).toEqual([
+        { question_id: '101', selected_choice: 'A', answer_count: 1 },
+        { question_id: '101', selected_choice: 'B', answer_count: 1 }
+      ])
+
+      await repository.deleteAnswerAnalyticsForSystemPack('system-1')
+      expect(await repository.listAnswerDistribution('system-1', ['101'], 'viewer')).toEqual([])
+      ;(repository as any).db.close()
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true })
+    }
+  })
+})

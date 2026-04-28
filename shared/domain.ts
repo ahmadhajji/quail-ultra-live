@@ -207,6 +207,20 @@ export interface SyncProgressOptions {
   silent?: boolean
 }
 
+export interface QuestionChoiceStats {
+  count: number | null
+  percent: number | null
+}
+
+export interface QuestionStats {
+  eligible: boolean
+  peerCount: number
+  minPeerCount: number
+  correctChoice: string
+  correctPercent: number | null
+  choices: Record<string, QuestionChoiceStats>
+}
+
 export interface AppSettings {
   registrationMode: RegistrationMode
   storageBackend?: StorageBackend | undefined
