@@ -1659,6 +1659,35 @@ export async function createApp() {
     res.json({ reports })
   }))
 
+  app.post('/api/admin/seed-test-stats', requireAuth, requireAdmin, asyncRoute(async function seedTestStats(req: any, res: any) {
+    const { packId, questionIds, peerCount = 5 } = req.body ?? {}
+    if (!packId) return jsonError(res, 400, 'packId required')
+    const pack = await loadPackForUser(req.user.id, packId, '')
+    if (!pack) return jsonError(res, 404, 'Study pack not found')
+    const systemPack = await repository.getSystemPackByWorkspacePath(pack.row.workspace_path)
+    if (!systemPack) return jsonError(res, 400, 'Pack is not a library pack — stats not eligible')
+    const allChoices = pack.qbankinfo.choices ?? {}
+    const qids: string[] = Array.isArray(questionIds) && questionIds.length
+      ? questionIds
+      : Object.keys(allChoices).slice(0, 10)
+    const now = new Date().toISOString()
+    const submissions: { systemPackId: string; questionId: string; userId: string; selectedChoice: string; correctChoice: string; answeredAt: string }[] = []
+    for (const qid of qids) {
+      const meta = allChoices[qid]
+      if (!meta) continue
+      const options = meta.options ?? []
+      const correct = meta.correct ?? options[0] ?? 'A'
+      const wrong = options.filter((o: string) => o !== correct)
+      for (let i = 0; i < peerCount; i++) {
+        const pickCorrect = i < Math.ceil(peerCount * 0.6)
+        const selected = pickCorrect ? correct : (wrong[i % Math.max(wrong.length, 1)] ?? options[0] ?? 'A')
+        submissions.push({ systemPackId: systemPack.id, questionId: qid, userId: `seed-peer-${i + 1}`, selectedChoice: selected, correctChoice: correct, answeredAt: now })
+      }
+    }
+    await repository.recordAnswerAnalytics(submissions)
+    res.json({ seeded: submissions.length, questions: qids.length, peerCount })
+  }))
+
   app.use(function apiErrorHandler(error: any, req: any, res: any, next: any) {
     if (!req.path.startsWith('/api/')) {
       return next(error)
