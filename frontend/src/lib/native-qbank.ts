@@ -71,16 +71,22 @@ function encodeRelativePath(relativePath: string): string {
     .join('/')
 }
 
+function appendRelativeToBasePath(basePath: string, relativePath: string): string {
+  const [pathPart, queryPart] = basePath.split('?')
+  const encodedPath = encodeRelativePath(relativePath.replace(/^\.?\//, ''))
+  return `${pathPart}/${encodedPath}${queryPart ? `?${queryPart}` : ''}`
+}
+
 export function nativeQuestionUrl(basePath: string, qid: string): string {
-  return `${basePath}/questions/${encodeURIComponent(qid)}.json`
+  return appendRelativeToBasePath(basePath, `questions/${qid}.json`)
 }
 
 export function nativeQuestionPathUrl(basePath: string, relativePath: string): string {
-  return `${basePath}/${encodeRelativePath(relativePath.replace(/^\.?\//, ''))}`
+  return appendRelativeToBasePath(basePath, relativePath)
 }
 
 export function nativeMediaUrl(basePath: string, relativePath: string): string {
-  return `${basePath}/${encodeRelativePath(relativePath.replace(/^\.?\//, ''))}`
+  return appendRelativeToBasePath(basePath, relativePath)
 }
 
 async function fetchNativeQuestionUncached(basePath: string, qid: string, relativePath = ''): Promise<NativeQuestion> {

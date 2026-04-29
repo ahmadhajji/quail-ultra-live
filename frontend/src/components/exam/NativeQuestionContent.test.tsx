@@ -56,10 +56,10 @@ describe('NativeQuestionContent', () => {
     render(
       <>
         <section aria-label="stem">
-          <NativeQuestionStem question={question} basePath="/api/study-packs/test/file" />
+          <NativeQuestionStem question={question} basePath="/api/study-packs/test/file?rev=3" />
         </section>
         <section aria-label="explanation">
-          <NativeQuestionExplanation question={question} basePath="/api/study-packs/test/file" />
+          <NativeQuestionExplanation question={question} basePath="/api/study-packs/test/file?rev=3" />
         </section>
       </>
     )
@@ -68,11 +68,11 @@ describe('NativeQuestionContent', () => {
     const explanation = screen.getByLabelText('explanation')
 
     expect(within(stem).getByText('Native stem text.')).toBeInTheDocument()
-    expect(within(stem).getByAltText('Stem image')).toHaveAttribute('src', '/api/study-packs/test/file/media/stem.svg')
+    expect(within(stem).getByAltText('Stem image')).toHaveAttribute('src', '/api/study-packs/test/file/media/stem.svg?rev=3')
     expect(within(stem).queryByAltText('Explanation image')).not.toBeInTheDocument()
 
     expect(within(explanation).getByText('Native explanation text.')).toBeInTheDocument()
-    expect(within(explanation).getByAltText('Explanation image')).toHaveAttribute('src', '/api/study-packs/test/file/media/explanation.svg')
+    expect(within(explanation).getByAltText('Explanation image')).toHaveAttribute('src', '/api/study-packs/test/file/media/explanation.svg?rev=3')
     expect(within(explanation).queryByAltText('Stem image')).not.toBeInTheDocument()
   })
 })
