@@ -45,6 +45,8 @@ jobs:
           npm run validate:qbank -- contracts/quail-ultra-qbank/v1/fixtures/legacy-pack-minimal
 
       - name: Run parser tests
+        env:
+          OPENAI_API_KEY: sk-proj-ci-placeholder
         run: npm run parser:test
 
   docker-build:
