@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { AdminUser, AppSettings, InviteCreationResult, InviteRecord, LibraryPackSummary, NativePackContent, NativePackDiff, NativeQuestionSummary, PackProgressSummary, QbankInfo, StudyPackSummary, User } from '../types/domain'
+import type { AdminUser, AppSettings, InviteCreationResult, InviteRecord, LibraryPackSummary, NativePackContent, NativePackDiff, NativeQuestionSummary, PackProgressSummary, QbankInfo, QuestionStats, StudyPackSummary, User } from '../types/domain'
 
 const userSchema = z.object({
   id: z.string(),
@@ -184,6 +184,22 @@ export const revisionResponseSchema = z.object({
   revision: z.number(),
   applied: z.boolean().optional(),
   serverAcceptedAt: z.string().optional()
+})
+
+export const questionStatsSchema: z.ZodType<QuestionStats> = z.object({
+  eligible: z.boolean(),
+  peerCount: z.number(),
+  minPeerCount: z.number(),
+  correctChoice: z.string(),
+  correctPercent: z.number().nullable(),
+  choices: z.record(z.string(), z.object({
+    count: z.number().nullable(),
+    percent: z.number().nullable()
+  }))
+})
+
+export const questionStatsResponseSchema = z.object({
+  stats: z.record(z.string(), questionStatsSchema)
 })
 
 export const importSessionSchema = z.object({

@@ -1,12 +1,12 @@
 import { z } from 'zod'
 import { upload as uploadBlobClient } from '@vercel/blob/client'
 import { unzipSync, zipSync } from 'fflate'
-import { adminUserSchema, adminUsersResponseSchema, appSettingsResponseSchema, authConfigSchema, authResponseSchema, importSessionSchema, inviteCreationResponseSchema, invitesResponseSchema, libraryPackSchema, libraryPacksResponseSchema, manifestResponseSchema, nativePackContentSchema, nativePackDiffSchema, packProgressSummarySchema, qbankInfoResponseSchema, qbankInfoSchema, revisionResponseSchema, sessionResponseSchema, startBlockResponseSchema, studyPackSchema, studyPacksResponseSchema } from './schemas'
+import { adminUserSchema, adminUsersResponseSchema, appSettingsResponseSchema, authConfigSchema, authResponseSchema, importSessionSchema, inviteCreationResponseSchema, invitesResponseSchema, libraryPackSchema, libraryPacksResponseSchema, manifestResponseSchema, nativePackContentSchema, nativePackDiffSchema, packProgressSummarySchema, qbankInfoResponseSchema, qbankInfoSchema, questionStatsResponseSchema, revisionResponseSchema, sessionResponseSchema, startBlockResponseSchema, studyPackSchema, studyPacksResponseSchema } from './schemas'
 import { getCurrentBlockKey } from './navigation'
 import { ProgressSyncCoordinator } from './progress-sync'
 import { normalizeProgress } from './progress'
 import { STORE_PREFIX, WARM_PREFIX, localStore } from './store'
-import type { AdminUser, AppSettings, CachedPackEntry, DirtyProgressEntry, InviteCreationResult, InviteRecord, LibraryPackSummary, NativePackContent, NativePackDiff, PackProgressSummary, ProgressRecord, QbankInfo, StartBlockPreferences, StudyPackSummary, SyncMetadata, SyncProgressOptions, SyncProgressResult, User, UserRole, UserStatus } from '../types/domain'
+import type { AdminUser, AppSettings, CachedPackEntry, DirtyProgressEntry, InviteCreationResult, InviteRecord, LibraryPackSummary, NativePackContent, NativePackDiff, PackProgressSummary, ProgressRecord, QbankInfo, QuestionStats, StartBlockPreferences, StudyPackSummary, SyncMetadata, SyncProgressOptions, SyncProgressResult, User, UserRole, UserStatus } from '../types/domain'
 
 const DB_NAME = 'quail-ultra-live'
 const DB_VERSION = 1
@@ -778,6 +778,16 @@ export async function resetPack(packId: string): Promise<number> {
   const refreshed = await fetchQbankInfo(packId, '')
   await updateCachedProgress(packId, refreshed.progress, payload.revision)
   return payload.revision
+}
+
+export async function getQuestionStats(packId: string, questionIds: string[]): Promise<Record<string, QuestionStats>> {
+  const ids = [...new Set(questionIds.filter(Boolean))]
+  if (ids.length === 0) {
+    return {}
+  }
+  const query = ids.map((id) => encodeURIComponent(id)).join(',')
+  const payload = await request(`/api/study-packs/${packId}/question-stats?ids=${query}`, questionStatsResponseSchema)
+  return payload.stats
 }
 
 export async function listAdminUsers(): Promise<AdminUser[]> {

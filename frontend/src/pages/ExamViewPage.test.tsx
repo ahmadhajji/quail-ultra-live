@@ -6,7 +6,8 @@ import { createQbankInfoFixture } from '../test/fixtures'
 import { ExamViewPage } from './ExamViewPage'
 
 const api = vi.hoisted(() => ({
-  syncProgress: vi.fn()
+  syncProgress: vi.fn(),
+  getQuestionStats: vi.fn().mockResolvedValue({})
 }))
 
 const navigation = vi.hoisted(() => ({

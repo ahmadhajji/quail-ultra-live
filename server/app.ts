@@ -33,6 +33,7 @@ import {
   summarizeNativeQuestion
 } from '../shared/native-pack-admin'
 import { deleteBlock, normalizeProgress, startBlock } from '../shared/progress'
+import { buildQuestionStats, collectNewlySubmittedAnswers } from './answer-stats'
 
 function nowIso() {
   return new Date().toISOString()
@@ -56,6 +57,15 @@ function packSummary(row: any) {
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
+}
+
+function parseQuestionStatsIds(value: unknown): string[] {
+  const rawValues = Array.isArray(value) ? value : [value]
+  const ids = rawValues
+    .flatMap((entry) => String(entry || '').split(','))
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+  return [...new Set(ids)].slice(0, 100)
 }
 
 function adminUserSummary(row: any) {
@@ -970,6 +980,7 @@ export async function createApp() {
         await deletePackRow(userPack)
       }
     }
+    await repository.deleteAnswerAnalyticsForSystemPack(systemPack.id)
     await repository.deleteSystemPack(systemPack.id)
     if (storageBackend !== 'railway') {
       await workspaceStore.deleteWorkspace(systemPack.workspace_path)
@@ -1442,6 +1453,27 @@ export async function createApp() {
     res.json({ qbankinfo: pack.qbankinfo, pack: packSummary(pack.row) })
   }))
 
+  app.get('/api/study-packs/:packId/question-stats', requireAuth, asyncRoute(async function getQuestionStats(req: any, res: any) {
+    const pack = await loadPackForUser(req.user.id, req.params.packId, '')
+    if (!pack) {
+      return jsonError(res, 404, 'Study pack not found')
+    }
+    const ids = parseQuestionStatsIds(req.query.ids)
+    const systemPack = await repository.getSystemPackByWorkspacePath(pack.row.workspace_path)
+    const eligible = Boolean(systemPack)
+    const rows = eligible
+      ? await repository.listAnswerDistribution(systemPack.id, ids, req.user.id)
+      : []
+    res.json({
+      stats: buildQuestionStats({
+        ids,
+        eligible,
+        choices: pack.qbankinfo.choices || {},
+        rows
+      })
+    })
+  }))
+
   app.get('/api/study-packs/:packId/manifest', requireAuth, asyncRoute(async function getManifest(req: any, res: any) {
     const row = await repository.getPackForUser(req.user.id, req.params.packId)
     if (!row) {
@@ -1513,7 +1545,20 @@ export async function createApp() {
         serverAcceptedAt: nowIso()
       })
     }
+    const previousProgress = structuredClone(pack.qbankinfo.progress)
     pack.qbankinfo.progress = incomingProgress
+    normalizeProgress(pack.qbankinfo.progress, pack.qbankinfo)
+    const systemPack = await repository.getSystemPackByWorkspacePath(pack.row.workspace_path)
+    if (systemPack) {
+      await repository.recordAnswerAnalytics(collectNewlySubmittedAnswers({
+        systemPackId: systemPack.id,
+        userId: req.user.id,
+        previousProgress,
+        nextProgress: pack.qbankinfo.progress,
+        choices: pack.qbankinfo.choices || {},
+        answeredAt: nowIso()
+      }))
+    }
     const nextRevision = await persistPackProgress(pack.row, pack.qbankinfo, Number(pack.row.revision || 0) + 1, syncMetadata)
     res.json({ revision: nextRevision, applied: true, serverAcceptedAt: nowIso() })
   }))

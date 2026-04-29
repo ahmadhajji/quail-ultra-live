@@ -3,7 +3,7 @@ import { fetchQuestionAssets, extractChoiceLabels, prefetchImagesFromHtml, prefe
 import { fetchNativeQuestion, getNativeChoiceLabels, prefetchNativeQuestion, prefetchNativeQuestionMedia, type NativeQuestion } from '../lib/native-qbank'
 import { getHighlightDoc, getQuestionNote, setHighlightDocTarget, setQuestionNote } from '../lib/annotations'
 import { addToBucket, isInBucket, removeFromBucket } from '../lib/progress'
-import { syncProgress } from '../lib/api'
+import { syncProgress, getQuestionStats } from '../lib/api'
 import { LAB_VALUE_SECTIONS, type ExamToolKey as ContentExamToolKey } from '../lib/exam-tools'
 import { navigate } from '../lib/navigation'
 import { isHighlightColor, type SerializedHighlight } from '../lib/highlighting'
@@ -28,6 +28,7 @@ import { SyncStatusPill } from '../components/SyncStatusPill'
 import { NativeQuestionExplanation, NativeQuestionStem } from '../components/exam/NativeQuestionContent'
 import { ReportQuestionModal } from '../components/ReportQuestionModal'
 import type { Mode, QbankInfo, SyncProgressOptions } from '../types/domain'
+import type { QuestionStats } from '../../../shared/domain'
 
 function modeLabel(mode: Mode): string {
   if (mode === 'timed') {
@@ -224,6 +225,8 @@ export function ExamViewPage() {
   const [timerText, setTimerText] = useState('0:00:00')
   const [warningOpen, setWarningOpen] = useState(false)
   const [reportModalOpen, setReportModalOpen] = useState(false)
+  const [questionStats, setQuestionStats] = useState<Record<string, QuestionStats>>({})
+  const statsFetchedRef = useRef(new Set<string>())
   const [uiPrefs, updateUiPrefs, resetUiPrefs] = useUiPreferences()
   const examUiMode = useMemo<'v2'>(() => 'v2', [])
   const filteredLabSections = useMemo(() => {
@@ -304,6 +307,15 @@ export function ExamViewPage() {
     noteTextRef.current = nextNote
     setNoteText(nextNote)
   }, [blockKey, selectedQnum])
+
+  useEffect(() => {
+    if (!explanationVisible || !currentQid || !packId) return
+    if (statsFetchedRef.current.has(currentQid)) return
+    statsFetchedRef.current.add(currentQid)
+    void getQuestionStats(packId, [currentQid]).then((stats) => {
+      setQuestionStats((prev) => ({ ...prev, ...stats }))
+    })
+  }, [explanationVisible, currentQid, packId])
 
   const questionRail = useMemo(() => {
     if (!block || !qbankinfo) {
@@ -1684,6 +1696,17 @@ export function ExamViewPage() {
                           <span className="exam-choice-letter">{choice}</span>
                           <span className="exam-choice-label">{choiceLabels[choice] ?? `Choice ${choice}`}</span>
                         </button>
+                        {(() => {
+                          const stats = questionStats[currentQid]
+                          if (!showOutcome || !stats?.eligible) return null
+                          const choiceStat = stats.choices[choice]
+                          if (!choiceStat) return null
+                          return (
+                            <span className="exam-peer-percent">
+                              {choiceStat.percent !== null ? `${choiceStat.percent}%` : null}
+                            </span>
+                          )
+                        })()}
                       </div>
                     )
                   })}
@@ -1735,6 +1758,20 @@ export function ExamViewPage() {
                     {block.mode === 'tutor' ? 'Submit the current question to reveal the explanation.' : 'Explanation hidden until you end the block and enter review mode.'}
                   </p>
                 )}
+                {explanationVisible ? (() => {
+                  const stats = questionStats[currentQid]
+                  if (!stats) return null
+                  if (!stats.eligible || stats.peerCount < stats.minPeerCount) {
+                    return <p className="exam-peer-note">Not enough peer data yet.</p>
+                  }
+                  return (
+                    <p className="exam-peer-note">
+                      {stats.correctPercent !== null ? `${stats.correctPercent}% of peers answered correctly` : null}
+                      {' · '}
+                      {stats.peerCount} peer{stats.peerCount !== 1 ? 's' : ''}
+                    </p>
+                  )
+                })() : null}
                 {sourceSlideAsset && explanationVisible ? (
                   <button className="btn btn-outline-secondary btn-sm exam-explanation-source-btn" type="button" onClick={() => setInspectorItem({ src: sourceSlideAsset, alt: 'Source Slide' })}>
                     Source Slide

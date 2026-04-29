@@ -1455,6 +1455,21 @@ body[data-exam-ui="v2"] .exam-question-list .list-group-item.q-item-incorrect .q
 /* The old fixed-position max-width nudge was for when the pill floated at
  * the top-right; it now lives in the footer so no override is needed. */
 
+/* Peer answer distribution */
+body[data-exam-ui="v2"] .exam-peer-percent {
+  font-size: 0.8em;
+  color: #6b7a8d;
+  margin-left: auto;
+  padding-left: 12px;
+  white-space: nowrap;
+}
+
+body[data-exam-ui="v2"] .exam-peer-note {
+  font-size: 0.8em;
+  color: #6b7a8d;
+  margin: 6px 0 0;
+}
+
 /* ============================================================
  * Dark mode overrides for the exam v2 shell.
  * The exam renders question HTML supplied by the qbank, so
@@ -1503,6 +1518,11 @@ body[data-exam-ui="v2"] .exam-question-list .list-group-item.q-item-incorrect .q
 [data-theme="dark"] body[data-exam-ui="v2"] .exam-choice-content,
 [data-theme="dark"] body[data-exam-ui="v2"] .exam-choice-label {
   color: var(--q-text);
+}
+
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-peer-percent,
+[data-theme="dark"] body[data-exam-ui="v2"] .exam-peer-note {
+  color: #8a9ab0;
 }
 
 [data-theme="dark"] body[data-exam-ui="v2"] .exam-choice-selector {
