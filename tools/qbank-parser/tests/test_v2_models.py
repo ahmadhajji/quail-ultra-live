@@ -32,13 +32,19 @@ def test_raw_slide_round_trip():
     assert restored == original
 
 
-def test_raw_slide_content_hash_excludes_paths():
+def test_raw_slide_content_hash_includes_deck_and_media_content(tmp_path):
+    image_a = tmp_path / "a.png"
+    image_b = tmp_path / "b.png"
+    image_a.write_bytes(b"image-a")
+    image_b.write_bytes(b"image-b")
     a = _sample_raw_slide()
     b = _sample_raw_slide()
-    b.image_paths = ["/some/other/path.png"]
-    b.slide_screenshot_path = "/different/path.png"
-    # Same content but different paths — hashes must match
-    assert a.content_hash() == b.content_hash()
+    a.image_paths = [str(image_a)]
+    b.image_paths = [str(image_b)]
+    assert a.content_hash() != b.content_hash()
+    b.image_paths = [str(image_a)]
+    b.deck_id = "other-deck"
+    assert a.content_hash() != b.content_hash()
 
 
 def test_raw_slide_content_hash_changes_on_text_edit():
@@ -55,7 +61,7 @@ def test_raw_slide_content_hash_changes_on_speaker_notes_edit():
     assert a.content_hash() != b.content_hash()
 
 
-def test_raw_slide_content_hash_includes_image_count_not_content():
+def test_raw_slide_content_hash_includes_image_count():
     a = _sample_raw_slide()
     b = _sample_raw_slide()
     b.image_paths = b.image_paths + ["/tmp/extra.png"]
@@ -142,6 +148,18 @@ def test_detected_content_hash_excludes_quality_signals():
     b.status = "needs_review"
     # Quality signals don't change the rewrite input -> hash must match
     assert a.content_hash() == b.content_hash()
+
+
+def test_detected_content_hash_changes_on_media_content(tmp_path):
+    image_a = tmp_path / "a.png"
+    image_b = tmp_path / "b.png"
+    image_a.write_bytes(b"image-a")
+    image_b.write_bytes(b"image-b")
+    a = _sample_detected()
+    b = _sample_detected()
+    a.stem_image_paths = [str(image_a)]
+    b.stem_image_paths = [str(image_b)]
+    assert a.content_hash() != b.content_hash()
 
 
 # ---------------------------------------------------------------------------

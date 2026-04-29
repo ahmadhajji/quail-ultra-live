@@ -10,6 +10,7 @@ import { handleUpload } from '@vercel/blob/client'
 import { clearSessionCookie, readSessionUserId, setSessionCookie } from './auth'
 import {
   DEFAULT_REGISTRATION_MODE,
+  DATA_DIR,
   DIST_DIR,
   MAX_UPLOAD_FILE_SIZE,
   PORT,
@@ -17,10 +18,11 @@ import {
   ROOT_DIR,
   getUploadMode,
   getStorageBackend,
+  validateRuntimeConfig,
   usesDirectUploads
 } from './config'
 import { buildPasswordHash, comparePassword, createInviteToken, createRepository, hashInviteToken } from './repository'
-import { createPresignedUpload } from './s3'
+import { checkS3Readiness, createPresignedUpload } from './s3'
 import { copyBlobPrefix, createWorkspaceStore } from './workspace-store'
 import { isEmailConfigured, sendInviteEmail, sendSupportEmail, sendQuestionReportEmail } from './email'
 import { legacyPageRedirectTarget, routePathFor } from './routes'
@@ -34,6 +36,7 @@ import {
 } from '../shared/native-pack-admin'
 import { deleteBlock, normalizeProgress, startBlock } from '../shared/progress'
 import { buildQuestionStats, collectNewlySubmittedAnswers } from './answer-stats'
+import { safeResolveWithin, validateStrictRelativePath } from '../shared/path-utils'
 
 function nowIso() {
   return new Date().toISOString()
@@ -46,6 +49,15 @@ function jsonError(res: any, status: number, message: string) {
 function sanitizePackName(input: string, fallback: string) {
   const trimmed = String(input || '').trim()
   return trimmed || fallback
+}
+
+function validateNativeQuestionId(value: string): string {
+  const qid = String(value || '').trim()
+  if (!qid || qid.includes('/') || qid.includes('\\')) {
+    throw new Error('Invalid native question id')
+  }
+  validateStrictRelativePath(`${qid}.json`)
+  return qid
 }
 
 function packSummary(row: any) {
@@ -130,21 +142,18 @@ function asyncRoute(handler: any) {
 }
 
 function safeRelativeUploadPath(value: string) {
-  const normalized = String(value || '').replace(/\\/g, '/').split('/').filter(Boolean).join('/')
-  if (!normalized || normalized.startsWith('.')) {
+  try {
+    return validateStrictRelativePath(value)
+  } catch {
     throw new Error('Invalid upload path')
   }
-  return normalized
 }
 
 async function writeUploadedFiles(targetDir: string, files: any[]) {
   await fsp.mkdir(targetDir, { recursive: true })
   for (const file of files) {
     const relativeName = safeRelativeUploadPath(file.originalname)
-    const absolutePath = path.resolve(targetDir, relativeName)
-    if (!absolutePath.startsWith(path.resolve(targetDir))) {
-      throw new Error(`Invalid upload path: ${relativeName}`)
-    }
+    const absolutePath = safeResolveWithin(targetDir, relativeName)
     await fsp.mkdir(path.dirname(absolutePath), { recursive: true })
     if (file.path) {
       await fsp.copyFile(file.path, absolutePath)
@@ -158,7 +167,24 @@ async function writeUploadedFiles(targetDir: string, files: any[]) {
 async function extractZipToDirectory(targetDir: string, zipPath: string) {
   const unzipper = await import('unzipper')
   await fsp.mkdir(targetDir, { recursive: true })
-  await fs.createReadStream(zipPath).pipe(unzipper.Extract({ path: targetDir })).promise()
+  const parser = fs.createReadStream(zipPath).pipe(unzipper.Parse({ forceStream: true }))
+  for await (const entry of parser) {
+    const relativeName = safeRelativeUploadPath(entry.path)
+    const absolutePath = safeResolveWithin(targetDir, relativeName)
+    if (entry.type === 'Directory') {
+      await fsp.mkdir(absolutePath, { recursive: true })
+      entry.autodrain()
+      continue
+    }
+    await fsp.mkdir(path.dirname(absolutePath), { recursive: true })
+    await new Promise<void>((resolve, reject) => {
+      const output = fs.createWriteStream(absolutePath)
+      entry.pipe(output)
+      output.on('finish', resolve)
+      output.on('error', reject)
+      entry.on('error', reject)
+    })
+  }
   await fsp.unlink(zipPath).catch(() => {})
 }
 
@@ -175,6 +201,7 @@ function parseImportSessionIdFromPathname(pathname: string) {
 }
 
 export async function createApp() {
+  validateRuntimeConfig()
   const repository = createRepository()
   const workspaceStore = createWorkspaceStore()
   const storageBackend = getStorageBackend()
@@ -343,6 +370,18 @@ export async function createApp() {
   app.get('/api/health', function health(_req: any, res: any) {
     res.json({ ok: true })
   })
+
+  app.get('/api/ready', asyncRoute(async function ready(_req: any, res: any) {
+    await fsp.mkdir(DATA_DIR, { recursive: true })
+    const probe = path.join(DATA_DIR, `.ready-${process.pid}-${Date.now()}`)
+    await fsp.writeFile(probe, 'ok')
+    await fsp.unlink(probe)
+    await repository.readinessCheck()
+    if (storageBackend === 'railway') {
+      await checkS3Readiness()
+    }
+    res.json({ ok: true, storageBackend })
+  }))
 
   app.get('/api/auth/session', function sessionInfo(req: any, res: any) {
     res.json({ user: req.user || null })
@@ -739,13 +778,14 @@ export async function createApp() {
   }
 
   function manifestEntryFromQuestion(question: any, existingEntry: any = {}, changeSummary = '') {
+    const qid = validateNativeQuestionId(String(question.id))
     const orderedChoices = Array.isArray(question?.choices)
       ? [...question.choices].sort((a, b) => Number(a?.displayOrder ?? 0) - Number(b?.displayOrder ?? 0))
       : []
     return {
       ...existingEntry,
-      id: String(question.id),
-      path: String(existingEntry.path || `questions/${question.id}.json`),
+      id: qid,
+      path: validateStrictRelativePath(String(existingEntry.path || `questions/${qid}.json`)),
       status: question.status,
       ...(existingEntry.replacesQuestionId ? { replacesQuestionId: existingEntry.replacesQuestionId } : {}),
       ...(changeSummary ? { changeSummary } : (existingEntry.changeSummary ? { changeSummary: existingEntry.changeSummary } : {})),
@@ -834,7 +874,7 @@ export async function createApp() {
   async function loadNativeQuestionDocuments(workspaceRoot: string, manifest: any) {
     const questions: Record<string, any> = {}
     for (const entry of Array.isArray(manifest?.questionIndex) ? manifest.questionIndex : []) {
-      const questionPath = path.join(workspaceRoot, String(entry.path || ''))
+      const questionPath = safeResolveWithin(workspaceRoot, String(entry.path || ''))
       questions[String(entry.id)] = await readJsonFile(questionPath)
     }
     return questions
@@ -868,9 +908,9 @@ export async function createApp() {
     manifest.revision.hash = computeManifestHash(manifest)
 
     for (const entry of questionIndex) {
-      await writeJsonFile(path.join(workspaceRoot, entry.path), questions[entry.id])
+      await writeJsonFile(safeResolveWithin(workspaceRoot, entry.path), questions[entry.id])
     }
-    await writeJsonFile(path.join(workspaceRoot, NATIVE_QBANK_MANIFEST), manifest)
+    await writeJsonFile(safeResolveWithin(workspaceRoot, NATIVE_QBANK_MANIFEST), manifest)
     return manifest
   }
 
@@ -1078,7 +1118,7 @@ export async function createApp() {
       if (!entry) {
         return jsonError(res, 404, 'Question not found')
       }
-      const question = await readJsonFile(path.join(materialized.workspaceRoot, entry.path))
+      const question = await readJsonFile(safeResolveWithin(materialized.workspaceRoot, entry.path))
       res.json({ question })
     } finally {
       await fsp.rm(materialized.workspaceRoot, { recursive: true, force: true })
@@ -1159,7 +1199,7 @@ export async function createApp() {
       if (!materialized.native || !materialized.manifest) {
         return jsonError(res, 400, 'This library pack is legacy.')
       }
-      const qid = String(req.params.qid || '')
+      const qid = validateNativeQuestionId(String(req.params.qid || ''))
       const questions = await loadNativeQuestionDocuments(materialized.workspaceRoot, materialized.manifest)
       const question = req.body?.question
       if (!question || typeof question !== 'object' || String(question.id || '') !== qid) {
@@ -1193,7 +1233,7 @@ export async function createApp() {
         return jsonError(res, 400, 'This library pack is legacy.')
       }
       const question = req.body?.question
-      const qid = String(question?.id || '')
+      const qid = validateNativeQuestionId(String(question?.id || ''))
       if (!question || typeof question !== 'object' || !qid) {
         return jsonError(res, 400, 'Request body must include a full question document with an id.')
       }
@@ -1202,7 +1242,7 @@ export async function createApp() {
         return jsonError(res, 409, 'Question id already exists.')
       }
       questions[qid] = question
-      materialized.manifest.questionIndex.push({ id: qid, path: `questions/${qid}.json` })
+      materialized.manifest.questionIndex.push({ id: qid, path: validateStrictRelativePath(`questions/${qid}.json`) })
       await rewriteNativeManifestFromQuestions(materialized.workspaceRoot, materialized.manifest, questions, String(req.body?.changeSummary || 'Manual admin add'))
       const validation = await validateNativeQbankDirectory(materialized.workspaceRoot)
       if (!validation.ok) {
@@ -1226,7 +1266,7 @@ export async function createApp() {
       if (!materialized.native || !materialized.manifest) {
         return jsonError(res, 400, 'This library pack is legacy.')
       }
-      const qid = String(req.params.qid || '')
+      const qid = validateNativeQuestionId(String(req.params.qid || ''))
       const questions = await loadNativeQuestionDocuments(materialized.workspaceRoot, materialized.manifest)
       const question = questions[qid]
       if (!question) {
@@ -1528,6 +1568,18 @@ export async function createApp() {
     if (!incomingProgress || typeof incomingProgress !== 'object') {
       return jsonError(res, 400, 'Progress payload is required')
     }
+    const baseRevision = Number(req.body.baseRevision)
+    const currentRevision = Number(pack.row.revision || 0)
+    if (!Number.isFinite(baseRevision)) {
+      return jsonError(res, 400, 'baseRevision is required')
+    }
+    if (baseRevision !== currentRevision) {
+      return res.status(409).json({
+        error: 'Progress revision conflict',
+        serverRevision: currentRevision,
+        qbankinfo: pack.qbankinfo
+      })
+    }
     const syncMetadata = {
       clientInstanceId: String(req.body.clientInstanceId || ''),
       clientMutationSeq: Number(req.body.clientMutationSeq || 0),
@@ -1540,7 +1592,7 @@ export async function createApp() {
       syncMetadata.clientMutationSeq <= Number(pack.row.last_client_mutation_seq || 0)
     ) {
       return res.json({
-        revision: Number(pack.row.revision || 0),
+        revision: currentRevision,
         applied: false,
         serverAcceptedAt: nowIso()
       })
@@ -1559,7 +1611,7 @@ export async function createApp() {
         answeredAt: nowIso()
       }))
     }
-    const nextRevision = await persistPackProgress(pack.row, pack.qbankinfo, Number(pack.row.revision || 0) + 1, syncMetadata)
+    const nextRevision = await persistPackProgress(pack.row, pack.qbankinfo, currentRevision + 1, syncMetadata)
     res.json({ revision: nextRevision, applied: true, serverAcceptedAt: nowIso() })
   }))
 

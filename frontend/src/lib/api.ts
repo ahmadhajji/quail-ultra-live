@@ -9,7 +9,7 @@ import { STORE_PREFIX, WARM_PREFIX, localStore } from './store'
 import type { AdminUser, AppSettings, CachedPackEntry, DirtyProgressEntry, InviteCreationResult, InviteRecord, LibraryPackSummary, NativePackContent, NativePackDiff, PackProgressSummary, ProgressRecord, QbankInfo, QuestionStats, StartBlockPreferences, StudyPackSummary, SyncMetadata, SyncProgressOptions, SyncProgressResult, User, UserRole, UserStatus } from '../types/domain'
 
 const DB_NAME = 'quail-ultra-live'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const PACK_STORE = 'packs'
 const DIRTY_STORE = 'dirty-progress'
 const PROGRESS_REQUEST_TIMEOUT_MS = 5000
@@ -19,6 +19,7 @@ let dbPromise: Promise<IDBDatabase> | undefined
 let sessionCache: User | null | undefined
 let authConfigCache: AppSettings | undefined
 const syncMutationSeqByPack = new Map<string, number>()
+const bootSyncInstanceId = window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`
 
 type ImportUploadEntry = {
   relativePath: string
@@ -30,12 +31,7 @@ type ImportUploadEntry = {
 type UploadMode = 'multipart' | 'vercel-blob' | 'presigned'
 
 function getSyncInstanceId(): string {
-  let instanceId = window.localStorage.getItem(SYNC_INSTANCE_KEY)
-  if (!instanceId) {
-    instanceId = window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`
-    window.localStorage.setItem(SYNC_INSTANCE_KEY, instanceId)
-  }
-  return instanceId
+  return bootSyncInstanceId
 }
 
 function nextSyncMetadata(packId: string): SyncMetadata {
@@ -224,13 +220,21 @@ function openDb(): Promise<IDBDatabase> {
     dbPromise = new Promise((resolve, reject) => {
       const request = window.indexedDB.open(DB_NAME, DB_VERSION)
       request.onerror = () => reject(request.error)
-      request.onupgradeneeded = () => {
+      request.onupgradeneeded = (event) => {
         const db = request.result
+        if (event.oldVersion < 2) {
+          if (db.objectStoreNames.contains(PACK_STORE)) {
+            db.deleteObjectStore(PACK_STORE)
+          }
+          if (db.objectStoreNames.contains(DIRTY_STORE)) {
+            db.deleteObjectStore(DIRTY_STORE)
+          }
+        }
         if (!db.objectStoreNames.contains(PACK_STORE)) {
-          db.createObjectStore(PACK_STORE, { keyPath: 'id' })
+          db.createObjectStore(PACK_STORE, { keyPath: 'cacheKey' })
         }
         if (!db.objectStoreNames.contains(DIRTY_STORE)) {
-          db.createObjectStore(DIRTY_STORE, { keyPath: 'packId' })
+          db.createObjectStore(DIRTY_STORE, { keyPath: 'cacheKey' })
         }
       }
       request.onsuccess = () => resolve(request.result)
@@ -269,6 +273,16 @@ async function idbDelete(storeName: string, key: string): Promise<void> {
   })
 }
 
+async function idbClear(storeName: string): Promise<void> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite')
+    tx.objectStore(storeName).clear()
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
 async function idbGetAll<T>(storeName: string): Promise<T[]> {
   const db = await openDb()
   return new Promise((resolve, reject) => {
@@ -279,13 +293,50 @@ async function idbGetAll<T>(storeName: string): Promise<T[]> {
   })
 }
 
+function cacheKeyFor(userId: string, packId: string): string {
+  return `${userId}:${packId}`
+}
+
+function warmKeyFor(userId: string, packId: string): string {
+  return `${WARM_PREFIX}${userId}:${packId}`
+}
+
+async function requireCachedUserId(): Promise<string> {
+  const user = sessionCache ?? await getSession()
+  if (!user) {
+    throw new Error('Authentication required.')
+  }
+  return user.id
+}
+
+async function clearSensitiveClientCaches(): Promise<void> {
+  await Promise.all([
+    idbClear(PACK_STORE).catch(() => {}),
+    idbClear(DIRTY_STORE).catch(() => {})
+  ])
+  syncMutationSeqByPack.clear()
+  Object.keys(window.localStorage)
+    .filter((key) => key.startsWith(WARM_PREFIX) || key === SYNC_INSTANCE_KEY)
+    .forEach((key) => window.localStorage.removeItem(key))
+  if ('caches' in window) {
+    const keys = await window.caches.keys()
+    await Promise.all(keys.filter((key) => key.startsWith('quail-live-runtime')).map((key) => window.caches.delete(key)))
+  }
+  window.navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_PACK_CACHES' })
+}
+
 async function getPackCache(packId: string): Promise<CachedPackEntry | null> {
-  return idbGet<CachedPackEntry>(PACK_STORE, packId)
+  const userId = await requireCachedUserId()
+  const cached = await idbGet<CachedPackEntry>(PACK_STORE, cacheKeyFor(userId, packId))
+  return cached?.userId === userId ? cached : null
 }
 
 async function setPackCache(packId: string, qbankinfo: QbankInfo, packMeta: StudyPackSummary | null): Promise<void> {
+  const userId = await requireCachedUserId()
   await idbPut<CachedPackEntry>(PACK_STORE, {
+    cacheKey: cacheKeyFor(userId, packId),
     id: packId,
+    userId,
     qbankinfo,
     packMeta,
     updatedAt: new Date().toISOString()
@@ -293,19 +344,30 @@ async function setPackCache(packId: string, qbankinfo: QbankInfo, packMeta: Stud
 }
 
 async function setDirtyProgress(entry: DirtyProgressEntry): Promise<void> {
-  await idbPut<DirtyProgressEntry>(DIRTY_STORE, entry)
+  const userId = await requireCachedUserId()
+  await idbPut<DirtyProgressEntry>(DIRTY_STORE, {
+    ...entry,
+    cacheKey: cacheKeyFor(userId, entry.packId),
+    userId
+  })
 }
 
-export function buildPackFileUrl(packId: string, relativePath: string): string {
-  return `/api/study-packs/${packId}/file/${relativePath.split('/').map(encodeURIComponent).join('/')}`
+export function buildPackFileUrl(packId: string, relativePath: string, revision?: number): string {
+  const encodedPath = relativePath.split('/').map(encodeURIComponent).join('/')
+  const suffix = Number.isFinite(revision) ? `?rev=${encodeURIComponent(String(revision))}` : ''
+  return `/api/study-packs/${packId}/file/${encodedPath}${suffix}`
 }
 
 function sanitizeImportRelativePath(relativePath: string): string {
-  const normalized = relativePath.replace(/\\/g, '/').split('/').filter(Boolean).join('/')
-  if (!normalized || normalized.startsWith('.')) {
+  const normalized = String(relativePath || '')
+  if (!normalized || normalized.startsWith('/') || normalized.startsWith('\\') || normalized.includes('\\') || /[\u0000-\u001f\u007f]/.test(normalized)) {
     throw new Error('Invalid import path.')
   }
-  return normalized
+  const parts = normalized.split('/')
+  if (parts.some((part) => !part || part === '.' || part === '..')) {
+    throw new Error('Invalid import path.')
+  }
+  return parts.join('/')
 }
 
 function buildImportBlobPath(sessionId: string, relativePath: string): string {
@@ -397,6 +459,12 @@ export async function getSession(force = false): Promise<User | null> {
     return sessionCache
   }
   const payload = await request('/api/auth/session', sessionResponseSchema)
+  if (sessionCache?.id && payload.user?.id && sessionCache.id !== payload.user.id) {
+    await clearSensitiveClientCaches()
+  }
+  if (sessionCache?.id && !payload.user) {
+    await clearSensitiveClientCaches()
+  }
   sessionCache = payload.user
   return sessionCache
 }
@@ -416,6 +484,9 @@ export async function login(username: string, password: string): Promise<User> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password })
   })
+  if (sessionCache?.id && sessionCache.id !== payload.user.id) {
+    await clearSensitiveClientCaches()
+  }
   sessionCache = payload.user
   return payload.user
 }
@@ -426,12 +497,16 @@ export async function register(username: string, password: string, email: string
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password, email, inviteToken })
   })
+  if (sessionCache?.id && sessionCache.id !== payload.user.id) {
+    await clearSensitiveClientCaches()
+  }
   sessionCache = payload.user
   return payload.user
 }
 
 export async function logout(): Promise<void> {
   await requestRaw('/api/auth/logout', { method: 'POST' })
+  await clearSensitiveClientCaches()
   sessionCache = null
   authConfigCache = undefined
 }
@@ -538,8 +613,9 @@ export async function cancelFolderImport(sessionId: string): Promise<void> {
 
 export async function deleteStudyPack(packId: string): Promise<void> {
   await requestRaw(`/api/study-packs/${packId}`, { method: 'DELETE' })
-  await idbDelete(PACK_STORE, packId)
-  await idbDelete(DIRTY_STORE, packId)
+  const userId = await requireCachedUserId()
+  await idbDelete(PACK_STORE, cacheKeyFor(userId, packId))
+  await idbDelete(DIRTY_STORE, cacheKeyFor(userId, packId))
 }
 
 export async function exportStudyPackZip(pack: StudyPackSummary, onProgress?: (message: string) => void): Promise<void> {
@@ -551,7 +627,7 @@ export async function exportStudyPackZip(pack: StudyPackSummary, onProgress?: (m
       continue
     }
     onProgress?.(`Preparing export ${index + 1} of ${manifest.files.length}: ${relativePath}`)
-    const response = await window.fetch(buildPackFileUrl(pack.id, relativePath), {
+    const response = await window.fetch(buildPackFileUrl(pack.id, relativePath, pack.revision), {
       credentials: 'include'
     })
     if (!response.ok) {
@@ -610,8 +686,18 @@ async function sendProgressEntry(entry: DirtyProgressEntry, options: SyncProgres
       ...(options.keepalive !== undefined ? { keepalive: options.keepalive } : {})
     }, PROGRESS_REQUEST_TIMEOUT_MS)
 
+    if (payload.applied === false) {
+      await setDirtyProgress(entry)
+      setSyncStatus({ state: 'pending', message: 'Progress is waiting for the latest server state.' })
+      return {
+        revision: payload.revision,
+        applied: false,
+        ...(payload.serverAcceptedAt !== undefined ? { serverAcceptedAt: payload.serverAcceptedAt } : {})
+      }
+    }
+
     await updateCachedProgress(entry.packId, entry.progress, payload.revision)
-    await idbDelete(DIRTY_STORE, entry.packId)
+    await idbDelete(DIRTY_STORE, entry.cacheKey || cacheKeyFor(entry.userId || await requireCachedUserId(), entry.packId))
 
     setSyncStatus({ state: 'synced' })
 
@@ -622,6 +708,13 @@ async function sendProgressEntry(entry: DirtyProgressEntry, options: SyncProgres
     }
   } catch (error) {
     setSyncStatus({ state: 'error' })
+    if (error instanceof RequestError && error.status === 409 && error.body && typeof error.body === 'object') {
+      const body = error.body as { qbankinfo?: unknown }
+      const parsed = qbankInfoSchema.safeParse(body.qbankinfo)
+      if (parsed.success) {
+        await setPackCache(entry.packId, normalizeQbankInfo(parsed.data), null)
+      }
+    }
     throw error
   }
 }
@@ -634,6 +727,9 @@ export async function loadPack(packId: string, blockKey: string): Promise<QbankI
     void warmPackInBackground(packId, qbankinfo.revision)
     return qbankinfo
   } catch (error) {
+    if (error instanceof RequestError && [401, 403, 404].includes(error.status)) {
+      throw error
+    }
     const cached = await getPackCache(packId)
     if (cached?.qbankinfo) {
       setSyncStatus({ state: 'offline' })
@@ -650,14 +746,15 @@ export async function warmPackInBackground(packId: string, revision: number): Pr
   if (!window.navigator.onLine) {
     return
   }
-  const warmKey = `${WARM_PREFIX}${packId}`
+  const userId = await requireCachedUserId()
+  const warmKey = warmKeyFor(userId, packId)
   if (window.localStorage.getItem(warmKey) === String(revision)) {
     return
   }
   try {
     const payload = await request(`/api/study-packs/${packId}/manifest`, manifestResponseSchema)
     for (const relativePath of payload.files) {
-      await window.fetch(buildPackFileUrl(packId, relativePath), {
+      await window.fetch(buildPackFileUrl(packId, relativePath, revision), {
         credentials: 'include',
         cache: 'reload'
       })
@@ -711,7 +808,9 @@ export async function flushDirtyProgress(options: SyncProgressOptions = {}): Pro
     immediate: true
   })
 
+  const userId = await requireCachedUserId()
   const entries = (await idbGetAll<DirtyProgressEntry>(DIRTY_STORE))
+    .filter((entry) => entry.userId === userId)
     .sort((left, right) => left.queuedAt.localeCompare(right.queuedAt))
   for (const dirtyEntry of entries) {
     try {
@@ -837,8 +936,9 @@ export async function deleteAdminPack(packId: string): Promise<void> {
   await requestRaw(`/api/admin/packs/${encodeURIComponent(packId)}`, {
     method: 'DELETE'
   })
-  await idbDelete(PACK_STORE, packId)
-  await idbDelete(DIRTY_STORE, packId)
+  const userId = await requireCachedUserId()
+  await idbDelete(PACK_STORE, cacheKeyFor(userId, packId))
+  await idbDelete(DIRTY_STORE, cacheKeyFor(userId, packId))
 }
 
 export async function listInvites(): Promise<InviteRecord[]> {

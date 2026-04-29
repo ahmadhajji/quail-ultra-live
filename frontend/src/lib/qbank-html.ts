@@ -2,6 +2,94 @@ function createDocument(html: string): Document {
   return new DOMParser().parseFromString(html, 'text/html')
 }
 
+const ALLOWED_TAGS = new Set([
+  'a', 'abbr', 'b', 'blockquote', 'br', 'caption', 'code', 'col', 'colgroup', 'dd', 'del', 'div', 'dl', 'dt', 'em',
+  'figcaption', 'figure', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'i', 'img', 'li', 'ol', 'p', 'pre', 's',
+  'small', 'source', 'span', 'strong', 'sub', 'sup', 'table', 'tbody', 'td', 'tfoot', 'th', 'thead', 'tr', 'u', 'ul',
+  'audio', 'video'
+])
+
+const GLOBAL_ATTRIBUTES = new Set(['title', 'aria-label'])
+const TAG_ATTRIBUTES: Record<string, Set<string>> = {
+  a: new Set(['href', 'title', 'target', 'rel']),
+  img: new Set(['src', 'alt', 'title', 'width', 'height', 'style', 'data-openable-image']),
+  audio: new Set(['src', 'controls', 'title']),
+  video: new Set(['src', 'controls', 'poster', 'title']),
+  source: new Set(['src', 'type']),
+  td: new Set(['colspan', 'rowspan']),
+  th: new Set(['colspan', 'rowspan', 'scope'])
+}
+
+function appendRelativeToBasePath(basePath: string, relativePath: string): string {
+  const [pathPart, queryPart] = basePath.split('?')
+  return `${pathPart}/${relativePath.replace(/^\.?\//, '')}${queryPart ? `?${queryPart}` : ''}`
+}
+
+function isSafeUrl(value: string, tagName: string): boolean {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return false
+  }
+  if (trimmed.startsWith('/api/')) {
+    return true
+  }
+  if (/^(https?:|mailto:)/i.test(trimmed)) {
+    return true
+  }
+  if (tagName === 'img' && /^data:image\/(?:png|jpe?g|gif|webp);base64,/i.test(trimmed)) {
+    return true
+  }
+  return !/^[a-z][a-z0-9+.-]*:/i.test(trimmed) && !trimmed.startsWith('//')
+}
+
+function isAllowedImageStyle(value: string): boolean {
+  return /^max-width:\s*100%;\s*max-height:\s*\d+px;?$/i.test(value.trim())
+}
+
+export function sanitizeLegacyHtml(html: string): string {
+  const document = createDocument(html)
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT)
+  const elements: Element[] = []
+  while (walker.nextNode()) {
+    elements.push(walker.currentNode as Element)
+  }
+
+  for (const element of elements) {
+    const tagName = element.tagName.toLowerCase()
+    if (!ALLOWED_TAGS.has(tagName)) {
+      element.replaceWith(document.createTextNode(element.textContent ?? ''))
+      continue
+    }
+
+    for (const attribute of Array.from(element.attributes)) {
+      const name = attribute.name.toLowerCase()
+      const value = attribute.value
+      const allowed = GLOBAL_ATTRIBUTES.has(name) || TAG_ATTRIBUTES[tagName]?.has(name)
+      if (!allowed || name.startsWith('on')) {
+        element.removeAttribute(attribute.name)
+        continue
+      }
+      if ((name === 'href' || name === 'src' || name === 'poster') && !isSafeUrl(value, tagName)) {
+        element.removeAttribute(attribute.name)
+        continue
+      }
+      if (name === 'style' && (tagName !== 'img' || !isAllowedImageStyle(value))) {
+        element.removeAttribute(attribute.name)
+        continue
+      }
+      if (name === 'target' && value !== '_blank') {
+        element.removeAttribute(attribute.name)
+      }
+    }
+
+    if (tagName === 'a' && element.getAttribute('target') === '_blank') {
+      element.setAttribute('rel', 'noopener noreferrer')
+    }
+  }
+
+  return document.body.innerHTML
+}
+
 function resolveAssetPath(basePath: string, rawPath: string | null): string | null {
   if (!rawPath || rawPath.startsWith('data:') || rawPath.startsWith('blob:') || rawPath.startsWith('http://') || rawPath.startsWith('https://')) {
     return rawPath
@@ -9,7 +97,7 @@ function resolveAssetPath(basePath: string, rawPath: string | null): string | nu
   if (rawPath.startsWith('/api/')) {
     return rawPath
   }
-  return `${basePath}/${rawPath.replace(/^\.?\//, '')}`
+  return appendRelativeToBasePath(basePath, rawPath)
 }
 
 function isChoiceLine(text: string): boolean {
@@ -108,7 +196,7 @@ export function rewriteAssetPaths(html: string, basePath: string, maxHeight: str
     }
   })
 
-  return document.body.innerHTML
+  return sanitizeLegacyHtml(document.body.innerHTML)
 }
 
 interface CachedAssets {
@@ -138,8 +226,8 @@ function trimCache(): void {
 
 async function fetchQuestionAssetsUncached(basePath: string, qid: string): Promise<CachedAssets> {
   const [questionResponse, explanationResponse] = await Promise.all([
-    window.fetch(`${basePath}/${qid}-q.html`, { credentials: 'include' }),
-    window.fetch(`${basePath}/${qid}-s.html`, { credentials: 'include' })
+    window.fetch(appendRelativeToBasePath(basePath, `${qid}-q.html`), { credentials: 'include' }),
+    window.fetch(appendRelativeToBasePath(basePath, `${qid}-s.html`), { credentials: 'include' })
   ])
 
   if (!questionResponse.ok || !explanationResponse.ok) {

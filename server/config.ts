@@ -55,6 +55,46 @@ export function shouldUseSecureCookies(): boolean {
   return process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL)
 }
 
+export function isRailwayRuntime(): boolean {
+  return Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_ID || process.env.RAILWAY_PROJECT_ID)
+}
+
+export function validateRuntimeConfig(): void {
+  const productionLike = process.env.NODE_ENV === 'production' || isRailwayRuntime()
+  if (!productionLike) {
+    return
+  }
+  const errors: string[] = []
+  if (isRailwayRuntime() && process.env.NODE_ENV !== 'production') {
+    errors.push('NODE_ENV=production is required on Railway.')
+  }
+  if (SESSION_SECRET === 'dev-session-secret-change-me' || SESSION_SECRET.trim().length < 32) {
+    errors.push('SESSION_SECRET must be set to a strong value of at least 32 characters.')
+  }
+  if (isRailwayRuntime() && getStorageBackend() !== 'railway') {
+    errors.push('QUAIL_STORAGE_BACKEND=railway is required on Railway.')
+  }
+  if (isRailwayRuntime() && DATA_DIR !== path.resolve('/data')) {
+    errors.push('QUAIL_DATA_DIR=/data is required on Railway.')
+  }
+  if (getStorageBackend() === 'railway') {
+    for (const group of [
+      ['S3_ENDPOINT', 'AWS_ENDPOINT_URL'],
+      ['S3_REGION', 'AWS_DEFAULT_REGION'],
+      ['S3_BUCKET', 'AWS_S3_BUCKET_NAME'],
+      ['S3_ACCESS_KEY_ID', 'AWS_ACCESS_KEY_ID'],
+      ['S3_SECRET_ACCESS_KEY', 'AWS_SECRET_ACCESS_KEY']
+    ]) {
+      if (!group.some((name) => String(process.env[name] || '').trim())) {
+        errors.push(`${group.join(' or ')} is required for Railway bucket storage.`)
+      }
+    }
+  }
+  if (errors.length > 0) {
+    throw new Error(`Unsafe production configuration:\n${errors.map((error) => `- ${error}`).join('\n')}`)
+  }
+}
+
 export function getDatabaseUrl(): string {
   const value = String(process.env.DATABASE_URL || '').trim()
   if (!value) {

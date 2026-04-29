@@ -23,6 +23,13 @@ self.addEventListener('activate', function onActivate(event) {
   self.clients.claim()
 })
 
+self.addEventListener('message', function onMessage(event) {
+  if (event.data?.type !== 'CLEAR_PACK_CACHES') {
+    return
+  }
+  event.waitUntil(caches.delete(RUNTIME_CACHE))
+})
+
 self.addEventListener('fetch', function onFetch(event) {
   const request = event.request
   if (request.method !== 'GET') {
@@ -37,13 +44,17 @@ self.addEventListener('fetch', function onFetch(event) {
   if (url.pathname.startsWith('/api/study-packs/') && url.pathname.includes('/file/')) {
     event.respondWith(
       caches.open(RUNTIME_CACHE).then(function runtimeCache(cache) {
-        return cache.match(request).then(function fromCache(cached) {
-          if (cached) {
-            return cached
-          }
-          return fetch(request).then(function fromNetwork(response) {
+        return fetch(request).then(function fromNetwork(response) {
+          if (response.ok) {
             cache.put(request, response.clone())
-            return response
+          }
+          return response
+        }).catch(function fromCache(error) {
+          return cache.match(request).then(function resolveCached(cached) {
+            if (cached) {
+              return cached
+            }
+            throw error
           })
         })
       })
