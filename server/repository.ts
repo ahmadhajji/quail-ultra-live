@@ -129,6 +129,7 @@ export interface AppRepository {
   listSupportTickets(): Promise<any[]>
   createQuestionReport(input: { id: string; packId: string; questionId: string; userId: string; category: string; message: string; createdAt: string }): Promise<void>
   listQuestionReports(): Promise<any[]>
+  readinessCheck(): Promise<void>
 }
 
 abstract class BaseRepository implements AppRepository {
@@ -172,6 +173,7 @@ abstract class BaseRepository implements AppRepository {
   abstract listSupportTickets(): Promise<any[]>
   abstract createQuestionReport(input: { id: string; packId: string; questionId: string; userId: string; category: string; message: string; createdAt: string }): Promise<void>
   abstract listQuestionReports(): Promise<any[]>
+  abstract readinessCheck(): Promise<void>
 
   async countUsers(): Promise<number> {
     return (await this.listUsers()).length
@@ -667,6 +669,13 @@ class LocalRepository extends BaseRepository {
       'SELECT qr.id, qr.pack_id, qr.question_id, qr.user_id, qr.category, qr.message, qr.created_at, COALESCE(u.username, \'\') AS username FROM question_reports qr LEFT JOIN users u ON u.id = qr.user_id ORDER BY qr.created_at DESC'
     ).all()
   }
+
+  async readinessCheck() {
+    const key = '__readiness__'
+    const timestamp = nowIso()
+    this.db.prepare('INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)').run(key, timestamp, timestamp)
+    this.db.prepare('DELETE FROM app_settings WHERE key = ?').run(key)
+  }
 }
 
 class CloudRepository extends BaseRepository {
@@ -1101,6 +1110,16 @@ class CloudRepository extends BaseRepository {
     return this.sql.query(
       "SELECT qr.id, qr.pack_id, qr.question_id, qr.user_id, qr.category, qr.message, qr.created_at, COALESCE(u.username, '') AS username FROM question_reports qr LEFT JOIN users u ON u.id = qr.user_id ORDER BY qr.created_at DESC"
     )
+  }
+
+  async readinessCheck() {
+    const key = '__readiness__'
+    const timestamp = nowIso()
+    await this.sql.query(
+      'INSERT INTO app_settings (key, value, updated_at) VALUES ($1, $2, $3) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at',
+      [key, timestamp, timestamp]
+    )
+    await this.sql.query('DELETE FROM app_settings WHERE key = $1', [key])
   }
 }
 

@@ -148,12 +148,16 @@ export interface ImportSessionStatus {
 
 export interface CachedPackEntry {
   id: string
+  cacheKey?: string
+  userId?: string
   qbankinfo: QbankInfo
   packMeta: StudyPackSummary | null
   updatedAt: string
 }
 
 export interface DirtyProgressEntry {
+  cacheKey?: string
+  userId?: string
   packId: string
   progress: ProgressRecord
   baseRevision: number

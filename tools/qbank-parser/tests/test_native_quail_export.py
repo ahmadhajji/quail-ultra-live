@@ -164,7 +164,7 @@ def test_export_native_quail_qbank_append_skips_unchanged_and_updates_changed(tm
         logger=lambda _message: None,
     )
 
-    changed_question = {**base_question, "question_stem": "Changed stem"}
+    changed_question = {**base_question, "educational_objective": "A changed educational objective must update append output."}
     _write_json(source_json, [changed_question])
     changed = export_native_quail_qbank(
         source_json=source_json,

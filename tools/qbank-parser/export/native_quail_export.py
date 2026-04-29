@@ -96,6 +96,13 @@ def _hash_json(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
 
 
+def _canonical_native_question_hash(question: dict[str, Any]) -> str:
+    clone = json.loads(json.dumps(question, ensure_ascii=False))
+    integrity = clone.setdefault("integrity", {})
+    integrity["contentHash"] = ""
+    return _hash_json(clone)
+
+
 def _randomized_choice_payload(
     *,
     qid: str,
@@ -439,17 +446,11 @@ def _question_to_native(
         },
         "integrity": {
             "sourceHash": _source_hash(question, pack_id),
-            "contentHash": _hash_json(
-                {
-                    "stem": _blocks_text(stem_blocks),
-                    "choices": choices,
-                    "correct": correct_answer,
-                    "explanation": _blocks_text(correct_blocks),
-                }
-            ),
+            "contentHash": "",
             "mediaHashes": {media["id"]: media.get("sha256", "") for media in question_media},
         },
     }
+    native_question["integrity"]["contentHash"] = _canonical_native_question_hash(native_question)
     return native_question, question_media, copied_count
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Literal
 
 
@@ -416,6 +417,18 @@ def _stable_hash(payload: dict) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
+def _file_hash(path_value: str) -> str:
+    if not path_value:
+        return ""
+    try:
+        path = Path(path_value)
+        if not path.exists() or not path.is_file():
+            return f"missing:{path.name}"
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return "unreadable"
+
+
 @dataclass
 class RawSlide:
     """All raw content extracted from a single slide. No AI involvement.
@@ -442,12 +455,14 @@ class RawSlide:
         """
         return _stable_hash(
             {
+                "deck_id": self.deck_id,
                 "slide_number": self.slide_number,
                 "text_blocks": self.text_blocks,
                 "speaker_notes": self.speaker_notes,
                 "highlighted_texts": self.highlighted_texts,
                 "potential_correct_answer": self.potential_correct_answer,
-                "image_count": len(self.image_paths),
+                "image_hashes": [_file_hash(path) for path in self.image_paths],
+                "slide_screenshot_hash": _file_hash(self.slide_screenshot_path),
                 "comment_contents": [c.get("content", "") for c in self.comments],
             }
         )
@@ -537,6 +552,9 @@ class DetectedQuestion:
         """
         return _stable_hash(
             {
+                "deck_id": self.deck_id,
+                "slide_number": self.slide_number,
+                "question_index": self.question_index,
                 "stem_text": self.stem_text,
                 "choices": self.choices,
                 "correct_answer": self.correct_answer,
@@ -544,8 +562,9 @@ class DetectedQuestion:
                 "speaker_notes": self.speaker_notes,
                 "comments": [c.get("content", "") for c in self.comments],
                 "highlighted_texts": self.highlighted_texts,
-                "stem_image_count": len(self.stem_image_paths),
-                "explanation_image_count": len(self.explanation_image_paths),
+                "source_slide_hash": _file_hash(self.source_slide_path),
+                "stem_image_hashes": [_file_hash(path) for path in self.stem_image_paths],
+                "explanation_image_hashes": [_file_hash(path) for path in self.explanation_image_paths],
             }
         )
 

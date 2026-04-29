@@ -21,6 +21,7 @@ import {
   getS3SecretAccessKey,
   shouldUseS3PathStyle
 } from './config'
+import { safeResolveWithin, validateStrictRelativePath } from '../shared/path-utils'
 
 let client: S3Client | undefined
 
@@ -78,7 +79,7 @@ async function collectFiles(directory: string, prefix: string): Promise<Array<{ 
   const entries = await fs.readdir(directory, { withFileTypes: true })
   for (const entry of entries) {
     const absolutePath = path.join(directory, entry.name)
-    const key = prefix ? `${prefix}/${entry.name}` : entry.name
+    const key = prefix ? `${prefix}/${validateStrictRelativePath(entry.name)}` : validateStrictRelativePath(entry.name)
     if (entry.isDirectory()) {
       files.push(...await collectFiles(absolutePath, key))
     } else if (entry.isFile()) {
@@ -163,8 +164,8 @@ export async function materializeS3PrefixToTemp(prefix: string) {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'quail-ultra-live-import-'))
   const keys = await listS3Keys(prefix)
   for (const key of keys) {
-    const relativePath = key.slice(`${prefix}/`.length)
-    const targetPath = path.join(tempRoot, relativePath)
+    const relativePath = validateStrictRelativePath(key.slice(`${prefix}/`.length))
+    const targetPath = safeResolveWithin(tempRoot, relativePath)
     await fs.mkdir(path.dirname(targetPath), { recursive: true })
     const response = await getClient().send(new GetObjectCommand({
       Bucket: getBucket(),
@@ -253,7 +254,7 @@ export async function copyS3Prefix(sourcePrefix: string, destinationPrefix: stri
 }
 
 export async function createPresignedUpload(relativePath: string, contentType?: string) {
-  const key = relativePath.split('/').filter(Boolean).join('/')
+  const key = validateStrictRelativePath(relativePath)
   const command = new PutObjectCommand({
     Bucket: getBucket(),
     Key: key,
@@ -282,4 +283,19 @@ export async function headS3Object(key: string): Promise<boolean> {
     }
     throw error
   }
+}
+
+export async function checkS3Readiness(): Promise<void> {
+  const key = `health/readiness-${Date.now()}-${Math.random().toString(16).slice(2)}.txt`
+  await writeS3Object(key, 'ok', 'text/plain; charset=utf-8')
+  await getClient().send(new HeadObjectCommand({
+    Bucket: getBucket(),
+    Key: key
+  }))
+  await getClient().send(new DeleteObjectsCommand({
+    Bucket: getBucket(),
+    Delete: {
+      Objects: [{ Key: key }]
+    }
+  }))
 }

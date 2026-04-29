@@ -148,6 +148,9 @@ Authoring rules:
 - Avoid repeating the same answer letters multiple times in unrelated parts of the stem.
 - Keep referenced local assets relative to the qbank folder.
 - Do not rely on remote assets when local assets are available.
+- Use simple HTML only: text formatting, headings, lists, tables, links, images, audio, and video.
+- Do not use scripts, event handlers, iframes, embedded objects, inline SVG, form controls, or inline styles. The app strips unsafe markup before rendering.
+- Local paths must not contain empty segments, `.`, `..`, leading slashes, backslashes, or control characters.
 
 ### Solution HTML: `*-s.html`
 
@@ -157,6 +160,7 @@ Authoring rules:
 
 - Keep the correct answer clearly stated.
 - Keep local asset paths relative and valid.
+- Follow the same safe HTML rules as question HTML. `javascript:` links, hostile `data:` URLs, event handlers, and unsupported embedded content are removed at render time.
 
 ## Common Failure Modes
 

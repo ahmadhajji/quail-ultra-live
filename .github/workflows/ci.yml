@@ -23,8 +23,31 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install parser dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r tools/qbank-parser/requirements.txt -r tools/qbank-parser/requirements-dev.txt
+
       - name: Run validation suite
         run: npm run check
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Validate qbank fixtures
+        run: |
+          npm run validate:qbank -- contracts/quail-ultra-qbank/v1/fixtures/native-pack-minimal
+          npm run validate:qbank -- contracts/quail-ultra-qbank/v1/fixtures/legacy-pack-minimal
+
+      - name: Run parser tests
+        env:
+          OPENAI_API_KEY: sk-proj-ci-placeholder
+        run: npm run parser:test
 
   docker-build:
     name: Docker Build
@@ -59,3 +82,11 @@ jobs:
         env:
           CI: "true"
         run: npm run test:smoke:local
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          if-no-files-found: ignore

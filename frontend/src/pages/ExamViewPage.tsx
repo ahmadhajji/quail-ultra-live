@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fetchQuestionAssets, extractChoiceLabels, prefetchImagesFromHtml, prefetchQuestionAssets, rewriteAssetPaths, stripChoicesFromQuestionDisplay } from '../lib/qbank-html'
-import { fetchNativeQuestion, getNativeChoiceLabels, prefetchNativeQuestion, prefetchNativeQuestionMedia, type NativeQuestion } from '../lib/native-qbank'
+import { fetchNativeQuestion, getNativeChoiceLabels, nativeMediaUrl, prefetchNativeQuestion, prefetchNativeQuestionMedia, type NativeQuestion } from '../lib/native-qbank'
 import { getHighlightDoc, getQuestionNote, setHighlightDocTarget, setQuestionNote } from '../lib/annotations'
 import { addToBucket, isInBucket, removeFromBucket } from '../lib/progress'
 import { syncProgress, getQuestionStats } from '../lib/api'
@@ -284,7 +284,7 @@ export function ExamViewPage() {
     (factCheck?.status && ['disputed', 'unresolved'].includes(factCheck.status)) || warningList.length > 0
   )
   const sourceSlideAsset = currentMeta?.source_slide?.expandable && currentMeta?.source_slide?.asset_path
-    ? `${qbankinfo?.path}/${currentMeta.source_slide.asset_path.replace(/^\.?\//, '')}`
+    ? nativeMediaUrl(qbankinfo?.path ?? '', currentMeta.source_slide.asset_path)
     : ''
 
   useEffect(() => {

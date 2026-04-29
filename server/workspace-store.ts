@@ -18,6 +18,7 @@ import {
   uploadDirectoryToS3,
   writeS3Json
 } from './s3'
+import { safeResolveWithin, validateStrictRelativePath } from '../shared/path-utils'
 
 type LoadedPack = {
   qbankinfo: any
@@ -133,7 +134,7 @@ async function collectFiles(directory: string, prefix: string): Promise<Array<{ 
 
   for (const entry of entries) {
     const absolutePath = path.join(directory, entry.name)
-    const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name
+    const relativePath = prefix ? `${prefix}/${validateStrictRelativePath(entry.name)}` : validateStrictRelativePath(entry.name)
     if (entry.isDirectory()) {
       files.push(...await collectFiles(absolutePath, relativePath))
     } else if (entry.isFile()) {
@@ -362,7 +363,7 @@ class BlobWorkspaceStore extends BaseWorkspaceStore {
       const qbankinfo = {
         ...withNativeQuestionPaths(snapshot, nativeManifest),
         progress,
-        path: `/api/study-packs/${packRow.id}/file`,
+        path: `/api/study-packs/${packRow.id}/file?rev=${encodeURIComponent(String(packRow.revision || 0))}`,
         revision: packRow.revision,
         blockToOpen: blockToOpen || ''
       }
@@ -400,7 +401,7 @@ class BlobWorkspaceStore extends BaseWorkspaceStore {
       panes,
       ...(questionMeta ? { questionMeta } : {}),
       progress,
-      path: `/api/study-packs/${packRow.id}/file`,
+      path: `/api/study-packs/${packRow.id}/file?rev=${encodeURIComponent(String(packRow.revision || 0))}`,
       revision: packRow.revision,
       blockToOpen: blockToOpen || ''
     }
@@ -446,7 +447,7 @@ class BlobWorkspaceStore extends BaseWorkspaceStore {
   }
 
   async getPackFile(workspacePath: string, relativePath: string) {
-    const cleanRelative = relativePath.split('/').filter(Boolean).join('/')
+    const cleanRelative = validateStrictRelativePath(relativePath)
     const blob = await get(`${workspacePath}/${cleanRelative}`, {
       access: 'private',
       token: getBlobToken()
@@ -485,8 +486,8 @@ class BlobWorkspaceStore extends BaseWorkspaceStore {
         token: getBlobToken()
       })
       for (const blob of page.blobs) {
-        const relativePath = blob.pathname.slice(`${stagingPrefix}/`.length)
-        const targetPath = path.join(tempRoot, relativePath)
+        const relativePath = validateStrictRelativePath(blob.pathname.slice(`${stagingPrefix}/`.length))
+        const targetPath = safeResolveWithin(tempRoot, relativePath)
         await ensureDir(path.dirname(targetPath))
         const result = await get(blob.pathname, { access: 'private', token: getBlobToken(), useCache: false })
         if (!result || result.statusCode !== 200) {
@@ -562,7 +563,7 @@ class RailwayWorkspaceStore extends BaseWorkspaceStore {
       const qbankinfo = {
         ...withNativeQuestionPaths(snapshot, nativeManifest),
         progress,
-        path: `/api/study-packs/${packRow.id}/file`,
+        path: `/api/study-packs/${packRow.id}/file?rev=${encodeURIComponent(String(packRow.revision || 0))}`,
         revision: packRow.revision,
         blockToOpen: blockToOpen || ''
       }
@@ -596,7 +597,7 @@ class RailwayWorkspaceStore extends BaseWorkspaceStore {
       panes,
       ...(questionMeta ? { questionMeta } : {}),
       progress,
-      path: `/api/study-packs/${packRow.id}/file`,
+      path: `/api/study-packs/${packRow.id}/file?rev=${encodeURIComponent(String(packRow.revision || 0))}`,
       revision: packRow.revision,
       blockToOpen: blockToOpen || ''
     }
@@ -630,7 +631,7 @@ class RailwayWorkspaceStore extends BaseWorkspaceStore {
   }
 
   async getPackFile(workspacePath: string, relativePath: string) {
-    const cleanRelative = relativePath.split('/').filter(Boolean).join('/')
+    const cleanRelative = validateStrictRelativePath(relativePath)
     const file = await getS3FileStream(`${workspacePath}/${cleanRelative}`)
     return {
       kind: 'stream',

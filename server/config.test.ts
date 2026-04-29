@@ -54,4 +54,33 @@ describe('config', () => {
     expect(config.DATA_DIR).toBe(path.resolve('/tmp/quail-data'))
     expect(config.LOCAL_DB_PATH).toBe(path.join(path.resolve('/tmp/quail-data'), 'quail-ultra-live.db'))
   })
+
+  it('rejects unsafe Railway production configuration', async () => {
+    const config = await loadConfig({
+      NODE_ENV: 'production',
+      RAILWAY_ENVIRONMENT: 'production',
+      QUAIL_STORAGE_BACKEND: 'local',
+      QUAIL_DATA_DIR: '/tmp/quail-data',
+      SESSION_SECRET: 'dev-session-secret-change-me'
+    })
+
+    expect(() => config.validateRuntimeConfig()).toThrow(/Unsafe production configuration/)
+  })
+
+  it('accepts required Railway production configuration', async () => {
+    const config = await loadConfig({
+      NODE_ENV: 'production',
+      RAILWAY_ENVIRONMENT: 'production',
+      QUAIL_STORAGE_BACKEND: 'railway',
+      QUAIL_DATA_DIR: '/data',
+      SESSION_SECRET: 'x'.repeat(32),
+      S3_ENDPOINT: 'https://bucket.example.test',
+      S3_REGION: 'auto',
+      S3_BUCKET: 'quail',
+      S3_ACCESS_KEY_ID: 'key',
+      S3_SECRET_ACCESS_KEY: 'secret'
+    })
+
+    expect(() => config.validateRuntimeConfig()).not.toThrow()
+  })
 })
