@@ -65,7 +65,6 @@ self.addEventListener('fetch', function onFetch(event) {
   const isNavigation = request.mode === 'navigate'
   const isStaticAsset = url.pathname === '/' ||
     url.pathname.startsWith('/assets/') ||
-    url.pathname.startsWith('/vendor/') ||
     url.pathname === '/sw.js' ||
     url.pathname === '/manifest.webmanifest' ||
     url.pathname.startsWith('/branding/')
