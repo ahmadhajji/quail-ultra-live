@@ -108,4 +108,75 @@ describe('progress sync API', () => {
       await fs.rm(tempDir, { recursive: true, force: true })
     }
   })
+
+  it('allows only one concurrent progress save from the same base revision', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'quail-progress-api-'))
+    let server: http.Server | undefined
+
+    try {
+      process.env = {
+        ...originalEnv,
+        QUAIL_DATA_DIR: tempDir,
+        QUAIL_STORAGE_BACKEND: 'local',
+        SESSION_SECRET: 'test-secret'
+      }
+      vi.resetModules()
+      const workspaceDir = path.join(tempDir, 'workspace')
+      await writeWorkspace(workspaceDir)
+
+      const { createRepository, buildPasswordHash } = await import('./repository')
+      const repository = createRepository()
+      await repository.init()
+      await repository.createUser({
+        id: 'viewer',
+        username: 'viewer',
+        email: 'viewer@example.test',
+        passwordHash: await buildPasswordHash('password'),
+        role: 'user',
+        status: 'active',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z'
+      })
+      await repository.createPack({
+        id: 'pack-1',
+        userId: 'viewer',
+        name: 'Pack',
+        workspacePath: workspaceDir,
+        questionCount: 1,
+        revision: 2,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z'
+      })
+      ;(repository as any).db.close()
+
+      const { createApp } = await import('./app')
+      const { createSessionToken } = await import('./auth')
+      const { SESSION_COOKIE_NAME } = await import('./config')
+      const runtime = await createApp()
+      const bound = await listen(runtime.app)
+      server = bound.server
+      const cookie = `${SESSION_COOKIE_NAME}=${createSessionToken('viewer')}`
+
+      const save = (clientMutationSeq: number) => fetch(`${bound.origin}/api/study-packs/pack-1/progress`, {
+        method: 'PUT',
+        headers: {
+          cookie,
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          baseRevision: 2,
+          clientInstanceId: `tab-${clientMutationSeq}`,
+          clientMutationSeq,
+          clientUpdatedAt: `2026-01-01T00:00:0${clientMutationSeq}.000Z`,
+          progress: { blockhist: {}, tagbuckets: {} }
+        })
+      })
+
+      const responses = await Promise.all([save(1), save(2)])
+      expect(responses.map((response) => response.status).sort()).toEqual([200, 409])
+    } finally {
+      await new Promise<void>((resolve) => server?.close(() => resolve()) ?? resolve())
+      await fs.rm(tempDir, { recursive: true, force: true })
+    }
+  })
 })
