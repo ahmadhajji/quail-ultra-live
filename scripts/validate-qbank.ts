@@ -5,6 +5,7 @@ const fsp = require('fs/promises')
 const path = require('path')
 const { findWorkspaceRoot, readJson } = require('../shared/qbank')
 const { NATIVE_QBANK_MANIFEST, hasNativeQbankManifest, validateNativeQbankDirectory } = require('../shared/native-qbank')
+const { validateStrictRelativePath } = require('../shared/path-utils')
 
 async function exists(targetPath) {
   try {
@@ -21,7 +22,7 @@ function parseLocalAssetPaths(html) {
   let match
   while ((match = assetRegex.exec(html)) !== null) {
     const candidate = match[1]
-    if (!candidate || /^(?:https?:|data:|mailto:|#|javascript:)/i.test(candidate)) {
+    if (!candidate || /^(?:data:|mailto:|#|javascript:)/i.test(candidate)) {
       continue
     }
     results.add(candidate.split('?')[0].split('#')[0])
@@ -179,8 +180,15 @@ async function main() {
       continue
     }
     const sourceSlide = meta && meta.source_slide && typeof meta.source_slide.asset_path === 'string' ? meta.source_slide.asset_path : ''
-    if (sourceSlide && !(await exists(path.join(workspaceRoot, sourceSlide)))) {
-      warnings.push(`question-meta.json for "${qid}" points to missing source slide "${sourceSlide}".`)
+    if (sourceSlide) {
+      try {
+        validateStrictRelativePath(sourceSlide)
+      } catch (_error) {
+        errors.push(`question-meta.json for "${qid}" has unsafe source slide path "${sourceSlide}".`)
+      }
+      if (!(await exists(path.join(workspaceRoot, sourceSlide)))) {
+        warnings.push(`question-meta.json for "${qid}" points to missing source slide "${sourceSlide}".`)
+      }
     }
     const displayOrder = meta && meta.choice_presentation && Array.isArray(meta.choice_presentation.display_order)
       ? meta.choice_presentation.display_order
@@ -224,6 +232,12 @@ async function main() {
       warnings.push(`Pane "${title}" is missing a valid file target.`)
       continue
     }
+    try {
+      validateStrictRelativePath(pane.file)
+    } catch (_error) {
+      errors.push(`Pane "${title}" has unsafe file target "${pane.file}".`)
+      continue
+    }
     if (!(await exists(path.join(workspaceRoot, pane.file)))) {
       warnings.push(`Pane "${title}" points to missing file "${pane.file}".`)
     }
@@ -255,6 +269,12 @@ async function main() {
     }
 
     for (const assetPath of [...parseLocalAssetPaths(questionHtml), ...parseLocalAssetPaths(solutionHtml)]) {
+      try {
+        validateStrictRelativePath(assetPath)
+      } catch (_error) {
+        errors.push(`Question "${qid}" references unsafe local asset "${assetPath}".`)
+        continue
+      }
       if (!(await exists(path.join(workspaceRoot, assetPath)))) {
         warnings.push(`Question "${qid}" references missing local asset "${assetPath}".`)
       }

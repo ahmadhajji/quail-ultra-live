@@ -188,6 +188,11 @@
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
       "minLength": 1
     },
+    "packRelativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*//)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*\\\\)(?!.*:)[^?#]+$"
+    },
     "tags": {
       "type": "object",
       "additionalProperties": false,
@@ -269,7 +274,7 @@
       "required": ["id", "path", "mimeType", "role"],
       "properties": {
         "id": { "$ref": "#/$defs/id" },
-        "path": { "type": "string", "minLength": 1 },
+        "path": { "$ref": "#/$defs/packRelativePath" },
         "mimeType": { "type": "string", "minLength": 1 },
         "role": { "enum": ["stem", "explanation", "source_slide"] },
         "sha256": { "type": "string" },

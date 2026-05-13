@@ -38,6 +38,22 @@ describe('qbank html helpers', () => {
     expect(html).not.toContain('data:image/svg+xml')
   })
 
+  it('drops imported content references that escape the pack boundary', () => {
+    const html = rewriteAssetPaths([
+      '<img src="/api/admin/users">',
+      '<img src="../secret.png">',
+      '<img src="images//x.png">',
+      '<img src="https://example.test/x.png">',
+      '<audio src="//example.test/x.mp3"></audio>',
+      '<a href="/api/admin/users">admin</a>'
+    ].join(''), '/api/study-packs/pack-1/file?rev=3', '240px')
+
+    expect(html).not.toContain('/api/admin/users')
+    expect(html).not.toContain('../secret.png')
+    expect(html).not.toContain('images//x.png')
+    expect(html).not.toContain('example.test')
+  })
+
   it('builds revision-aware pack file URLs', () => {
     expect(buildPackFileUrl('pack-1', 'media/q01.png', 7)).toBe('/api/study-packs/pack-1/file/media/q01.png?rev=7')
   })

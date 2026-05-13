@@ -13,6 +13,13 @@ try {
   progressHelpers = require('./progress.ts')
 }
 const { createTagBuckets, normalizeProgress } = progressHelpers
+let pathHelpers
+try {
+  pathHelpers = require('./path-utils')
+} catch (_error) {
+  pathHelpers = require('./path-utils.ts')
+}
+const { safeResolveWithin, validateStrictRelativePath } = pathHelpers
 
 const NATIVE_QBANK_FORMAT = 'quail-ultra-qbank'
 const NATIVE_QBANK_SCHEMA_VERSION = 1
@@ -55,19 +62,11 @@ function ajvErrors(prefix: string, errors: any[] | null | undefined): string[] {
 }
 
 function safePackPath(workspaceDir: string, relativePath: string): string | null {
-  if (!relativePath || path.isAbsolute(relativePath)) {
+  try {
+    return safeResolveWithin(workspaceDir, relativePath)
+  } catch (_error) {
     return null
   }
-  const cleanRelative = relativePath.split('/').filter(Boolean).join(path.sep)
-  if (!cleanRelative || cleanRelative.split(path.sep).includes('..')) {
-    return null
-  }
-  const root = path.resolve(workspaceDir)
-  const resolved = path.resolve(root, cleanRelative)
-  if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) {
-    return null
-  }
-  return resolved
 }
 
 function pushDuplicateIssue(kind: string, id: string, seen: Set<string>, errors: string[]) {
@@ -503,5 +502,6 @@ module.exports = {
   getNativeQuestionText,
   hasNativeQbankManifest,
   loadNativeWorkspaceData,
-  validateNativeQbankDirectory
+  validateNativeQbankDirectory,
+  validateStrictRelativePath
 }

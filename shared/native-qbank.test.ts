@@ -45,6 +45,29 @@ describe('native qbank contract validation', () => {
     expect(result.errors.join('\n')).toContain('validation.status is failed')
   })
 
+  it('rejects native manifest paths that are not strict pack-relative paths', async () => {
+    const badPaths = [
+      'questions/./q.json',
+      'questions//q.json',
+      '/questions/q.json',
+      'questions\\q.json',
+      'questions/../q.json',
+      'https://example.test/q.json'
+    ]
+
+    for (const badPath of badPaths) {
+      const workspaceRoot = await copyFixture('native-pack-minimal')
+      const manifestPath = path.join(workspaceRoot, 'quail-ultra-pack.json')
+      const manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf8'))
+      manifest.questionIndex[0].path = badPath
+      await fsp.writeFile(manifestPath, JSON.stringify(manifest, null, 2))
+
+      const result = await validateNativeQbankDirectory(workspaceRoot)
+      expect(result.ok, badPath).toBe(false)
+      expect(result.errors.join('\n'), badPath).toMatch(/path|unsafe/i)
+    }
+  })
+
   it('normalizes a native pack into the existing qbankinfo shape', async () => {
     const workspaceRoot = await copyFixture('native-pack-minimal')
     const qbankinfo = await loadWorkspaceData(workspaceRoot)
