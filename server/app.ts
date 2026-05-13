@@ -22,7 +22,7 @@ import {
   usesDirectUploads
 } from './config'
 import { buildPasswordHash, comparePassword, createInviteToken, createRepository, hashInviteToken } from './repository'
-import { checkS3Readiness, createPresignedUpload } from './s3'
+import { checkS3Readiness, copyS3Prefix, createPresignedUpload } from './s3'
 import { copyBlobPrefix, createWorkspaceStore } from './workspace-store'
 import { isEmailConfigured, sendInviteEmail, sendSupportEmail, sendQuestionReportEmail } from './email'
 import { legacyPageRedirectTarget, routePathFor } from './routes'
@@ -45,6 +45,11 @@ function nowIso() {
 function jsonError(res: any, status: number, message: string) {
   res.status(status).json({ error: message })
 }
+
+const MAX_IMPORT_FILE_COUNT = 20000
+const MAX_IMPORT_TOTAL_SIZE = 4 * 1024 * 1024 * 1024
+const MAX_ZIP_ENTRY_COUNT = 20000
+const MAX_ZIP_UNCOMPRESSED_SIZE = 4 * 1024 * 1024 * 1024
 
 function sanitizePackName(input: string, fallback: string) {
   const trimmed = String(input || '').trim()
@@ -150,6 +155,13 @@ function safeRelativeUploadPath(value: string) {
 }
 
 async function writeUploadedFiles(targetDir: string, files: any[]) {
+  if (files.length > MAX_IMPORT_FILE_COUNT) {
+    throw new Error('Too many files were selected for a single import.')
+  }
+  const totalSize = files.reduce((sum, file) => sum + Number(file.size || 0), 0)
+  if (totalSize > MAX_IMPORT_TOTAL_SIZE) {
+    throw new Error('Selected files exceed the aggregate import limit.')
+  }
   await fsp.mkdir(targetDir, { recursive: true })
   for (const file of files) {
     const relativeName = safeRelativeUploadPath(file.originalname)
@@ -167,25 +179,47 @@ async function writeUploadedFiles(targetDir: string, files: any[]) {
 async function extractZipToDirectory(targetDir: string, zipPath: string) {
   const unzipper = await import('unzipper')
   await fsp.mkdir(targetDir, { recursive: true })
-  const parser = fs.createReadStream(zipPath).pipe(unzipper.Parse({ forceStream: true }))
-  for await (const entry of parser) {
-    const relativeName = safeRelativeUploadPath(entry.path)
-    const absolutePath = safeResolveWithin(targetDir, relativeName)
-    if (entry.type === 'Directory') {
-      await fsp.mkdir(absolutePath, { recursive: true })
-      entry.autodrain()
-      continue
+  try {
+    const parser = fs.createReadStream(zipPath).pipe(unzipper.Parse({ forceStream: true }))
+    let entryCount = 0
+    let uncompressedBytes = 0
+    for await (const entry of parser) {
+      const relativeName = safeRelativeUploadPath(entry.path)
+      const absolutePath = safeResolveWithin(targetDir, relativeName)
+      entryCount += 1
+      if (entryCount > MAX_ZIP_ENTRY_COUNT) {
+        entry.autodrain()
+        throw new Error('Zip import contains too many entries.')
+      }
+      if (entry.type === 'Directory') {
+        await fsp.mkdir(absolutePath, { recursive: true })
+        entry.autodrain()
+        continue
+      }
+      const declaredSize = Number(entry.vars?.uncompressedSize || 0)
+      if (declaredSize > MAX_UPLOAD_FILE_SIZE) {
+        entry.autodrain()
+        throw new Error('Zip import contains a file over the per-file upload limit.')
+      }
+      await fsp.mkdir(path.dirname(absolutePath), { recursive: true })
+      await new Promise<void>((resolve, reject) => {
+        const output = fs.createWriteStream(absolutePath)
+        entry.on('data', (chunk: Buffer) => {
+          uncompressedBytes += chunk.length
+          if (uncompressedBytes > MAX_ZIP_UNCOMPRESSED_SIZE) {
+            entry.destroy(new Error('Zip import exceeds the expanded-size limit.'))
+            output.destroy()
+          }
+        })
+        entry.pipe(output)
+        output.on('finish', resolve)
+        output.on('error', reject)
+        entry.on('error', reject)
+      })
     }
-    await fsp.mkdir(path.dirname(absolutePath), { recursive: true })
-    await new Promise<void>((resolve, reject) => {
-      const output = fs.createWriteStream(absolutePath)
-      entry.pipe(output)
-      output.on('finish', resolve)
-      output.on('error', reject)
-      entry.on('error', reject)
-    })
+  } finally {
+    await fsp.unlink(zipPath).catch(() => {})
   }
-  await fsp.unlink(zipPath).catch(() => {})
 }
 
 function parseImportSessionIdFromPathname(pathname: string) {
@@ -285,7 +319,10 @@ export async function createApp() {
     if (row.progress_override_path) {
       await workspaceStore.deleteWorkspace(row.progress_override_path)
     } else {
-      await workspaceStore.deleteWorkspace(row.workspace_path)
+      const systemPack = await repository.getSystemPackByWorkspacePath(row.workspace_path)
+      if (!systemPack) {
+        await workspaceStore.deleteWorkspace(row.workspace_path)
+      }
     }
   }
 
@@ -986,9 +1023,8 @@ export async function createApp() {
       systemWorkspacePath = `system-packs/${systemPackId}/workspace`
       await copyBlobPrefix(row.workspace_path, systemWorkspacePath)
     } else {
-      // railway: leave in place; the prefix move is expensive and the admin's
-      // pack can stay as the shared workspace. Keep original path.
-      systemWorkspacePath = row.workspace_path
+      systemWorkspacePath = `system-packs/${systemPackId}/workspace`
+      await copyS3Prefix(row.workspace_path, systemWorkspacePath)
     }
     await repository.createSystemPack({
       id: systemPackId,
@@ -999,12 +1035,7 @@ export async function createApp() {
       createdAt: timestamp,
       updatedAt: timestamp
     })
-    // For local/cloud we've copied the workspace; delete the admin's original
-    // study_pack row and its workspace. For railway we keep the row — admin
-    // keeps their personal copy as well.
-    if (storageBackend !== 'railway') {
-      await deletePackRow(row)
-    }
+    await deletePackRow(row)
     res.status(201).json({ pack: systemPackSummary(await repository.getSystemPackById(systemPackId)) })
   }))
 
@@ -1377,10 +1408,35 @@ export async function createApp() {
     if (files.length === 0) {
       return jsonError(res, 400, 'Select files to upload')
     }
-    const uploads = await Promise.all(files.map(async (entry: any) => {
-      const relativePath = safeRelativeUploadPath(String(entry?.relativePath || ''))
+    if (files.length > MAX_IMPORT_FILE_COUNT) {
+      return jsonError(res, 413, 'Too many files were selected for a single import.')
+    }
+    const validatedFiles = []
+    let declaredTotalSize = 0
+    for (const entry of files) {
+      let relativePath: string
+      try {
+        relativePath = safeRelativeUploadPath(String(entry?.relativePath || ''))
+      } catch (_error) {
+        return jsonError(res, 400, 'Invalid upload path')
+      }
+      const declaredSize = Number(entry?.size)
+      if (!Number.isFinite(declaredSize) || declaredSize < 0) {
+        return jsonError(res, 400, 'Each upload must declare a valid file size.')
+      }
+      if (declaredSize > MAX_UPLOAD_FILE_SIZE) {
+        return jsonError(res, 413, 'One of the uploaded files exceeded the current per-file upload limit.')
+      }
+      declaredTotalSize += declaredSize
+      if (declaredTotalSize > MAX_IMPORT_TOTAL_SIZE) {
+        return jsonError(res, 413, 'Selected files exceed the aggregate import limit.')
+      }
+      validatedFiles.push({ relativePath, contentType: String(entry?.contentType || '').trim() || undefined })
+    }
+    const uploads = await Promise.all(validatedFiles.map(async (entry: any) => {
+      const relativePath = entry.relativePath
       const pathname = `${session.staging_prefix}/${relativePath}`
-      const upload = await createPresignedUpload(pathname, String(entry?.contentType || '').trim() || undefined)
+      const upload = await createPresignedUpload(pathname, entry.contentType)
       return {
         relativePath,
         url: upload.url,

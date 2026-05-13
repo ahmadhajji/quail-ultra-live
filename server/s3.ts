@@ -1,8 +1,10 @@
 // @ts-nocheck
 import fs from 'node:fs/promises'
+import { createWriteStream } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import {
   CopyObjectCommand,
   DeleteObjectsCommand,
@@ -160,13 +162,48 @@ export async function getS3FileStream(key: string) {
   }
 }
 
-export async function materializeS3PrefixToTemp(prefix: string) {
+export async function headS3Object(key: string): Promise<{ exists: boolean, contentLength: number }> {
+  try {
+    const response = await getClient().send(new HeadObjectCommand({
+      Bucket: getBucket(),
+      Key: key
+    }))
+    return {
+      exists: true,
+      contentLength: Number(response.ContentLength || 0)
+    }
+  } catch (error: any) {
+    const statusCode = error?.$metadata?.httpStatusCode
+    const code = error?.name || error?.Code
+    if (statusCode === 404 || code === 'NoSuchKey' || code === 'NotFound') {
+      return { exists: false, contentLength: 0 }
+    }
+    throw error
+  }
+}
+
+export async function materializeS3PrefixToTemp(prefix: string, limits?: { maxFiles?: number, maxBytes?: number, maxFileSize?: number }) {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'quail-ultra-live-import-'))
   const keys = await listS3Keys(prefix)
+  if (limits?.maxFiles != null && keys.length > limits.maxFiles) {
+    throw new Error('Import contains too many files')
+  }
+  let totalBytes = 0
   for (const key of keys) {
     const relativePath = validateStrictRelativePath(key.slice(`${prefix}/`.length))
     const targetPath = safeResolveWithin(tempRoot, relativePath)
     await fs.mkdir(path.dirname(targetPath), { recursive: true })
+    const head = await headS3Object(key)
+    if (!head.exists) {
+      throw new Error(`Unable to fetch staged object ${key}`)
+    }
+    if (limits?.maxFileSize != null && head.contentLength > limits.maxFileSize) {
+      throw new Error('A staged import file exceeds the per-file upload limit')
+    }
+    totalBytes += head.contentLength
+    if (limits?.maxBytes != null && totalBytes > limits.maxBytes) {
+      throw new Error('Import exceeds the aggregate upload limit')
+    }
     const response = await getClient().send(new GetObjectCommand({
       Bucket: getBucket(),
       Key: key
@@ -174,7 +211,7 @@ export async function materializeS3PrefixToTemp(prefix: string) {
     if (!response.Body) {
       throw new Error(`Unable to fetch staged object ${key}`)
     }
-    await fs.writeFile(targetPath, Buffer.from(await response.Body.transformToByteArray()))
+    await pipeline(Readable.fromWeb(response.Body.transformToWebStream()), createWriteStream(targetPath))
   }
   return tempRoot
 }
@@ -265,23 +302,6 @@ export async function createPresignedUpload(relativePath: string, contentType?: 
     key,
     url,
     headers: contentType ? { 'content-type': contentType } : {}
-  }
-}
-
-export async function headS3Object(key: string): Promise<boolean> {
-  try {
-    await getClient().send(new HeadObjectCommand({
-      Bucket: getBucket(),
-      Key: key
-    }))
-    return true
-  } catch (error: any) {
-    const statusCode = error?.$metadata?.httpStatusCode
-    const code = error?.name || error?.Code
-    if (statusCode === 404 || code === 'NoSuchKey' || code === 'NotFound') {
-      return false
-    }
-    throw error
   }
 }
 

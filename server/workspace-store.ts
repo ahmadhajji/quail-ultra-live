@@ -8,7 +8,7 @@ import { copy, del, get, list, put } from '@vercel/blob'
 import { createTagBuckets, normalizeProgress } from '../shared/progress'
 import { findWorkspaceRoot, listWorkspaceManifest, loadWorkspaceData, safeResolveWorkspaceFile, saveProgress, withPackPath } from '../shared/qbank'
 import { NATIVE_QBANK_FORMAT, NATIVE_QBANK_INFO_SNAPSHOT, NATIVE_QBANK_MANIFEST } from '../shared/native-qbank'
-import { PACKS_DIR, getBlobToken, getStorageBackend } from './config'
+import { MAX_UPLOAD_FILE_SIZE, PACKS_DIR, getBlobToken, getStorageBackend } from './config'
 import {
   deleteS3Prefix,
   getS3FileStream,
@@ -19,6 +19,8 @@ import {
   writeS3Json
 } from './s3'
 import { safeResolveWithin, validateStrictRelativePath } from '../shared/path-utils'
+
+const MAX_IMPORT_TOTAL_SIZE = 4 * 1024 * 1024 * 1024
 
 type LoadedPack = {
   qbankinfo: any
@@ -654,7 +656,11 @@ class RailwayWorkspaceStore extends BaseWorkspaceStore {
   }
 
   async finalizeImportedWorkspace(sessionRow: any, packId: string) {
-    const tempRoot = await materializeS3PrefixToTemp(sessionRow.staging_prefix)
+    const tempRoot = await materializeS3PrefixToTemp(sessionRow.staging_prefix, {
+      maxFiles: 20000,
+      maxFileSize: MAX_UPLOAD_FILE_SIZE,
+      maxBytes: MAX_IMPORT_TOTAL_SIZE
+    })
     try {
       const workspaceRoot = await findWorkspaceRoot(tempRoot)
       const prepared = await loadWorkspaceData(workspaceRoot)
