@@ -353,6 +353,10 @@ def _run_v2_pipeline(args: argparse.Namespace) -> bool:
         source_tag=args.source_tag or "",
         output_dir=Path(args.native_pack_dir) if args.native_pack_dir else OUTPUT_DIR,
         api_key=OPENAI_API_KEY,
+        dry_run=bool(args.dry_run or args.dry_run_cost),
+        slide_range=_parse_slide_range(args.slide_range),
+        max_slides=args.max_slides,
+        max_questions=args.max_questions,
     )
 
     try:

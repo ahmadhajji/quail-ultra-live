@@ -16,6 +16,7 @@ from app.v2_pipeline import (
     _filter_comments_by_slide,
     _stage2_cache_key,
     run_v2_stages_1_and_2,
+    run_v2_pipeline,
     stage1_raw_extract,
     stage2_detect,
 )
@@ -498,6 +499,118 @@ def test_stage2_records_error_on_adapter_error(tmp_path):
     )
     assert detected == []
     assert errors[1] == "rate limited"
+
+
+def test_v2_dry_run_does_not_call_provider_adapters(tmp_path):
+    pptx = tmp_path / "deck.pptx"
+    pptx.write_bytes(b"fake")
+    out = tmp_path / "run"
+    slide_contents = [SlideContent(slide_number=1, texts=["Q?"], speaker_notes="n", images=[])]
+    screenshots = [str(tmp_path / "shot1.png")]
+
+    class _FailIfCalledDetect:
+        model_name = "fail-detect"
+
+        def detect(self, slide):
+            raise AssertionError("detect adapter should not be called during dry-run")
+
+    opts = V2RunOptions(
+        pptx_path=str(pptx),
+        output_dir=out,
+        rotation="Pediatrics",
+        api_key="sk-test",
+        dry_run=True,
+        parse_pptx_fn=_fake_parse_pptx_factory(slide_contents),
+        pptx_to_images_fn=_fake_pptx_to_images_factory(screenshots),
+        detect_adapter=_FailIfCalledDetect(),
+    )
+
+    result = run_v2_pipeline(opts)
+    assert len(result.raw_slides) == 1
+    assert result.detected_questions == []
+    assert result.rewritten_questions == []
+    assert result.stats.ai_calls == 0
+
+
+def test_v2_limits_reduce_detection_calls(tmp_path):
+    pptx = tmp_path / "deck.pptx"
+    pptx.write_bytes(b"fake")
+    out = tmp_path / "run"
+    slide_contents = [
+        SlideContent(slide_number=1, texts=["Q1?"], images=[]),
+        SlideContent(slide_number=2, texts=["Q2?"], images=[]),
+        SlideContent(slide_number=3, texts=["Q3?"], images=[]),
+    ]
+    screenshots = [str(tmp_path / "shot1.png"), str(tmp_path / "shot2.png"), str(tmp_path / "shot3.png")]
+    stub = _StubDetectAdapter()
+
+    opts = V2RunOptions(
+        pptx_path=str(pptx),
+        output_dir=out,
+        rotation="Pediatrics",
+        api_key="sk-test",
+        slide_range=(2, 3),
+        max_slides=1,
+        parse_pptx_fn=_fake_parse_pptx_factory(slide_contents),
+        pptx_to_images_fn=_fake_pptx_to_images_factory(screenshots),
+        detect_adapter=stub,
+    )
+
+    result = run_v2_stages_1_and_2(opts)
+    assert [slide.slide_number for slide in result.raw_slides] == [2]
+    assert stub.calls == 1
+    assert result.stats.ai_calls == 1
+
+
+def test_stage4_export_failure_fails_pipeline(tmp_path):
+    pptx = tmp_path / "deck.pptx"
+    pptx.write_bytes(b"fake")
+    out = tmp_path / "run"
+    slide_contents = [SlideContent(slide_number=1, texts=["Q?"], speaker_notes="n", images=[])]
+    screenshots = [str(tmp_path / "shot1.png")]
+
+    class _StubRewriteAdapter:
+        model_name = "stub-rewrite"
+
+        def rewrite(self, detected, rotation):
+            from domain.models import RewrittenQuestion
+            from providers.v2.openai_rewrite import RewriteResult, RewriteUsage
+
+            return RewriteResult(
+                question_id=detected.question_id,
+                question=RewrittenQuestion(
+                    deck_id=detected.deck_id,
+                    slide_number=detected.slide_number,
+                    question_index=detected.question_index,
+                    question_id=detected.question_id,
+                    stem="Stem",
+                    choices={"A": "Alpha", "B": "Bravo"},
+                    correct_answer="A",
+                    correct_explanation="Because",
+                    incorrect_explanations={},
+                    educational_objective="Learn.",
+                    rotation=rotation,
+                    topic="Sample",
+                ),
+                usage=RewriteUsage(prompt_tokens=1, completion_tokens=1),
+            )
+
+    opts = V2RunOptions(
+        pptx_path=str(pptx),
+        output_dir=out,
+        rotation="Pediatrics",
+        api_key="sk-test",
+        parse_pptx_fn=_fake_parse_pptx_factory(slide_contents),
+        pptx_to_images_fn=_fake_pptx_to_images_factory(screenshots),
+        detect_adapter=_StubDetectAdapter(),
+        rewrite_adapter=_StubRewriteAdapter(),
+    )
+
+    def _failing_export(**_kwargs):
+        raise RuntimeError("export exploded")
+
+    with pytest.raises(RuntimeError, match="export exploded"):
+        run_v2_pipeline(opts, export_fn=_failing_export)
 
 
 # ---------------------------------------------------------------------------
