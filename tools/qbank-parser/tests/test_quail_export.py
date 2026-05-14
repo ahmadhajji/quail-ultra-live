@@ -265,7 +265,7 @@ def test_export_quail_qbank_writes_question_meta_sidecar(tmp_path):
                 "question": "Question?",
                 "choices": {"A": "Alpha", "B": "Bravo"},
                 "correct_answer": "B",
-                "deck_id": "deck-12",
+                "deck_id": "../../escape",
                 "source_group_id": "deck-12:12",
                 "source_slide_path": str(source_slide),
                 "slide_consensus_status": "consensus",
@@ -292,11 +292,53 @@ def test_export_quail_qbank_writes_question_meta_sidecar(tmp_path):
     )
 
     question_meta = json.loads((output_dir / "question-meta.json").read_text(encoding="utf-8"))
-    assert question_meta["001"]["source"]["deck_id"] == "deck-12"
+    assert question_meta["001"]["source"]["deck_id"] == "../../escape"
     assert question_meta["001"]["source_slide"]["expandable"] is True
     assert question_meta["001"]["fact_check"]["status"] == "confirmed"
     assert question_meta["001"]["choice_presentation"]["display_order"] == ["B", "A"]
-    assert (output_dir / "source-slides" / "deck-12__slide_12.png").exists()
+    assert (output_dir / "source-slides" / "escape__slide_12.png").exists()
+    assert ".." not in question_meta["001"]["source_slide"]["asset_path"]
+
+
+def test_export_quail_qbank_rejects_media_paths_outside_allowed_roots(tmp_path):
+    source_dir = tmp_path / "source"
+    output_dir = tmp_path / "qbank"
+    images_dir = source_dir / "images"
+    templates_dir = tmp_path / "templates"
+    outside_dir = tmp_path / "outside"
+
+    source_dir.mkdir(parents=True)
+    images_dir.mkdir(parents=True)
+    outside_dir.mkdir(parents=True)
+    _make_templates(templates_dir)
+
+    secret = outside_dir / "secret.png"
+    _write_noise_image(secret, size=(400, 400))
+
+    source_json = source_dir / "formatted.json"
+    _write_json(
+        source_json,
+        [
+            {
+                "question_id": "1",
+                "review_status": "approved",
+                "extraction_classification": "accepted",
+                "question_stem": "Stem",
+                "choices": {"A": "Alpha", "B": "Bravo"},
+                "correct_answer": "A",
+                "images": [str(secret)],
+            }
+        ],
+    )
+
+    with pytest.raises(ValueError, match="escapes allowed source roots"):
+        export_quail_qbank(
+            source_json=source_json,
+            output_dir=output_dir,
+            images_dir=images_dir,
+            templates_dir=templates_dir,
+            logger=lambda _message: None,
+        )
 
 
 def test_export_quail_qbank_blocks_disputed_items(tmp_path):

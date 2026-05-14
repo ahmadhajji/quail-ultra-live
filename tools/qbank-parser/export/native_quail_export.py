@@ -18,7 +18,7 @@ from typing import Any, Callable
 
 from export.native_contract import NATIVE_QBANK_MANIFEST, schema_checksum, validate_native_pack_directory
 from export.native_pack_state import PACK_STATE_FILE, NativePackState, source_key_for_question
-from export.quail_export import resolve_image_path
+from export.quail_export import _validate_media_file, resolve_image_path
 from utils.question_hardening import strip_bat_markers, sanitize_choice_map
 
 
@@ -186,6 +186,7 @@ def _copy_media(
         raise FileNotFoundError(f"Media not found: {source_value}")
 
     digest = hashlib.sha256(resolved.read_bytes()).hexdigest()
+    mime_type = _validate_media_file(resolved)
     suffix = resolved.suffix.lower() or ".png"
     if media_subdir == "source-slides":
         relative_path = Path(media_subdir) / f"{media_id}{suffix}"
@@ -201,7 +202,7 @@ def _copy_media(
         {
             "id": media_id,
             "path": relative_path.as_posix(),
-            "mimeType": "image/svg+xml" if suffix == ".svg" else "image/png",
+            "mimeType": mime_type,
             "role": role,
             "sha256": digest,
         },

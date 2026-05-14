@@ -268,6 +268,45 @@ def test_export_native_quail_qbank_blocks_conflicting_duplicate_fingerprints(tmp
         )
 
 
+def test_export_native_quail_qbank_rejects_unsafe_media_paths(tmp_path):
+    source_dir = tmp_path / "source"
+    outside_dir = tmp_path / "outside"
+    output_dir = tmp_path / "native"
+    source_dir.mkdir(parents=True)
+    outside_dir.mkdir(parents=True)
+    outside_image = outside_dir / "secret.png"
+    _write_noise_image(outside_image)
+
+    source_json = source_dir / "formatted.json"
+    _write_json(
+        source_json,
+        [
+            {
+                "question_id": "unsafe",
+                "review_status": "approved",
+                "extraction_classification": "accepted",
+                "deck_id": "peds-deck",
+                "original_slide_number": 1,
+                "question_stem": "Stem",
+                "choices": {"A": "Alpha", "B": "Bravo"},
+                "correct_answer": "A",
+                "images": [str(outside_image)],
+                "tags": {"rotation": "Pediatrics", "topic": "Sample"},
+            }
+        ],
+    )
+
+    with pytest.raises(ValueError, match="failed validation"):
+        export_native_quail_qbank(
+            source_json=source_json,
+            output_dir=output_dir,
+            pack_id="pediatrics",
+            logger=lambda _message: None,
+        )
+    report = json.loads((output_dir / "validation" / "native_sample_report.json").read_text(encoding="utf-8"))
+    assert "escapes allowed source roots" in report["excluded"][0]["reason"]
+
+
 def test_export_native_quail_qbank_strips_bat_markers_and_reports_exclusions(tmp_path):
     source_json = tmp_path / "formatted.json"
     output_dir = tmp_path / "native"

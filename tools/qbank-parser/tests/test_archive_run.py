@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import archive_run
+import pytest
 
 
 def test_has_content_ignores_placeholder_files(monkeypatch, tmp_path):
@@ -32,3 +33,12 @@ def test_has_content_detects_real_files(monkeypatch, tmp_path):
     monkeypatch.setattr(archive_run, "OUTPUT_DIR", output_dir)
 
     assert archive_run.has_content() is True
+
+
+def test_archive_run_rejects_traversal_names(monkeypatch, tmp_path):
+    archives_dir = tmp_path / "archives"
+    monkeypatch.setattr(archive_run, "ARCHIVES_DIR", archives_dir)
+
+    for name in ("", ".", ".."):
+        with pytest.raises(ValueError):
+            archive_run.archive_run(name)

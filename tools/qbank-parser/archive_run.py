@@ -11,6 +11,7 @@ import os
 import sys
 import shutil
 import re
+import tempfile
 from pathlib import Path
 from datetime import datetime
 
@@ -68,6 +69,21 @@ def sanitize_name(name: str) -> str:
     return re.sub(r'[<>:"/\\|?*]', '_', name)
 
 
+def _archive_path_for_name(name: str) -> tuple[str, Path]:
+    sanitized = sanitize_name(name).strip()
+    if sanitized in {"", ".", ".."}:
+        raise ValueError("Archive name must not be empty, '.' or '..'.")
+    archive_path = (ARCHIVES_DIR / sanitized).resolve()
+    archives_root = ARCHIVES_DIR.resolve()
+    try:
+        archive_path.relative_to(archives_root)
+    except ValueError as exc:
+        raise ValueError("Archive path must stay inside the archives directory.") from exc
+    if archive_path == archives_root:
+        raise ValueError("Archive path must be a child of the archives directory.")
+    return sanitized, archive_path
+
+
 def has_content() -> bool:
     """Check if there's anything to archive."""
     data_has_content = _has_non_placeholder_files(DATA_DIR, {".gitkeep", ".DS_Store"})
@@ -77,8 +93,7 @@ def has_content() -> bool:
 
 def archive_run(name: str):
     """Archive current run to named folder."""
-    name = sanitize_name(name)
-    archive_path = ARCHIVES_DIR / name
+    name, archive_path = _archive_path_for_name(name)
     
     # Check if archive already exists
     if archive_path.exists():
@@ -88,8 +103,8 @@ def archive_run(name: str):
             return False
         shutil.rmtree(archive_path)
     
-    # Create archive directory
-    archive_path.mkdir(parents=True, exist_ok=True)
+    ARCHIVES_DIR.mkdir(parents=True, exist_ok=True)
+    temp_path = Path(tempfile.mkdtemp(prefix=f".{name}.", dir=ARCHIVES_DIR))
     print(f"\n📁 Creating archive: {name}")
     
     # Fix markdown image paths before moving
@@ -99,15 +114,16 @@ def archive_run(name: str):
     # Move data files
     data_files = [f for f in DATA_DIR.glob("*") if f.name != ".gitkeep"]
     for f in data_files:
-        shutil.move(str(f), str(archive_path / f.name))
+        shutil.move(str(f), str(temp_path / f.name))
         print(f"  ✓ Moved {f.name}")
     
     # Move output files
     output_files = [f for f in OUTPUT_DIR.glob("*") if f.name not in [".gitkeep", ".DS_Store"]]
     for f in output_files:
-        shutil.move(str(f), str(archive_path / f.name))
+        shutil.move(str(f), str(temp_path / f.name))
         print(f"  ✓ Moved {f.name}")
-    
+
+    temp_path.rename(archive_path)
     return True
 
 

@@ -69,6 +69,10 @@ class V2RunOptions:
     max_detect_inflight: int = MAX_DETECT_INFLIGHT
     max_rewrite_inflight: int = MAX_REWRITE_INFLIGHT
     use_cache: bool = True
+    dry_run: bool = False
+    slide_range: tuple[int, int] | None = None
+    max_slides: int | None = None
+    max_questions: int | None = None
     # Optional injected dependencies (for testing).
     parse_pptx_fn: Callable[[str | Path, Path], list[SlideContent]] | None = None
     pptx_to_images_fn: Callable[[str | Path, str | Path, int], list[str]] | None = None
@@ -247,6 +251,8 @@ def stage1_raw_extract(opts: V2RunOptions) -> tuple[list[RawSlide], dict[str, An
         )
         raw_slides.append(raw)
 
+    raw_slides = _limit_raw_slides(raw_slides, opts)
+
     raw_slides_path = output_dir / "raw_slides.json"
     raw_slides_path.write_text(
         json.dumps([s.to_dict() for s in raw_slides], indent=2, ensure_ascii=False),
@@ -299,6 +305,16 @@ def _coerce_comments(items: list[Any]) -> list[dict]:
     return out
 
 
+def _limit_raw_slides(raw_slides: list[RawSlide], opts: V2RunOptions) -> list[RawSlide]:
+    selected = raw_slides
+    if opts.slide_range:
+        start, end = opts.slide_range
+        selected = [slide for slide in selected if start <= slide.slide_number <= end]
+    if opts.max_slides is not None:
+        selected = selected[:max(0, int(opts.max_slides))]
+    return selected
+
+
 # ---------------------------------------------------------------------------
 # Stage 2 — Detection
 # ---------------------------------------------------------------------------
@@ -310,6 +326,11 @@ def stage2_detect(
     stats: V2RunStats,
 ) -> tuple[list[DetectedQuestion], dict[int, str]]:
     """Run Stage 2 detection across all slides in parallel."""
+    if opts.dry_run:
+        detected_path = Path(opts.output_dir) / "detected_questions.json"
+        detected_path.write_text("[]\n", encoding="utf-8")
+        return [], {}
+
     adapter = opts.detect_adapter or OpenAIDetectAdapter(
         api_key=opts.api_key,
         model_name=opts.detect_model,
@@ -362,6 +383,8 @@ def stage2_detect(
         _save_cache(cache_path, cache)
 
     detected.sort(key=lambda q: (q.slide_number, q.question_index))
+    if opts.max_questions is not None:
+        detected = detected[:max(0, int(opts.max_questions))]
 
     detected_path = Path(opts.output_dir) / "detected_questions.json"
     detected_path.write_text(
@@ -637,11 +660,7 @@ def run_v2_pipeline(
 
     pack_summary = None
     if rewritten:
-        try:
-            pack_summary = stage4_export(rewritten, opts, export_fn=export_fn)
-        except Exception as exc:
-            logger.exception("Stage 4 native pack export failed: %s", exc)
-            stage3_errors["__stage4_export__"] = str(exc)
+        pack_summary = stage4_export(rewritten, opts, export_fn=export_fn)
 
     stats.duration_seconds = time.monotonic() - started
     stats_path = Path(opts.output_dir) / "v2_run_stats.json"
@@ -660,3 +679,7 @@ def run_v2_pipeline(
         stats=stats,
         pack_summary=pack_summary,
     )
+    if opts.dry_run:
+        rewritten_path = Path(opts.output_dir) / "rewritten_questions.json"
+        rewritten_path.write_text("[]\n", encoding="utf-8")
+        return [], {}

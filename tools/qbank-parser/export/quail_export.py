@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import json
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -116,18 +117,68 @@ def generate_solution_html(question: dict, valid_images: list[str]) -> str:
     return "\n".join(lines)
 
 
-def resolve_image_path(image_value: str, images_dir: Path, source_json_dir: Path) -> Path | None:
-    """Resolve an image path from absolute/relative references."""
-    raw_path = Path(image_value)
+SUPPORTED_IMAGE_SIGNATURES = (
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+    (b"RIFF", "image/webp"),
+    (b"<svg", "image/svg+xml"),
+    (b"<?xml", "image/svg+xml"),
+)
 
-    candidates = [raw_path]
+
+def _is_relative_to(child: Path, parent: Path) -> bool:
+    try:
+        child.resolve().relative_to(parent.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _validate_media_file(path: Path) -> str:
+    sample = path.read_bytes()[:512].lstrip()
+    for signature, mime_type in SUPPORTED_IMAGE_SIGNATURES:
+        if sample.startswith(signature):
+            if signature == b"RIFF" and sample[8:12] != b"WEBP":
+                continue
+            return mime_type
+    raise ValueError(f"Unsupported or invalid image file: {path}")
+
+
+def _sanitize_filename_token(value: str, fallback: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9._:-]+", "-", str(value or "").strip()).strip(".:-_")
+    return cleaned or fallback
+
+
+def resolve_image_path(image_value: str, images_dir: Path, source_json_dir: Path) -> Path | None:
+    """Resolve an image path while confining reads to known source roots."""
+    raw_value = str(image_value or "").strip()
+    if not raw_value:
+        return None
+    if "\x00" in raw_value:
+        raise ValueError("Image path contains a control character")
+
+    raw_path = Path(raw_value)
+    allowed_roots = [images_dir.resolve(), source_json_dir.resolve()]
+
+    candidates = []
     if not raw_path.is_absolute():
         candidates.append(source_json_dir / raw_path)
-    candidates.append(images_dir / raw_path.name)
+        candidates.append(images_dir / raw_path)
+        candidates.append(images_dir / raw_path.name)
+    else:
+        candidates.append(raw_path)
 
-    for path in candidates:
-        if path.exists() and path.is_file():
-            return path.resolve()
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if not any(_is_relative_to(resolved, root) for root in allowed_roots):
+            continue
+        if resolved.exists() and resolved.is_file():
+            _validate_media_file(resolved)
+            return resolved
+    if raw_path.is_absolute() or ".." in raw_path.parts:
+        raise ValueError(f"Image path escapes allowed source roots: {image_value}")
     return None
 
 
@@ -248,7 +299,7 @@ def _copy_source_slide_asset(
 
     target_dir = output_dir / "source-slides"
     target_dir.mkdir(parents=True, exist_ok=True)
-    target_name = f"{deck_id}__slide_{slide_number}.png"
+    target_name = f"{_sanitize_filename_token(deck_id, 'deck')}__slide_{slide_number}.png"
     shutil.copy2(resolved, target_dir / target_name)
     return {"asset_path": f"source-slides/{target_name}", "expandable": True}
 
