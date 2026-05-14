@@ -17,6 +17,13 @@ try {
 }
 const { createTagBuckets, normalizeProgress } = progressHelpers
 const { NATIVE_QBANK_MANIFEST, hasNativeQbankManifest, loadNativeWorkspaceData } = nativeQbankHelpers
+let pathHelpers
+try {
+  pathHelpers = require('./path-utils')
+} catch (_error) {
+  pathHelpers = require('./path-utils.ts')
+}
+const { safeResolveWithin } = pathHelpers
 
 async function exists(targetPath) {
   try {
@@ -223,20 +230,11 @@ async function findWorkspaceRoot(importDir) {
 }
 
 function safeResolveWorkspaceFile(workspaceDir, relativePath) {
-  const raw = String(relativePath || '')
-  if (!raw || raw.startsWith('/') || raw.startsWith('\\') || raw.includes('\\') || /[\u0000-\u001f\u007f]/.test(raw)) {
+  try {
+    return safeResolveWithin(workspaceDir, relativePath)
+  } catch (_error) {
     throw new Error('Invalid workspace path')
   }
-  const parts = raw.split('/')
-  if (parts.some(function invalidPart(part) { return !part || part === '.' || part === '..' })) {
-    throw new Error('Invalid workspace path')
-  }
-  const resolved = path.resolve(workspaceDir, parts.join(path.sep))
-  const normalizedRoot = path.resolve(workspaceDir)
-  if (resolved !== normalizedRoot && resolved.startsWith(normalizedRoot + path.sep)) {
-    return resolved
-  }
-  throw new Error('Invalid workspace path')
 }
 
 module.exports = {

@@ -38,6 +38,44 @@ describe('qbank html helpers', () => {
     expect(html).not.toContain('data:image/svg+xml')
   })
 
+  it('drops imported content references that escape the pack boundary', () => {
+    const html = rewriteAssetPaths([
+      '<img src="/api/admin/users">',
+      '<img src="/api/study-packs/other-pack/file/x.png">',
+      '<img src="/api/study-packs/pack-1/file/x.png">',
+      '<img src="../secret.png">',
+      '<img src="images//x.png">',
+      '<img src="images/%2e%2e/secret.png">',
+      '<img src="https://example.test/x.png">',
+      '<audio src="//example.test/x.mp3"></audio>',
+      '<a href="/api/admin/users">admin</a>'
+    ].join(''), '/api/study-packs/pack-1/file?rev=3', '240px')
+
+    expect(html).not.toContain('/api/admin/users')
+    expect(html).not.toContain('/api/study-packs/other-pack/file/x.png')
+    expect(html).not.toContain('/api/study-packs/pack-1/file/x.png')
+    expect(html).not.toContain('../secret.png')
+    expect(html).not.toContain('images//x.png')
+    expect(html).not.toContain('%2e%2e')
+    expect(html).not.toContain('example.test')
+  })
+
+  it('rewrites relative media with query strings without malformed double queries', () => {
+    const html = rewriteAssetPaths('<img src="media/chest xray 01.png?v=1#figure">', '/api/study-packs/pack-1/file?rev=3', '240px')
+
+    expect(html).toContain('/api/study-packs/pack-1/file/media/chest xray 01.png?rev=3')
+    expect(html).not.toContain('?v=1?rev=3')
+    expect(html).not.toContain('?rev=3?')
+  })
+
+  it('keeps external links but strips remote media sources', () => {
+    const html = rewriteAssetPaths('<a href="https://example.test/ref">ref</a><img src="https://example.test/x.png"><video poster="https://example.test/poster.png"></video>', '/api/study-packs/pack-1/file?rev=3', '240px')
+
+    expect(html).toContain('href="https://example.test/ref"')
+    expect(html).not.toContain('src="https://example.test/x.png"')
+    expect(html).not.toContain('poster="https://example.test/poster.png"')
+  })
+
   it('builds revision-aware pack file URLs', () => {
     expect(buildPackFileUrl('pack-1', 'media/q01.png', 7)).toBe('/api/study-packs/pack-1/file/media/q01.png?rev=7')
   })

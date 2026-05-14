@@ -45,6 +45,64 @@ describe('native qbank contract validation', () => {
     expect(result.errors.join('\n')).toContain('validation.status is failed')
   })
 
+  it('rejects native manifest paths that are not strict pack-relative paths', async () => {
+    const badPaths = [
+      'questions/./q.json',
+      'questions//q.json',
+      'questions/',
+      '/questions/q.json',
+      'questions\\q.json',
+      'questions/../q.json',
+      'questions/%2e%2e/q.json',
+      'C:questions/q.json',
+      'https://example.test/q.json'
+    ]
+
+    for (const badPath of badPaths) {
+      const workspaceRoot = await copyFixture('native-pack-minimal')
+      const manifestPath = path.join(workspaceRoot, 'quail-ultra-pack.json')
+      const manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf8'))
+      manifest.questionIndex[0].path = badPath
+      await fsp.writeFile(manifestPath, JSON.stringify(manifest, null, 2))
+
+      const result = await validateNativeQbankDirectory(workspaceRoot)
+      expect(result.ok, badPath).toBe(false)
+      expect(result.errors.join('\n'), badPath).toMatch(/path|unsafe/i)
+    }
+  })
+
+  it('rejects unsafe native media index and question media paths', async () => {
+    const cases = [
+      {
+        label: 'mediaIndex',
+        mutate(manifest: any, _question: any) {
+          manifest.mediaIndex[0].path = 'media/%2e%2e/secret.svg'
+        }
+      },
+      {
+        label: 'question media',
+        mutate(_manifest: any, question: any) {
+          question.media[0].path = 'C:media/q01.svg'
+        }
+      }
+    ]
+
+    for (const testCase of cases) {
+      const workspaceRoot = await copyFixture('native-pack-minimal')
+      const manifestPath = path.join(workspaceRoot, 'quail-ultra-pack.json')
+      const questionPath = path.join(workspaceRoot, 'questions', 'peds.sample.s001.q01.json')
+      const manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf8'))
+      const question = JSON.parse(await fsp.readFile(questionPath, 'utf8'))
+      testCase.mutate(manifest, question)
+      await fsp.writeFile(manifestPath, JSON.stringify(manifest, null, 2))
+      await fsp.writeFile(questionPath, JSON.stringify(question, null, 2))
+
+      const result = await validateNativeQbankDirectory(workspaceRoot)
+      expect(result.ok, testCase.label).toBe(false)
+      expect(result.errors.join('\n'), testCase.label).toMatch(/path|unsafe/i)
+    }
+  })
+
   it('normalizes a native pack into the existing qbankinfo shape', async () => {
     const workspaceRoot = await copyFixture('native-pack-minimal')
     const qbankinfo = await loadWorkspaceData(workspaceRoot)

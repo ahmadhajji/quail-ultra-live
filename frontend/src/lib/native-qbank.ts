@@ -71,9 +71,25 @@ function encodeRelativePath(relativePath: string): string {
     .join('/')
 }
 
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/
+
+function assertStrictPackRelativePath(relativePath: string): string {
+  const raw = String(relativePath || '')
+  if (!raw || raw.startsWith('/') || raw.startsWith('\\') || raw.includes('\\') || CONTROL_CHARS.test(raw)) {
+    throw new Error('Invalid native qbank path.')
+  }
+  if (raw.startsWith('//') || /^[a-z][a-z0-9+.-]*:/i.test(raw)) {
+    throw new Error('Invalid native qbank path.')
+  }
+  if (raw.split('/').some((part) => !part || part === '.' || part === '..')) {
+    throw new Error('Invalid native qbank path.')
+  }
+  return raw
+}
+
 function appendRelativeToBasePath(basePath: string, relativePath: string): string {
   const [pathPart, queryPart] = basePath.split('?')
-  const encodedPath = encodeRelativePath(relativePath.replace(/^\.?\//, ''))
+  const encodedPath = encodeRelativePath(assertStrictPackRelativePath(relativePath))
   return `${pathPart}/${encodedPath}${queryPart ? `?${queryPart}` : ''}`
 }
 

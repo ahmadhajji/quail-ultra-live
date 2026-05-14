@@ -21,25 +21,39 @@ const TAG_ATTRIBUTES: Record<string, Set<string>> = {
 }
 
 function appendRelativeToBasePath(basePath: string, relativePath: string): string {
-  const [pathPart, queryPart] = basePath.split('?')
-  return `${pathPart}/${relativePath.replace(/^\.?\//, '')}${queryPart ? `?${queryPart}` : ''}`
+  const [pathPart = '', queryPart] = basePath.split('?')
+  return `${pathPart}/${relativePath}${queryPart ? `?${queryPart}` : ''}`
 }
 
-function isSafeUrl(value: string, tagName: string): boolean {
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/
+
+function stripUrlSuffix(value: string): string {
+  return value.split('?')[0]?.split('#')[0] ?? ''
+}
+
+function isStrictPackRelativePath(value: string): boolean {
+  const raw = stripUrlSuffix(value)
+  if (!raw || raw.startsWith('/') || raw.startsWith('\\') || raw.includes('\\') || CONTROL_CHARS.test(raw)) {
+    return false
+  }
+  if (raw.startsWith('//') || /^[a-z][a-z0-9+.-]*:/i.test(raw)) {
+    return false
+  }
+  return !raw.split('/').some((part) => !part || part === '.' || part === '..' || /^(?:\.|%2e){1,2}$/i.test(part))
+}
+
+function isSafeUrl(value: string, tagName: string, attributeName: string): boolean {
   const trimmed = value.trim()
   if (!trimmed) {
     return false
   }
-  if (trimmed.startsWith('/api/')) {
-    return true
-  }
-  if (/^(https?:|mailto:)/i.test(trimmed)) {
+  if (attributeName === 'href' && /^(https?:|mailto:)/i.test(trimmed)) {
     return true
   }
   if (tagName === 'img' && /^data:image\/(?:png|jpe?g|gif|webp);base64,/i.test(trimmed)) {
     return true
   }
-  return !/^[a-z][a-z0-9+.-]*:/i.test(trimmed) && !trimmed.startsWith('//')
+  return isStrictPackRelativePath(trimmed)
 }
 
 function isAllowedImageStyle(value: string): boolean {
@@ -69,7 +83,7 @@ export function sanitizeLegacyHtml(html: string): string {
         element.removeAttribute(attribute.name)
         continue
       }
-      if ((name === 'href' || name === 'src' || name === 'poster') && !isSafeUrl(value, tagName)) {
+      if ((name === 'href' || name === 'src' || name === 'poster') && !isSafeUrl(value, tagName, name)) {
         element.removeAttribute(attribute.name)
         continue
       }
@@ -91,13 +105,18 @@ export function sanitizeLegacyHtml(html: string): string {
 }
 
 function resolveAssetPath(basePath: string, rawPath: string | null): string | null {
-  if (!rawPath || rawPath.startsWith('data:') || rawPath.startsWith('blob:') || rawPath.startsWith('http://') || rawPath.startsWith('https://')) {
+  if (!rawPath) {
+    return null
+  }
+  const trimmed = rawPath.trim()
+  if (/^data:image\/(?:png|jpe?g|gif|webp);base64,/i.test(trimmed)) {
     return rawPath
   }
-  if (rawPath.startsWith('/api/')) {
-    return rawPath
+  const pathOnly = stripUrlSuffix(trimmed)
+  if (!isStrictPackRelativePath(pathOnly)) {
+    return null
   }
-  return appendRelativeToBasePath(basePath, rawPath)
+  return appendRelativeToBasePath(basePath, pathOnly)
 }
 
 function isChoiceLine(text: string): boolean {
@@ -159,7 +178,7 @@ export function stripChoicesFromQuestionDisplay(questionHtml: string): string {
 }
 
 export function rewriteAssetPaths(html: string, basePath: string, maxHeight: string): string {
-  const document = createDocument(html)
+  const document = createDocument(sanitizeLegacyHtml(html))
 
   document.querySelectorAll('img').forEach((image) => {
     const nextSource = resolveAssetPath(basePath, image.getAttribute('src'))
@@ -196,7 +215,7 @@ export function rewriteAssetPaths(html: string, basePath: string, maxHeight: str
     }
   })
 
-  return sanitizeLegacyHtml(document.body.innerHTML)
+  return document.body.innerHTML
 }
 
 interface CachedAssets {
