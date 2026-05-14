@@ -96,6 +96,116 @@ describe('local repository invite schema', () => {
   })
 })
 
+describe('local repository atomic writes', () => {
+  afterEach(() => {
+    process.env = { ...originalEnv }
+    vi.resetModules()
+  })
+
+  it('claims an invite and creates a user only once', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'quail-atomic-invite-'))
+
+    try {
+      const { createRepository } = await loadRepository(tempDir)
+      const repository = createRepository()
+      await repository.init()
+      await repository.createUser({
+        id: 'admin',
+        username: 'admin',
+        email: 'admin@example.test',
+        passwordHash: 'hash',
+        role: 'admin',
+        status: 'active',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z'
+      })
+      await repository.createInvite({
+        id: 'invite-1',
+        email: 'student@example.test',
+        tokenHash: 'token-hash',
+        role: 'user',
+        createdBy: 'admin',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        expiresAt: '2026-01-08T00:00:00.000Z'
+      })
+
+      const first = await repository.redeemInviteAndCreateUser('invite-1', {
+        id: 'student-1',
+        username: 'student1',
+        email: 'student@example.test',
+        passwordHash: 'hash',
+        role: 'user',
+        status: 'active',
+        createdAt: '2026-01-01T00:00:01.000Z',
+        updatedAt: '2026-01-01T00:00:01.000Z'
+      }, '2026-01-01T00:00:01.000Z')
+      const second = await repository.redeemInviteAndCreateUser('invite-1', {
+        id: 'student-2',
+        username: 'student2',
+        email: 'student@example.test',
+        passwordHash: 'hash',
+        role: 'user',
+        status: 'active',
+        createdAt: '2026-01-01T00:00:02.000Z',
+        updatedAt: '2026-01-01T00:00:02.000Z'
+      }, '2026-01-01T00:00:02.000Z')
+
+      expect(first).toBe(true)
+      expect(second).toBe(false)
+      expect(await repository.getUserById('student-1')).toBeTruthy()
+      expect(await repository.getUserById('student-2')).toBeNull()
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('advances pack revision only from the expected base revision', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'quail-cas-progress-'))
+
+    try {
+      const { createRepository } = await loadRepository(tempDir)
+      const repository = createRepository()
+      await repository.init()
+      await repository.createUser({
+        id: 'viewer',
+        username: 'viewer',
+        email: 'viewer@example.test',
+        passwordHash: 'hash',
+        role: 'user',
+        status: 'active',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z'
+      })
+      await repository.createPack({
+        id: 'pack-1',
+        userId: 'viewer',
+        name: 'Pack',
+        workspacePath: '/tmp/pack',
+        questionCount: 1,
+        revision: 2,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z'
+      })
+
+      const first = await repository.advancePackRevision('pack-1', 2, {
+        revision: 3,
+        updatedAt: '2026-01-01T00:00:01.000Z'
+      })
+      const second = await repository.advancePackRevision('pack-1', 2, {
+        revision: 3,
+        updatedAt: '2026-01-01T00:00:02.000Z'
+      })
+
+      expect(first).toBe(true)
+      expect(second).toBe(false)
+      expect((await repository.getPackById('pack-1')).revision).toBe(3)
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('local repository answer analytics', () => {
   afterEach(() => {
     process.env = { ...originalEnv }

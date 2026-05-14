@@ -76,6 +76,16 @@ export interface AppRepository {
     expiresAt: string
   }): Promise<void>
   markInviteUsed(inviteId: string, userId: string, timestamp: string): Promise<void>
+  redeemInviteAndCreateUser(inviteId: string, userInput: {
+    id: string
+    username: string
+    email: string
+    passwordHash: string
+    role: 'user' | 'admin'
+    status: 'active' | 'disabled'
+    createdAt: string
+    updatedAt: string
+  }, timestamp: string): Promise<boolean>
   revokeInvite(inviteId: string, timestamp: string): Promise<void>
   listPacksForUser(userId: string): Promise<any[]>
   listAllPacks(): Promise<any[]>
@@ -100,6 +110,14 @@ export interface AppRepository {
     lastClientMutationSeq?: number
     lastClientUpdatedAt?: string
   }): Promise<void>
+  advancePackRevision(packId: string, expectedRevision: number, input: {
+    revision: number
+    updatedAt: string
+    questionCount?: number
+    lastClientInstanceId?: string
+    lastClientMutationSeq?: number
+    lastClientUpdatedAt?: string
+  }): Promise<boolean>
   deletePack(packId: string): Promise<void>
   createImportSession(input: ImportSessionInput): Promise<void>
   getImportSession(sessionId: string): Promise<any | null>
@@ -148,6 +166,7 @@ abstract class BaseRepository implements AppRepository {
   abstract listInvites(): Promise<any[]>
   abstract createInvite(input: any): Promise<void>
   abstract markInviteUsed(inviteId: string, userId: string, timestamp: string): Promise<void>
+  abstract redeemInviteAndCreateUser(inviteId: string, userInput: any, timestamp: string): Promise<boolean>
   abstract revokeInvite(inviteId: string, timestamp: string): Promise<void>
   abstract listPacksForUser(userId: string): Promise<any[]>
   abstract listAllPacks(): Promise<any[]>
@@ -155,6 +174,7 @@ abstract class BaseRepository implements AppRepository {
   abstract getPackForUser(userId: string, packId: string): Promise<any | null>
   abstract createPack(input: any): Promise<void>
   abstract updatePack(packId: string, input: any): Promise<void>
+  abstract advancePackRevision(packId: string, expectedRevision: number, input: any): Promise<boolean>
   abstract deletePack(packId: string): Promise<void>
   abstract createImportSession(input: ImportSessionInput): Promise<void>
   abstract getImportSession(sessionId: string): Promise<any | null>
@@ -447,6 +467,41 @@ class LocalRepository extends BaseRepository {
     this.db.prepare('UPDATE invites SET used_by = ?, used_at = ?, updated_at = ? WHERE id = ?').run(userId, timestamp, timestamp, inviteId)
   }
 
+  async redeemInviteAndCreateUser(inviteId: string, userInput: any, timestamp: string) {
+    this.db.exec('BEGIN')
+    try {
+      const claimed = this.db.prepare(`
+        UPDATE invites
+        SET used_by = ?, used_at = ?, updated_at = ?
+        WHERE id = ? AND used_at = '' AND revoked_at = '' AND expires_at > ?
+      `).run(userInput.id, timestamp, timestamp, inviteId, timestamp)
+      if (claimed.changes !== 1) {
+        this.db.exec('ROLLBACK')
+        return false
+      }
+      this.db.prepare(`
+        INSERT INTO users (id, username, email, password_hash, role, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        userInput.id,
+        userInput.username,
+        userInput.email,
+        userInput.passwordHash,
+        userInput.role,
+        userInput.status,
+        userInput.createdAt,
+        userInput.updatedAt
+      )
+      this.db.exec('COMMIT')
+      return true
+    } catch (error) {
+      try {
+        this.db.exec('ROLLBACK')
+      } catch {}
+      throw error
+    }
+  }
+
   async revokeInvite(inviteId: string, timestamp: string) {
     this.db.prepare('UPDATE invites SET revoked_at = ?, updated_at = ? WHERE id = ?').run(timestamp, timestamp, inviteId)
   }
@@ -500,6 +555,27 @@ class LocalRepository extends BaseRepository {
       input.lastClientUpdatedAt || '',
       packId
     )
+  }
+
+  async advancePackRevision(packId: string, expectedRevision: number, input: any) {
+    const nextQuestionCount = Number.isFinite(Number(input.questionCount)) ? Number(input.questionCount) : -1
+    const result = this.db.prepare(`
+      UPDATE study_packs
+      SET question_count = CASE WHEN ? >= 0 THEN ? ELSE question_count END,
+        revision = ?, updated_at = ?, last_client_instance_id = ?, last_client_mutation_seq = ?, last_client_updated_at = ?
+      WHERE id = ? AND revision = ?
+    `).run(
+      nextQuestionCount,
+      nextQuestionCount,
+      input.revision,
+      input.updatedAt,
+      input.lastClientInstanceId || '',
+      input.lastClientMutationSeq || 0,
+      input.lastClientUpdatedAt || '',
+      packId,
+      expectedRevision
+    )
+    return result.changes === 1
   }
 
   async deletePack(packId: string) {
@@ -889,6 +965,25 @@ class CloudRepository extends BaseRepository {
     await this.sql.query('UPDATE invites SET used_by = $1, used_at = $2, updated_at = $2 WHERE id = $3', [userId, timestamp, inviteId])
   }
 
+  async redeemInviteAndCreateUser(inviteId: string, userInput: any, timestamp: string) {
+    const claimed = await this.sql.query(`
+      UPDATE invites
+      SET used_by = $1, used_at = $2, updated_at = $2
+      WHERE id = $3 AND used_at = '' AND revoked_at = '' AND expires_at > $4
+      RETURNING id
+    `, [userInput.id, timestamp, inviteId, timestamp])
+    if (claimed.length !== 1) {
+      return false
+    }
+    try {
+      await this.createUser(userInput)
+      return true
+    } catch (error) {
+      await this.sql.query('UPDATE invites SET used_by = \'\', used_at = \'\', updated_at = $1 WHERE id = $2 AND used_by = $3', [timestamp, inviteId, userInput.id])
+      throw error
+    }
+  }
+
   async revokeInvite(inviteId: string, timestamp: string) {
     await this.sql.query('UPDATE invites SET revoked_at = $1, updated_at = $1 WHERE id = $2', [timestamp, inviteId])
   }
@@ -947,6 +1042,28 @@ class CloudRepository extends BaseRepository {
       input.lastClientUpdatedAt || '',
       packId
     ])
+  }
+
+  async advancePackRevision(packId: string, expectedRevision: number, input: any) {
+    const nextQuestionCount = Number.isFinite(Number(input.questionCount)) ? Number(input.questionCount) : -1
+    const rows = await this.sql.query(`
+      UPDATE study_packs
+      SET question_count = CASE WHEN $1 >= 0 THEN $2 ELSE question_count END,
+        revision = $3, updated_at = $4, last_client_instance_id = $5, last_client_mutation_seq = $6, last_client_updated_at = $7
+      WHERE id = $8 AND revision = $9
+      RETURNING id
+    `, [
+      nextQuestionCount,
+      nextQuestionCount,
+      input.revision,
+      input.updatedAt,
+      input.lastClientInstanceId || '',
+      input.lastClientMutationSeq || 0,
+      input.lastClientUpdatedAt || '',
+      packId,
+      expectedRevision
+    ])
+    return rows.length === 1
   }
 
   async deletePack(packId: string) {

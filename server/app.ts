@@ -341,15 +341,18 @@ export async function createApp() {
   async function persistPackProgress(packRow: any, qbankinfo: any, nextRevision: number, syncMetadata?: any) {
     normalizeProgress(qbankinfo.progress, qbankinfo)
     const progressPath = packRow.progress_override_path || packRow.workspace_path
-    await workspaceStore.savePackProgress(progressPath, qbankinfo.progress)
     const updatedAt = nowIso()
-    await repository.updatePack(packRow.id, {
+    const advanced = await repository.advancePackRevision(packRow.id, Number(packRow.revision || 0), {
       revision: nextRevision,
       updatedAt,
       lastClientInstanceId: syncMetadata?.clientInstanceId || packRow.last_client_instance_id || '',
       lastClientMutationSeq: Number.isFinite(syncMetadata?.clientMutationSeq) ? syncMetadata.clientMutationSeq : (packRow.last_client_mutation_seq || 0),
       lastClientUpdatedAt: syncMetadata?.clientUpdatedAt || packRow.last_client_updated_at || ''
     })
+    if (!advanced) {
+      return null
+    }
+    await workspaceStore.savePackProgress(progressPath, qbankinfo.progress)
     return nextRevision
   }
 
@@ -472,7 +475,7 @@ export async function createApp() {
 
     const userId = crypto.randomUUID()
     const timestamp = nowIso()
-    await repository.createUser({
+    const created = await repository.redeemInviteAndCreateUser(invite.id, {
       id: userId,
       username,
       email,
@@ -481,8 +484,10 @@ export async function createApp() {
       status: 'active',
       createdAt: timestamp,
       updatedAt: timestamp
-    })
-    await repository.markInviteUsed(invite.id, userId, timestamp)
+    }, timestamp)
+    if (!created) {
+      return jsonError(res, 409, 'Invite has already been used')
+    }
     setSessionCookie(res, userId)
     res.json({ user: await repository.getUserById(userId) })
   }))
@@ -1612,6 +1617,9 @@ export async function createApp() {
     }
     const blockKey = startBlock(pack.qbankinfo, blockqlist, req.body.preferences || {})
     const nextRevision = await persistPackProgress(pack.row, pack.qbankinfo, Number(pack.row.revision || 0) + 1)
+    if (nextRevision === null) {
+      return jsonError(res, 409, 'Progress revision conflict')
+    }
     res.json({ blockKey, revision: nextRevision })
   }))
 
@@ -1656,6 +1664,15 @@ export async function createApp() {
     const previousProgress = structuredClone(pack.qbankinfo.progress)
     pack.qbankinfo.progress = incomingProgress
     normalizeProgress(pack.qbankinfo.progress, pack.qbankinfo)
+    const nextRevision = await persistPackProgress(pack.row, pack.qbankinfo, currentRevision + 1, syncMetadata)
+    if (nextRevision === null) {
+      const latest = await loadPackForUser(req.user.id, req.params.packId, '')
+      return res.status(409).json({
+        error: 'Progress revision conflict',
+        serverRevision: Number(latest?.row?.revision || currentRevision),
+        qbankinfo: latest?.qbankinfo || pack.qbankinfo
+      })
+    }
     const systemPack = await repository.getSystemPackByWorkspacePath(pack.row.workspace_path)
     if (systemPack) {
       await repository.recordAnswerAnalytics(collectNewlySubmittedAnswers({
@@ -1667,7 +1684,6 @@ export async function createApp() {
         answeredAt: nowIso()
       }))
     }
-    const nextRevision = await persistPackProgress(pack.row, pack.qbankinfo, currentRevision + 1, syncMetadata)
     res.json({ revision: nextRevision, applied: true, serverAcceptedAt: nowIso() })
   }))
 
@@ -1678,6 +1694,9 @@ export async function createApp() {
     }
     deleteBlock(pack.qbankinfo, req.params.blockKey)
     const nextRevision = await persistPackProgress(pack.row, pack.qbankinfo, Number(pack.row.revision || 0) + 1)
+    if (nextRevision === null) {
+      return jsonError(res, 409, 'Progress revision conflict')
+    }
     res.json({ revision: nextRevision })
   }))
 
@@ -1692,6 +1711,9 @@ export async function createApp() {
     }
     normalizeProgress(pack.qbankinfo.progress, pack.qbankinfo)
     const nextRevision = await persistPackProgress(pack.row, pack.qbankinfo, Number(pack.row.revision || 0) + 1)
+    if (nextRevision === null) {
+      return jsonError(res, 409, 'Progress revision conflict')
+    }
     res.json({ revision: nextRevision })
   }))
 
