@@ -46,6 +46,46 @@ function jsonError(res: any, status: number, message: string) {
   res.status(status).json({ error: message })
 }
 
+function securityHeaders(_req: any, res: any, next: any) {
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "media-src 'self' data: blob:",
+    "connect-src 'self'",
+    "font-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'"
+  ].join('; '))
+  res.setHeader('X-Frame-Options', 'DENY')
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  next()
+}
+
+function createRateLimiter(options: { windowMs: number, max: number, key?: (req: any) => string }) {
+  const buckets = new Map<string, { count: number, resetAt: number }>()
+  return function rateLimiter(req: any, res: any, next: any) {
+    const now = Date.now()
+    const rawKey = options.key ? options.key(req) : (req.ip || req.socket?.remoteAddress || 'unknown')
+    const key = `${req.path}:${rawKey}`
+    const bucket = buckets.get(key)
+    if (!bucket || bucket.resetAt <= now) {
+      buckets.set(key, { count: 1, resetAt: now + options.windowMs })
+      return next()
+    }
+    bucket.count += 1
+    if (bucket.count > options.max) {
+      res.setHeader('Retry-After', String(Math.ceil((bucket.resetAt - now) / 1000)))
+      return jsonError(res, 429, 'Too many requests')
+    }
+    return next()
+  }
+}
+
 const MAX_IMPORT_FILE_COUNT = 20000
 const MAX_IMPORT_TOTAL_SIZE = 4 * 1024 * 1024 * 1024
 const MAX_ZIP_ENTRY_COUNT = 20000
@@ -261,10 +301,14 @@ export async function createApp() {
 
   const app = express()
   app.set('trust proxy', 1)
+  app.use(securityHeaders)
   app.use(express.json({ limit: '10mb' }))
   app.use(express.urlencoded({ extended: true }))
-  app.use('/vendor', express.static(path.join(ROOT_DIR, 'node_modules')))
   app.use(express.static(DIST_DIR, { index: false }))
+
+  const authRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20 })
+  const supportRateLimit = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, key: (req) => req.user?.id || req.ip })
+  const importRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 120, key: (req) => req.user?.id || req.ip })
 
   async function loadCurrentUser(req: any) {
     const userId = readSessionUserId(req.headers.cookie)
@@ -438,7 +482,7 @@ export async function createApp() {
     })
   }))
 
-  app.post('/api/auth/register', asyncRoute(async function register(req: any, res: any) {
+  app.post('/api/auth/register', authRateLimit, asyncRoute(async function register(req: any, res: any) {
     if (await repository.getRegistrationMode() !== 'invite-only') {
       return jsonError(res, 403, 'Registration is currently closed')
     }
@@ -492,7 +536,7 @@ export async function createApp() {
     res.json({ user: await repository.getUserById(userId) })
   }))
 
-  app.post('/api/auth/login', asyncRoute(async function login(req: any, res: any) {
+  app.post('/api/auth/login', authRateLimit, asyncRoute(async function login(req: any, res: any) {
     const username = String(req.body.username || '').trim()
     const password = String(req.body.password || '')
     if (!username || !password) {
@@ -1330,7 +1374,7 @@ export async function createApp() {
     res.json({ packs: rows.map(packSummary) })
   }))
 
-  app.post('/api/study-packs/import/folder-session', requireAuth, asyncRoute(async function beginFolderImport(req: any, res: any) {
+  app.post('/api/study-packs/import/folder-session', requireAuth, importRateLimit, asyncRoute(async function beginFolderImport(req: any, res: any) {
     const sessionId = crypto.randomUUID()
     const timestamp = nowIso()
     if (storageBackend !== 'local') {
@@ -1398,7 +1442,7 @@ export async function createApp() {
     res.json(response)
   }))
 
-  app.post('/api/study-packs/import/upload-urls', requireAuth, asyncRoute(async function createImportUploadUrls(req: any, res: any) {
+  app.post('/api/study-packs/import/upload-urls', requireAuth, importRateLimit, asyncRoute(async function createImportUploadUrls(req: any, res: any) {
     if (uploadMode !== 'presigned') {
       return jsonError(res, 404, 'Presigned uploads are not enabled for this environment')
     }
@@ -1726,7 +1770,7 @@ export async function createApp() {
     res.json({ ok: true })
   }))
 
-  app.post('/api/support/submit', requireAuth, asyncRoute(async function submitSupportTicket(req: any, res: any) {
+  app.post('/api/support/submit', requireAuth, supportRateLimit, asyncRoute(async function submitSupportTicket(req: any, res: any) {
     const { subject, category, message } = req.body ?? {}
     if (typeof subject !== 'string' || subject.trim().length === 0 || subject.trim().length > 200) {
       return jsonError(res, 400, 'Subject must be 1–200 characters.')
@@ -1760,7 +1804,7 @@ export async function createApp() {
     res.json({ tickets })
   }))
 
-  app.post('/api/study-packs/:packId/questions/:qid/report', requireAuth, asyncRoute(async function reportQuestion(req: any, res: any) {
+  app.post('/api/study-packs/:packId/questions/:qid/report', requireAuth, supportRateLimit, asyncRoute(async function reportQuestion(req: any, res: any) {
     const { packId, qid } = req.params
     const { category, message = '' } = req.body ?? {}
     const validCategories = ['wrong-answer-key', 'typo-stem', 'bad-explanation', 'other']

@@ -28,7 +28,7 @@ function appendRelativeToBasePath(basePath: string, relativePath: string): strin
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/
 
 function isStrictPackRelativePath(value: string): boolean {
-  const raw = value.split('?')[0].split('#')[0]
+  const raw = (value.split('?')[0] || '').split('#')[0] || ''
   if (!raw || raw.startsWith('/') || raw.startsWith('\\') || raw.includes('\\') || CONTROL_CHARS.test(raw)) {
     return false
   }
