@@ -4,11 +4,11 @@ const CONTROL_CHARS = /[\u0000-\u001f\u007f]/
 
 export function validateStrictRelativePath(value: string): string {
   const raw = String(value || '')
-  if (!raw || raw.startsWith('/') || raw.startsWith('\\') || raw.includes('\\') || CONTROL_CHARS.test(raw)) {
+  if (!raw || raw.startsWith('/') || raw.startsWith('\\') || raw.includes('\\') || raw.includes(':') || raw.includes('?') || raw.includes('#') || CONTROL_CHARS.test(raw)) {
     throw new Error('Invalid relative path')
   }
   const parts = raw.split('/')
-  if (parts.some((part) => !part || part === '.' || part === '..')) {
+  if (parts.some((part) => !part || part === '.' || part === '..' || /^(?:\.|%2e){1,2}$/i.test(part))) {
     throw new Error('Invalid relative path')
   }
   return parts.join('/')
