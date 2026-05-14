@@ -17,6 +17,7 @@ py-modules = [
   "convert_to_quail",
   "main",
   "md_to_pdf",
+  "native_pack_pdf_export",
   "qbank_cli",
   "setup_google_auth",
 ]

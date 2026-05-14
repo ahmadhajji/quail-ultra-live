@@ -137,6 +137,25 @@ python main.py --format-usmle --dry-run
 python main.py --export-quail --dry-run
 ```
 
+### One-Off PDF From An Existing Native Pack
+Use this when a small PPTX contains selected source slides that already exist in
+a larger native pack and you only need a review PDF. This command does not call
+OpenAI and does not rerun extraction or formatting.
+
+```bash
+python native_pack_pdf_export.py \
+  --pack-dir /path/to/native-pack \
+  --pptx /path/to/selected-slides.pptx \
+  --output-pdf output/pdf/selected-native-questions.pdf \
+  --output-dir output/pdf/selected-native-questions
+```
+
+It writes the PDF plus `native_pack_pdf_matches.json` and
+`native_pack_pdf_matches.csv` match reports.
+
+Add `--fail-on-ambiguous` when you want it to stop after writing the reports if
+any selected slide is unmatched or too close between multiple candidates.
+
 ### Review Step
 The review stage remains terminal-only:
 ```bash
