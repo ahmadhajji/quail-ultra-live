@@ -12,12 +12,13 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from domain.models import DetectedQuestion, RawSlide
+from domain.models import DetectedQuestion, DetectionStatus, RawSlide
 
 logger = logging.getLogger(__name__)
 
@@ -221,14 +222,16 @@ class OpenAIDetectAdapter:
         text_section = self._format_text_section(slide)
         payload: list[dict] = [{"type": "input_text", "text": text_section}]
 
-        # Always include the rendered slide screenshot
+        # Label every image immediately before the image payload. The model sees
+        # multimodal parts in order, but explicit labels make numbered image
+        # references deterministic for stem/explanation routing.
         if slide.slide_screenshot_path and Path(slide.slide_screenshot_path).exists():
+            payload.append({"type": "input_text", "text": "SLIDE SCREENSHOT"})
             payload.append(self._image_input(slide.slide_screenshot_path))
 
-        # Each extracted image gets a numbered label so the model can reference
-        # `stem_image_numbers` / `explanation_image_numbers`
-        for image_path in slide.image_paths:
+        for index, image_path in enumerate(slide.image_paths, start=1):
             if Path(image_path).exists():
+                payload.append({"type": "input_text", "text": f"EXTRACTED IMAGE {index}"})
                 payload.append(self._image_input(image_path))
 
         return payload
@@ -272,7 +275,7 @@ class OpenAIDetectAdapter:
         lines.append("")
         lines.append(
             "Identify each question on this slide and return strict JSON. "
-            "If the slide has no questions, return {\"questions\": [], \"no_question_reason\": \"...\"}."
+            'If the slide has no questions, return {"questions": [], "no_question_reason": "..."}.'
         )
         return "\n".join(lines)
 
@@ -338,30 +341,46 @@ def _build_questions(slide: RawSlide, payload: dict, model_name: str) -> list[De
     raw_questions = payload.get("questions", []) or []
     for entry in raw_questions:
         index = int(entry.get("question_index", 1) or 1)
+        stem_text = str(entry.get("stem_text", "") or "").strip()
         stem_image_paths = _resolve_image_refs(slide, entry.get("stem_image_numbers", []))
         explanation_image_paths = _resolve_image_refs(slide, entry.get("explanation_image_numbers", []))
         confidence = int(entry.get("confidence", 0) or 0)
-        warnings = list(entry.get("warnings", []) or [])
-        status = "needs_review" if confidence < 70 or warnings else "ok"
+        warnings = [str(item).strip() for item in list(entry.get("warnings", []) or []) if str(item).strip()]
 
         # choices is now a list of {letter, text} dicts (strict schema compatible)
         raw_choices = entry.get("choices") or []
         if isinstance(raw_choices, list):
             choices_dict = {
-                str(c.get("letter", "")).strip().upper(): str(c.get("text", "")).strip()
+                _normalize_choice_letter(str(c.get("letter", ""))): str(c.get("text", "")).strip()
                 for c in raw_choices
-                if c.get("letter") and c.get("text")
+                if _normalize_choice_letter(str(c.get("letter", ""))) and str(c.get("text", "")).strip()
             }
         else:
-            choices_dict = {k: str(v).strip() for k, v in raw_choices.items()}
+            choices_dict = {
+                _normalize_choice_letter(str(k)): str(v).strip()
+                for k, v in raw_choices.items()
+                if _normalize_choice_letter(str(k)) and str(v).strip()
+            }
+        correct_answer = _normalize_choice_letter(str(entry.get("correct_answer", "") or ""))
+        if confidence < 70:
+            warnings.append(f"Low detection confidence ({confidence}).")
+        if not stem_text:
+            warnings.append("Missing detected question stem.")
+        if len(choices_dict) < 4:
+            warnings.append("Fewer than four detected answer choices.")
+        if not correct_answer:
+            warnings.append("Missing detected correct answer.")
+        elif correct_answer not in choices_dict:
+            warnings.append(f"Detected correct answer {correct_answer!r} is not present in choices.")
+        status: DetectionStatus = "needs_review" if warnings else "ok"
 
         question = DetectedQuestion(
             deck_id=slide.deck_id,
             slide_number=slide.slide_number,
             question_index=index,
-            stem_text=str(entry.get("stem_text", "") or "").strip(),
+            stem_text=stem_text,
             choices=choices_dict,
-            correct_answer=str(entry.get("correct_answer", "") or "").strip().upper(),
+            correct_answer=correct_answer,
             explanation_hint=str(entry.get("explanation_hint", "") or "").strip(),
             stem_image_paths=stem_image_paths,
             explanation_image_paths=explanation_image_paths,
@@ -377,6 +396,11 @@ def _build_questions(slide: RawSlide, payload: dict, model_name: str) -> list[De
         )
         questions.append(question)
     return questions
+
+
+def _normalize_choice_letter(value: str) -> str:
+    match = re.match(r"^\s*\(?([A-H])(?:[\).:\-\s]|$)", str(value or "").strip().upper())
+    return match.group(1) if match else ""
 
 
 def _resolve_image_refs(slide: RawSlide, refs: list) -> list[str]:
@@ -400,8 +424,6 @@ def _extract_usage(response: Any) -> DetectionUsage:
         return DetectionUsage()
     return DetectionUsage(
         prompt_tokens=int(getattr(usage, "input_tokens", 0) or getattr(usage, "prompt_tokens", 0) or 0),
-        completion_tokens=int(
-            getattr(usage, "output_tokens", 0) or getattr(usage, "completion_tokens", 0) or 0
-        ),
+        completion_tokens=int(getattr(usage, "output_tokens", 0) or getattr(usage, "completion_tokens", 0) or 0),
         total_tokens=int(getattr(usage, "total_tokens", 0) or 0),
     )

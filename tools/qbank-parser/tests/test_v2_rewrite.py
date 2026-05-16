@@ -379,9 +379,7 @@ def test_stage3_cache_key_changes_on_content():
     a = _detected_question()
     b = _detected_question()
     b.stem_text = "different stem"
-    assert _stage3_cache_key(a, "m", "v", "Pediatrics") != _stage3_cache_key(
-        b, "m", "v", "Pediatrics"
-    )
+    assert _stage3_cache_key(a, "m", "v", "Pediatrics") != _stage3_cache_key(b, "m", "v", "Pediatrics")
 
 
 # ---------------------------------------------------------------------------
@@ -477,6 +475,40 @@ def test_run_v2_pipeline_end_to_end_smoke(tmp_path):
     assert stats_blob["rewrite_calls"] == 2
 
 
+def test_run_v2_pipeline_caps_questions_before_rewrite(tmp_path):
+    pptx = tmp_path / "deck.pptx"
+    pptx.write_bytes(b"fake")
+    out = tmp_path / "run"
+    slide_contents = [
+        SlideContent(slide_number=1, texts=["Q?"], speaker_notes="n", images=[]),
+        SlideContent(slide_number=2, texts=["Q2?"], speaker_notes="n", images=[]),
+    ]
+    screenshots = [str(tmp_path / "shot1.png"), str(tmp_path / "shot2.png")]
+    rewrite_adapter = _StubRewriteAdapter()
+    export_fn = _stub_pack_export_fn()
+
+    opts = V2RunOptions(
+        pptx_path=str(pptx),
+        output_dir=out,
+        rotation="Pediatrics",
+        pack_id="test-peds",
+        api_key="sk-test",
+        max_questions=1,
+        parse_pptx_fn=lambda *a, **kw: slide_contents,
+        pptx_to_images_fn=lambda *a, **kw: screenshots,
+        detect_adapter=_StubDetectAdapter(),
+        rewrite_adapter=rewrite_adapter,
+    )
+
+    result = run_v2_pipeline(opts, export_fn=export_fn)
+
+    assert len(result.detected_questions) == 2
+    assert len(result.rewritten_questions) == 1
+    assert rewrite_adapter.calls == 1
+    payload = json.loads((out / "v2_export_input.json").read_text())
+    assert len(payload["questions"]) == 1
+
+
 def test_stage4_real_exporter_produces_native_pack(tmp_path):
     """Integration test: invoke the real export_native_quail_qbank and verify pack files."""
     from app.v2_pipeline import stage4_export
@@ -488,10 +520,7 @@ def test_stage4_real_exporter_produces_native_pack(tmp_path):
             deck_id="deck-int",
             slide_number=1,
             question_index=1,
-            stem=(
-                "A 5-year-old boy presents with episodic wheezing and nighttime cough. "
-                "He has a history of eczema."
-            ),
+            stem=("A 5-year-old boy presents with episodic wheezing and nighttime cough. He has a history of eczema."),
             choices={
                 "A": "Asthma",
                 "B": "Viral upper respiratory infection",

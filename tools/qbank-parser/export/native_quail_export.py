@@ -18,7 +18,7 @@ from typing import Any, Callable
 
 from export.native_contract import NATIVE_QBANK_MANIFEST, schema_checksum, validate_native_pack_directory
 from export.native_pack_state import PACK_STATE_FILE, NativePackState, source_key_for_question
-from export.quail_export import resolve_image_path
+from export.quail_export import UnsafeMediaPathError, resolve_image_path
 from utils.question_hardening import strip_bat_markers, sanitize_choice_map
 
 
@@ -113,11 +113,16 @@ def _randomized_choice_payload(
     original_items = [(str(letter), str(text)) for letter, text in choices.items() if str(text).strip()]
     if len(original_items) < 2 or len(original_items) > len(CHOICE_LETTERS):
         normalized = {letter: text for letter, text in original_items}
-        return normalized, correct_answer, {
-            str(letter): str(explanation)
-            for letter, explanation in incorrect_explanations.items()
-            if str(letter) in normalized and str(explanation).strip()
-        }, list(normalized.keys())
+        return (
+            normalized,
+            correct_answer,
+            {
+                str(letter): str(explanation)
+                for letter, explanation in incorrect_explanations.items()
+                if str(letter) in normalized and str(explanation).strip()
+            },
+            list(normalized.keys()),
+        )
 
     seed = int(hashlib.sha256(qid.encode("utf-8")).hexdigest()[:16], 16)
     shuffled = original_items[:]
@@ -221,7 +226,11 @@ def _is_true_error_or_non_question(question: dict[str, Any]) -> bool:
 
 
 def _quality_warnings(question: dict[str, Any]) -> list[str]:
-    warnings = [str(item) for item in question.get("warnings", []) if str(item).strip()] if isinstance(question.get("warnings"), list) else []
+    warnings = (
+        [str(item) for item in question.get("warnings", []) if str(item).strip()]
+        if isinstance(question.get("warnings"), list)
+        else []
+    )
     review_status = str(question.get("review_status", "") or "").strip()
     classification = str(question.get("extraction_classification", question.get("classification", "")) or "").strip()
     fact_check = question.get("fact_check", {})
@@ -257,10 +266,11 @@ def _question_to_native(
         raise ValueError(f"Question {qid} correct_answer {correct_answer!r} is not present in choices.")
 
     raw_incorrect_explanations = question.get("incorrect_explanations", {})
-    incorrect_explanations = {
-        str(letter): _clean_text(explanation)
-        for letter, explanation in raw_incorrect_explanations.items()
-    } if isinstance(raw_incorrect_explanations, dict) else {}
+    incorrect_explanations = (
+        {str(letter): _clean_text(explanation) for letter, explanation in raw_incorrect_explanations.items()}
+        if isinstance(raw_incorrect_explanations, dict)
+        else {}
+    )
     choice_presentation = question.get("choice_presentation", {})
     raw_display_order = choice_presentation.get("display_order", []) if isinstance(choice_presentation, dict) else []
     display_order = [str(item) for item in raw_display_order if str(item) in choices]
@@ -299,7 +309,9 @@ def _question_to_native(
     if question_text and question_text != _clean_text(question.get("question_stem", "")).strip():
         stem_blocks.extend(_content_blocks(question_text, question_text))
 
-    for image_index, image_value in enumerate(question.get("images", []) if isinstance(question.get("images"), list) else [], start=1):
+    for image_index, image_value in enumerate(
+        question.get("images", []) if isinstance(question.get("images"), list) else [], start=1
+    ):
         media_id = f"{qid}.stem.{image_index}"
         media, copied = _copy_media(
             source_value=str(image_value),
@@ -366,7 +378,9 @@ def _question_to_native(
 
     fact_check = question.get("fact_check", {}) if isinstance(question.get("fact_check", {}), dict) else {}
     confidence = question.get("confidence", question.get("parser_confidence", 100))
-    parser_confidence = float(confidence) / 100 if isinstance(confidence, (int, float)) and confidence > 1 else float(confidence or 1)
+    parser_confidence = (
+        float(confidence) / 100 if isinstance(confidence, (int, float)) and confidence > 1 else float(confidence or 1)
+    )
     parser_confidence = max(0.0, min(1.0, parser_confidence))
 
     native_incorrect = {
@@ -585,32 +599,40 @@ def export_native_quail_qbank(
     questions = [question for question in questions if isinstance(question, dict)]
 
     state_path = Path(pack_state_path).resolve() if pack_state_path else target_dir / PACK_STATE_FILE
-    pack_state = NativePackState.load(state_path, pack_id=_slug(pack_id, "qbank")) if append else NativePackState(pack_id=_slug(pack_id, "qbank"))
+    pack_state = (
+        NativePackState.load(state_path, pack_id=_slug(pack_id, "qbank"))
+        if append
+        else NativePackState(pack_id=_slug(pack_id, "qbank"))
+    )
 
     if slide_range:
         start, end = slide_range
         questions = [
-            question for question in questions
+            question
+            for question in questions
             if start <= int(question.get("original_slide_number", question.get("slide_number", 0)) or 0) <= end
         ]
     if reprocess_question:
         questions = [
-            question for question in questions
-            if pack_state.question_id_for(source_key=source_key_for_question(question, pack_id), question=question) == reprocess_question
+            question
+            for question in questions
+            if pack_state.question_id_for(source_key=source_key_for_question(question, pack_id), question=question)
+            == reprocess_question
             or str(question.get("question_id", "")) == reprocess_question
         ]
     if only_new:
         questions = [
-            question for question in questions
-            if source_key_for_question(question, pack_id) not in pack_state.questions
+            question for question in questions if source_key_for_question(question, pack_id) not in pack_state.questions
         ]
     if only_failed:
         questions = [
-            question for question in questions
-            if pack_state.questions.get(source_key_for_question(question, pack_id), {}).get("status") in {"failed", "blocked"}
+            question
+            for question in questions
+            if pack_state.questions.get(source_key_for_question(question, pack_id), {}).get("status")
+            in {"failed", "blocked"}
         ]
     if max_questions is not None:
-        questions = questions[:max(0, max_questions)]
+        questions = questions[: max(0, max_questions)]
 
     source_questions = questions[:]
     excluded: list[dict[str, Any]] = []
@@ -621,7 +643,10 @@ def export_native_quail_qbank(
                 {
                     "id": str(question.get("question_id", question.get("slide_number", "unknown")) or "unknown"),
                     "slide": int(question.get("original_slide_number", question.get("slide_number", 0)) or 0),
-                    "reason": str(question.get("error", "") or question.get("extraction_classification", question.get("classification", "excluded"))),
+                    "reason": str(
+                        question.get("error", "")
+                        or question.get("extraction_classification", question.get("classification", "excluded"))
+                    ),
                 }
             )
         else:
@@ -644,9 +669,7 @@ def export_native_quail_qbank(
             path_value = target_dir / str(entry.get("path", ""))
             if path_value.exists():
                 existing_questions[str(entry.get("id"))] = json.loads(path_value.read_text(encoding="utf-8"))
-        existing_media = {
-            str(media.get("id")): media for media in existing_manifest.get("mediaIndex", [])
-        }
+        existing_media = {str(media.get("id")): media for media in existing_manifest.get("mediaIndex", [])}
 
     native_questions = existing_questions.copy()
     media_by_id = existing_media.copy()
@@ -676,6 +699,10 @@ def export_native_quail_qbank(
                 source_json_dir=source_json_dir,
                 source_tag=source_tag,
             )
+        except UnsafeMediaPathError as exc:
+            pack_state.record_blocked(source_key=source_key, question_id=qid, reason=str(exc))
+            pack_state.save(state_path)
+            raise
         except Exception as exc:
             excluded.append(
                 {
@@ -795,7 +822,9 @@ def export_native_quail_qbank(
         "title": title or data.get("title") or f"{pack_id} QBank",
         "rotation": data.get("rotation", ""),
         "description": data.get("description", ""),
-        "createdAt": existing_manifest.get("createdAt") if existing_manifest else data.get("createdAt", "1970-01-01T00:00:00Z"),
+        "createdAt": existing_manifest.get("createdAt")
+        if existing_manifest
+        else data.get("createdAt", "1970-01-01T00:00:00Z"),
         "updatedAt": data.get("updatedAt", "1970-01-01T00:00:00Z"),
         "producer": {
             "name": "qbank-parser",

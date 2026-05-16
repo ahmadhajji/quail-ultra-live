@@ -6,8 +6,7 @@ Four stages:
 3. Rewrite (1 AI call/question, rotation-specific): produce USMLE-style stem/choices/explanation/edu objective (PR 3)
 4. Native pack export (no AI): write Quail Ultra native pack (PR 4)
 
-This module currently implements Stages 1 and 2. Stages 3 and 4 land in
-PR 3 and PR 4 respectively.
+This module implements the full v2 path behind the `--v2` CLI flag.
 """
 
 from __future__ import annotations
@@ -68,6 +67,11 @@ class V2RunOptions:
     rewrite_reasoning_effort: str = DEFAULT_REWRITE_REASONING_EFFORT
     max_detect_inflight: int = MAX_DETECT_INFLIGHT
     max_rewrite_inflight: int = MAX_REWRITE_INFLIGHT
+    slide_range: tuple[int, int] | None = None
+    max_slides: int | None = None
+    max_questions: int | None = None
+    reprocess_slide: int | None = None
+    dry_run: bool = False
     use_cache: bool = True
     # Optional injected dependencies (for testing).
     parse_pptx_fn: Callable[[str | Path, Path], list[SlideContent]] | None = None
@@ -299,6 +303,52 @@ def _coerce_comments(items: list[Any]) -> list[dict]:
     return out
 
 
+def _selected_raw_slides(raw_slides: list[RawSlide], opts: V2RunOptions) -> list[RawSlide]:
+    """Apply user-requested slide bounds before any provider work."""
+    selected = list(raw_slides)
+    if opts.reprocess_slide is not None:
+        selected = [slide for slide in selected if slide.slide_number == opts.reprocess_slide]
+    if opts.slide_range is not None:
+        start, end = opts.slide_range
+        if start > end:
+            raise ValueError(f"Invalid slide_range {start}-{end}: start must be <= end")
+        selected = [slide for slide in selected if start <= slide.slide_number <= end]
+    if opts.max_slides is not None:
+        selected = selected[: max(0, opts.max_slides)]
+    return selected
+
+
+def _limited_detected_questions(
+    detected_questions: list[DetectedQuestion],
+    opts: V2RunOptions,
+) -> list[DetectedQuestion]:
+    """Apply question bounds before rewrite/provider work."""
+    if opts.max_questions is None:
+        return list(detected_questions)
+    return list(detected_questions)[: max(0, opts.max_questions)]
+
+
+def _selection_metadata(raw_slides: list[RawSlide], selected: list[RawSlide], opts: V2RunOptions) -> dict[str, Any]:
+    return {
+        "total_slide_count": len(raw_slides),
+        "selected_slide_count": len(selected),
+        "selected_slide_numbers": [slide.slide_number for slide in selected],
+        "slide_range": list(opts.slide_range) if opts.slide_range else None,
+        "max_slides": opts.max_slides,
+        "max_questions": opts.max_questions,
+        "reprocess_slide": opts.reprocess_slide,
+        "dry_run": opts.dry_run,
+    }
+
+
+def _write_stats(output_dir: Path, stats: V2RunStats) -> None:
+    stats_path = output_dir / "v2_run_stats.json"
+    stats_path.write_text(
+        json.dumps(stats.to_dict(), indent=2),
+        encoding="utf-8",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Stage 2 — Detection
 # ---------------------------------------------------------------------------
@@ -351,9 +401,7 @@ def stage2_detect(
             if result.error:
                 errors[processed_slide.slide_number] = result.error
                 continue
-            cache_key = _stage2_cache_key(
-                processed_slide, adapter.model_name, DETECT_PROMPT_VERSION
-            )
+            cache_key = _stage2_cache_key(processed_slide, adapter.model_name, DETECT_PROMPT_VERSION)
             cache[cache_key] = [q.to_dict() for q in result.questions]
             cache_writes += 1
             detected.extend(result.questions)
@@ -422,9 +470,7 @@ def stage3_rewrite(
     cache_writes = 0
 
     def _process(detected: DetectedQuestion):
-        cache_key = _stage3_cache_key(
-            detected, adapter.model_name, REWRITE_PROMPT_VERSION, opts.rotation
-        )
+        cache_key = _stage3_cache_key(detected, adapter.model_name, REWRITE_PROMPT_VERSION, opts.rotation)
         if opts.use_cache and cache_key in cache:
             cached = RewrittenQuestion.from_dict(cache[cache_key])
             return detected, None, cached
@@ -478,9 +524,7 @@ def stage3_rewrite(
     return rewritten, errors
 
 
-def _stage3_cache_key(
-    detected: DetectedQuestion, model_name: str, prompt_version: str, rotation: str
-) -> str:
+def _stage3_cache_key(detected: DetectedQuestion, model_name: str, prompt_version: str, rotation: str) -> str:
     payload = f"{detected.content_hash()}|{model_name}|{prompt_version}|{rotation}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
@@ -557,9 +601,7 @@ def stage4_export(
         "questions": [_rewritten_to_legacy_dict(q) for q in rewritten_questions],
     }
     intermediate_path = output_dir / "v2_export_input.json"
-    intermediate_path.write_text(
-        json.dumps(legacy_payload, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    intermediate_path.write_text(json.dumps(legacy_payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
     pack_dir = output_dir / "packs" / (opts.pack_id or "qbank")
 
@@ -593,20 +635,32 @@ class V2RunResult:
 
 
 def run_v2_stages_1_and_2(opts: V2RunOptions) -> V2RunResult:
-    """Run Stages 1 and 2 of the v2 pipeline. Used by `--v2` until Stages 3+4 land."""
+    """Run Stages 1 and 2 of the v2 pipeline for focused detection tests."""
     started = time.monotonic()
     stats = V2RunStats()
 
     raw_slides, metadata = stage1_raw_extract(opts)
-    detected, errors = stage2_detect(raw_slides, opts, stats)
+    selected_slides = _selected_raw_slides(raw_slides, opts)
+    metadata.update(_selection_metadata(raw_slides, selected_slides, opts))
+    if opts.dry_run:
+        stats.duration_seconds = time.monotonic() - started
+        _write_stats(Path(opts.output_dir), stats)
+        return V2RunResult(
+            raw_slides=raw_slides,
+            detected_questions=[],
+            rewritten_questions=[],
+            metadata=metadata,
+            stage2_errors={},
+            stage3_errors={},
+            stats=stats,
+        )
+
+    detected, errors = stage2_detect(selected_slides, opts, stats)
+    detected = _limited_detected_questions(detected, opts)
 
     stats.duration_seconds = time.monotonic() - started
 
-    stats_path = Path(opts.output_dir) / "v2_run_stats.json"
-    stats_path.write_text(
-        json.dumps(stats.to_dict(), indent=2),
-        encoding="utf-8",
-    )
+    _write_stats(Path(opts.output_dir), stats)
 
     return V2RunResult(
         raw_slides=raw_slides,
@@ -629,10 +683,26 @@ def run_v2_pipeline(
     stats = V2RunStats()
 
     raw_slides, metadata = stage1_raw_extract(opts)
-    detected, stage2_errors = stage2_detect(raw_slides, opts, stats)
+    selected_slides = _selected_raw_slides(raw_slides, opts)
+    metadata.update(_selection_metadata(raw_slides, selected_slides, opts))
+    if opts.dry_run:
+        stats.duration_seconds = time.monotonic() - started
+        _write_stats(Path(opts.output_dir), stats)
+        return V2RunResult(
+            raw_slides=raw_slides,
+            detected_questions=[],
+            rewritten_questions=[],
+            metadata=metadata,
+            stage2_errors={},
+            stage3_errors={},
+            stats=stats,
+        )
+
+    detected, stage2_errors = stage2_detect(selected_slides, opts, stats)
 
     # Filter out detection errors before sending to rewrite
     healthy_detected = [q for q in detected if q.status != "error" and not q.error]
+    healthy_detected = _limited_detected_questions(healthy_detected, opts)
     rewritten, stage3_errors = stage3_rewrite(healthy_detected, opts, stats)
 
     pack_summary = None
@@ -644,11 +714,7 @@ def run_v2_pipeline(
             stage3_errors["__stage4_export__"] = str(exc)
 
     stats.duration_seconds = time.monotonic() - started
-    stats_path = Path(opts.output_dir) / "v2_run_stats.json"
-    stats_path.write_text(
-        json.dumps(stats.to_dict(), indent=2),
-        encoding="utf-8",
-    )
+    _write_stats(Path(opts.output_dir), stats)
 
     return V2RunResult(
         raw_slides=raw_slides,

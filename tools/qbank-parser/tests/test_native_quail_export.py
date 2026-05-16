@@ -92,7 +92,10 @@ def test_export_native_quail_qbank_writes_structured_pack(tmp_path):
     assert manifest["format"] == "quail-ultra-qbank"
     correct_choice_id = manifest["questionIndex"][0]["answerSummary"]["correctChoiceId"]
     assert question["answerKey"]["correctChoiceId"] == correct_choice_id
-    assert next(choice for choice in question["choices"] if choice["id"] == correct_choice_id)["text"][0]["text"] == "Streptococcus pneumoniae"
+    assert (
+        next(choice for choice in question["choices"] if choice["id"] == correct_choice_id)["text"][0]["text"]
+        == "Streptococcus pneumoniae"
+    )
     assert any(block.get("mediaId", "").endswith(".stem.1") for block in question["stem"]["blocks"])
     assert any(block.get("mediaId", "").endswith(".explanation.1") for block in question["explanation"]["correct"])
     assert {media["role"] for media in question["media"]} == {"stem", "explanation", "source_slide"}
@@ -164,7 +167,10 @@ def test_export_native_quail_qbank_append_skips_unchanged_and_updates_changed(tm
         logger=lambda _message: None,
     )
 
-    changed_question = {**base_question, "educational_objective": "A changed educational objective must update append output."}
+    changed_question = {
+        **base_question,
+        "educational_objective": "A changed educational objective must update append output.",
+    }
     _write_json(source_json, [changed_question])
     changed = export_native_quail_qbank(
         source_json=source_json,
@@ -311,3 +317,40 @@ def test_export_native_quail_qbank_strips_bat_markers_and_reports_exclusions(tmp
     assert "BAT" not in packed
     assert report["excludedQuestionCount"] == 1
     assert report["batMarkerFindings"]["sourceRecordsWithBatMarkers"] == 1
+
+
+def test_export_native_quail_qbank_rejects_media_paths_outside_allowed_roots(tmp_path):
+    source_dir = tmp_path / "source"
+    output_dir = tmp_path / "native"
+    images_dir = source_dir / "images"
+    source_dir.mkdir(parents=True)
+    images_dir.mkdir(parents=True)
+
+    outside_image = tmp_path / "outside.png"
+    _write_noise_image(outside_image)
+    source_json = source_dir / "unsafe.json"
+    _write_json(
+        source_json,
+        [
+            {
+                "question_id": "unsafe",
+                "review_status": "approved",
+                "extraction_classification": "accepted",
+                "question_stem": "Stem",
+                "choices": {"A": "Alpha", "B": "Bravo"},
+                "correct_answer": "A",
+                "images": [str(outside_image)],
+            }
+        ],
+    )
+
+    with pytest.raises(ValueError, match="escapes allowed roots"):
+        export_native_quail_qbank(
+            source_json=source_json,
+            output_dir=output_dir,
+            pack_id="pediatrics",
+            images_dir=images_dir,
+            logger=lambda _message: None,
+        )
+
+    assert not any((output_dir / "media").glob("*")) if (output_dir / "media").exists() else True

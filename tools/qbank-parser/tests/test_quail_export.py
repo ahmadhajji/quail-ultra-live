@@ -299,6 +299,84 @@ def test_export_quail_qbank_writes_question_meta_sidecar(tmp_path):
     assert (output_dir / "source-slides" / "deck-12__slide_12.png").exists()
 
 
+def test_export_quail_qbank_rejects_media_paths_outside_allowed_roots(tmp_path):
+    source_dir = tmp_path / "source"
+    output_dir = tmp_path / "qbank"
+    images_dir = source_dir / "images"
+    templates_dir = tmp_path / "templates"
+    source_dir.mkdir(parents=True)
+    images_dir.mkdir(parents=True)
+    _make_templates(templates_dir)
+
+    outside_image = tmp_path / "outside.png"
+    _write_noise_image(outside_image, size=(400, 400))
+
+    source_json = source_dir / "unsafe.json"
+    _write_json(
+        source_json,
+        [
+            {
+                "question_id": "unsafe",
+                "review_status": "approved",
+                "extraction_classification": "accepted",
+                "question_stem": "Stem",
+                "choices": {"A": "Alpha", "B": "Bravo"},
+                "correct_answer": "A",
+                "images": [str(outside_image)],
+            }
+        ],
+    )
+
+    with pytest.raises(ValueError, match="escapes allowed roots"):
+        export_quail_qbank(
+            source_json=source_json,
+            output_dir=output_dir,
+            images_dir=images_dir,
+            templates_dir=templates_dir,
+            logger=lambda _message: None,
+        )
+
+    assert not (output_dir / "001-img-1.png").exists()
+
+
+def test_export_quail_qbank_rejects_traversal_deck_id_for_source_slide(tmp_path):
+    source_dir = tmp_path / "source"
+    output_dir = tmp_path / "qbank"
+    templates_dir = tmp_path / "templates"
+    source_dir.mkdir(parents=True)
+    _make_templates(templates_dir)
+
+    source_slide = source_dir / "slide.png"
+    _write_noise_image(source_slide, size=(400, 400))
+    source_json = source_dir / "unsafe-source-slide.json"
+    _write_json(
+        source_json,
+        [
+            {
+                "question_id": "unsafe-slide",
+                "review_status": "approved",
+                "extraction_classification": "accepted",
+                "original_slide_number": 1,
+                "question_stem": "Stem",
+                "choices": {"A": "Alpha", "B": "Bravo"},
+                "correct_answer": "A",
+                "deck_id": "../../escape",
+                "source_slide_path": str(source_slide),
+            }
+        ],
+    )
+
+    with pytest.raises(ValueError, match="Unsafe deck_id"):
+        export_quail_qbank(
+            source_json=source_json,
+            output_dir=output_dir,
+            templates_dir=templates_dir,
+            logger=lambda _message: None,
+        )
+
+    assert not (tmp_path / "escape__slide_1.png").exists()
+
+
 def test_export_quail_qbank_blocks_disputed_items(tmp_path):
     source_dir = tmp_path / "source"
     output_dir = tmp_path / "qbank"

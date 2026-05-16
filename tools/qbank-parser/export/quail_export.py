@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import json
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +14,11 @@ from utils.image_filters import is_placeholder_image_for_export
 
 PANE_FILES = ("lab_values.html", "calculator.html", "notes.html")
 QUESTION_META_FILE = "question-meta.json"
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+class UnsafeMediaPathError(ValueError):
+    """Raised when a source media reference escapes the allowed export roots."""
 
 
 @dataclass
@@ -63,7 +69,7 @@ def generate_question_html(question: dict, valid_images: list[str]) -> str:
     """Create the Quail question HTML payload."""
     lines = [
         "<!DOCTYPE html>",
-        "<html><head><meta charset=\"UTF-8\"></head><body>",
+        '<html><head><meta charset="UTF-8"></head><body>',
         f"<p>{escape_html(str(question.get('question_stem', '')))}</p>",
     ]
 
@@ -87,7 +93,7 @@ def generate_solution_html(question: dict, valid_images: list[str]) -> str:
     """Create the Quail solution HTML payload."""
     lines = [
         "<!DOCTYPE html>",
-        "<html><head><meta charset=\"UTF-8\"></head><body>",
+        '<html><head><meta charset="UTF-8"></head><body>',
         f"<p><strong>Correct Answer: {escape_html(str(question.get('correct_answer', '')))}</strong></p>",
     ]
 
@@ -116,18 +122,62 @@ def generate_solution_html(question: dict, valid_images: list[str]) -> str:
     return "\n".join(lines)
 
 
+def _is_under_any_root(path: Path, roots: list[Path]) -> bool:
+    return any(path.is_relative_to(root) for root in roots)
+
+
+def _normalized_roots(images_dir: Path, source_json_dir: Path) -> list[Path]:
+    roots: list[Path] = []
+    for root in (images_dir, source_json_dir):
+        resolved = root.resolve()
+        if resolved not in roots:
+            roots.append(resolved)
+    return roots
+
+
+def _validate_media_reference(image_value: str) -> Path:
+    raw_value = str(image_value or "").strip()
+    if not raw_value:
+        raise UnsafeMediaPathError("empty media path")
+    if _CONTROL_CHAR_RE.search(raw_value):
+        raise UnsafeMediaPathError("media path contains control characters")
+    if "\\" in raw_value:
+        raise UnsafeMediaPathError("media path must use POSIX separators")
+    if raw_value.startswith("//") or "://" in raw_value:
+        raise UnsafeMediaPathError("remote or protocol-relative media paths are not allowed")
+
+    raw_path = Path(raw_value)
+    if any(part in {"", ".", ".."} for part in raw_path.parts):
+        raise UnsafeMediaPathError("media path contains empty, current, or parent segments")
+    return raw_path
+
+
 def resolve_image_path(image_value: str, images_dir: Path, source_json_dir: Path) -> Path | None:
-    """Resolve an image path from absolute/relative references."""
-    raw_path = Path(image_value)
+    """Resolve a media reference inside the source JSON or image directory roots.
 
-    candidates = [raw_path]
-    if not raw_path.is_absolute():
-        candidates.append(source_json_dir / raw_path)
-    candidates.append(images_dir / raw_path.name)
+    Absolute paths are accepted only when they already live under one of the
+    explicit allowed roots. Relative paths may not traverse upward and are
+    resolved against the source JSON directory and the configured image root.
+    """
+    raw_path = _validate_media_reference(image_value)
+    roots = _normalized_roots(images_dir, source_json_dir)
 
-    for path in candidates:
-        if path.exists() and path.is_file():
-            return path.resolve()
+    if raw_path.is_absolute():
+        resolved = raw_path.resolve()
+        if not _is_under_any_root(resolved, roots):
+            raise UnsafeMediaPathError(f"media path escapes allowed roots: {image_value}")
+        return resolved if resolved.exists() and resolved.is_file() else None
+
+    candidates = [source_json_dir / raw_path, images_dir / raw_path]
+    if len(raw_path.parts) == 1:
+        candidates.append(images_dir / raw_path.name)
+
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if not _is_under_any_root(resolved, roots):
+            raise UnsafeMediaPathError(f"media path escapes allowed roots: {image_value}")
+        if resolved.exists() and resolved.is_file():
+            return resolved
     return None
 
 
@@ -147,7 +197,10 @@ def process_images(
 
     image_counter = 1
     for image_value in image_values:
-        image_path = resolve_image_path(str(image_value), images_dir, source_json_dir)
+        try:
+            image_path = resolve_image_path(str(image_value), images_dir, source_json_dir)
+        except UnsafeMediaPathError as exc:
+            raise UnsafeMediaPathError(f"Unsafe media path {image_value!r}: {exc}") from exc
         if image_path is None:
             logger(f"  Warning: Image not found: {image_value}")
             continue
@@ -248,9 +301,21 @@ def _copy_source_slide_asset(
 
     target_dir = output_dir / "source-slides"
     target_dir.mkdir(parents=True, exist_ok=True)
-    target_name = f"{deck_id}__slide_{slide_number}.png"
+    target_name = f"{_safe_source_slide_component(deck_id)}__slide_{slide_number}.png"
     shutil.copy2(resolved, target_dir / target_name)
     return {"asset_path": f"source-slides/{target_name}", "expandable": True}
+
+
+def _safe_source_slide_component(value: str) -> str:
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        raise ValueError("deck_id is required for source slide assets")
+    if "/" in raw_value or "\\" in raw_value or _CONTROL_CHAR_RE.search(raw_value):
+        raise ValueError(f"Unsafe deck_id for source slide asset: {value!r}")
+    cleaned = re.sub(r"[^A-Za-z0-9._:-]+", ".", raw_value).strip(".:-_")
+    if not cleaned:
+        raise ValueError(f"Unsafe deck_id for source slide asset: {value!r}")
+    return cleaned
 
 
 def export_quail_qbank(
@@ -314,8 +379,7 @@ def export_quail_qbank(
 
     if blocking:
         raise ValueError(
-            "Quail export blocked because unresolved or disputed items remain: "
-            + "; ".join(blocking[:10])
+            "Quail export blocked because unresolved or disputed items remain: " + "; ".join(blocking[:10])
         )
 
     logger_fn(f"\nFound {len(questions)} questions")
@@ -390,10 +454,7 @@ def export_quail_qbank(
         )
         stats["images_copied"] += len(valid_question_images) + len(valid_explanation_images)
         stats["images_skipped"] += (
-            len(question_images)
-            - len(valid_question_images)
-            + len(explanation_images)
-            - len(valid_explanation_images)
+            len(question_images) - len(valid_question_images) + len(explanation_images) - len(valid_explanation_images)
         )
 
         (target_dir / f"{question_num}-q.html").write_text(
@@ -474,13 +535,13 @@ def export_quail_qbank(
                 "review_reasons": (
                     question.get("review_reasons", []) if isinstance(question.get("review_reasons", []), list) else []
                 ),
-                "validation": question.get("validation", {}) if isinstance(question.get("validation", {}), dict) else {},
+                "validation": question.get("validation", {})
+                if isinstance(question.get("validation", {}), dict)
+                else {},
             },
             "source_group_id": str(question.get("source_group_id", "") or ""),
             "source_slide": source_slide,
-            "slide_consensus": {
-                "status": str(question.get("slide_consensus_status", "") or "")
-            },
+            "slide_consensus": {"status": str(question.get("slide_consensus_status", "") or "")},
             "fact_check": {
                 "status": str(raw_fact_check.get("status", "") or ""),
                 "note": str(raw_fact_check.get("note", "") or ""),
@@ -503,27 +564,19 @@ def export_quail_qbank(
     logger_fn("Writing metadata files...")
     logger_fn("-" * 60)
 
-    (target_dir / "choices.json").write_text(
-        json.dumps(choices_data, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    (target_dir / "choices.json").write_text(json.dumps(choices_data, indent=2, ensure_ascii=False), encoding="utf-8")
     logger_fn(f"  Updated: choices.json ({len(choices_data)} questions)")
 
-    (target_dir / "tagnames.json").write_text(
-        json.dumps(tagnames, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    (target_dir / "tagnames.json").write_text(json.dumps(tagnames, indent=2, ensure_ascii=False), encoding="utf-8")
     logger_fn("  Updated: tagnames.json")
 
-    (target_dir / "index.json").write_text(
-        json.dumps(index_data, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    (target_dir / "index.json").write_text(json.dumps(index_data, indent=2, ensure_ascii=False), encoding="utf-8")
     logger_fn(f"  Updated: index.json ({len(index_data)} questions)")
 
     (target_dir / "groups.json").write_text("{}\n", encoding="utf-8")
     logger_fn("  Updated: groups.json")
 
-    (target_dir / "panes.json").write_text(
-        json.dumps(panes, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    (target_dir / "panes.json").write_text(json.dumps(panes, indent=2, ensure_ascii=False), encoding="utf-8")
     logger_fn("  Updated: panes.json (3 study tools)")
 
     (target_dir / QUESTION_META_FILE).write_text(
@@ -563,4 +616,6 @@ __all__ = [
     "is_white_image",
     "generate_question_html",
     "generate_solution_html",
+    "resolve_image_path",
+    "UnsafeMediaPathError",
 ]

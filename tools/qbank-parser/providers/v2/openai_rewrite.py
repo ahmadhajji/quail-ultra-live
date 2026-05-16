@@ -212,6 +212,9 @@ class OpenAIRewriteAdapter:
                     time.sleep(sleep_for)
                     continue
                 break
+            if parsed is None:
+                last_error = "empty parsed response"
+                break
 
             question = _build_rewritten_question(
                 detected,
@@ -264,8 +267,7 @@ class OpenAIRewriteAdapter:
                 explanation = f"{explanation}\n\nDECK COMMENTS (authoritative):\n{comments_text}"
         if detected.highlighted_texts:
             explanation = (
-                f"{explanation}\n\nHIGHLIGHTED TEXT (correct-answer signal): "
-                f"{', '.join(detected.highlighted_texts)}"
+                f"{explanation}\n\nHIGHLIGHTED TEXT (correct-answer signal): {', '.join(detected.highlighted_texts)}"
             )
 
         has_images = "yes" if (detected.stem_image_paths or detected.explanation_image_paths) else "no"
@@ -340,9 +342,7 @@ def _build_rewritten_question(
         }
     else:
         incorrect_explanations = {
-            str(k).strip().upper(): str(v).strip()
-            for k, v in raw_incorrect.items()
-            if str(v).strip()
+            str(k).strip().upper(): str(v).strip() for k, v in raw_incorrect.items() if str(v).strip()
         }
 
     educational_objective = str(payload.get("educational_objective", "") or "").strip()

@@ -19,9 +19,6 @@ from typing import Optional
 
 from tqdm import tqdm
 
-import sys
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
 from ai.rotation_prompts import normalize_rotation_name
 from config import (
     OPENAI_ESCALATION_CONFIDENCE_THRESHOLD,
@@ -153,7 +150,9 @@ class USMLEFormatter:
         self.request_timeout_seconds = max(10, int(request_timeout_seconds))
         self.http_retry_attempts = max(1, int(http_retry_attempts))
         self.transport = transport if transport in {"rest", "sdk"} else "rest"
-        self.reasoning_effort = reasoning_effort if reasoning_effort in {"none", "low", "medium", "high", "xhigh"} else "high"
+        self.reasoning_effort = (
+            reasoning_effort if reasoning_effort in {"none", "low", "medium", "high", "xhigh"} else "high"
+        )
         self.web_search_enabled = bool(web_search_enabled)
         self.target_rpm = max(1, int(target_rpm))
         self.max_inflight = max(1, int(max_inflight))
@@ -306,9 +305,7 @@ class USMLEFormatter:
             errors.append("Formatter returned an empty question body")
 
         cleaned_choices = {
-            str(letter): str(text).strip()
-            for letter, text in (result.choices or {}).items()
-            if str(text).strip()
+            str(letter): str(text).strip() for letter, text in (result.choices or {}).items() if str(text).strip()
         }
         if not cleaned_choices:
             errors.append("Formatter returned no answer choices")
@@ -320,7 +317,9 @@ class USMLEFormatter:
             errors.append("Formatter returned duplicate choice text")
 
         distractor_letters = {letter for letter in cleaned_choices if letter != result.correct_answer}
-        explanation_letters = {letter for letter, text in (result.incorrect_explanations or {}).items() if str(text).strip()}
+        explanation_letters = {
+            letter for letter, text in (result.incorrect_explanations or {}).items() if str(text).strip()
+        }
         if explanation_letters - distractor_letters:
             result.incorrect_explanations = {
                 letter: text
