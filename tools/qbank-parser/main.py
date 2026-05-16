@@ -343,6 +343,18 @@ def _run_v2_pipeline(args: argparse.Namespace) -> bool:
 
     from app.v2_pipeline import V2RunOptions, run_v2_pipeline
 
+    slide_range = _parse_slide_range(args.slide_range)
+    if args.dry_run or args.dry_run_cost:
+        _print("[bold]v2 dry-run plan:[/bold] no OpenAI calls, downloads, writes, or exports will be performed.")
+        _print(f"  • input: {args.google_slides_link or args.pptx_file}")
+        _print(f"  • rotation: {args.rotation}")
+        _print(f"  • slide_range: {args.slide_range or 'all'}")
+        _print(f"  • max_slides: {args.max_slides if args.max_slides is not None else 'none'}")
+        _print(f"  • max_questions: {args.max_questions if args.max_questions is not None else 'none'}")
+        _print(f"  • reprocess_slide: {args.reprocess_slide if args.reprocess_slide is not None else 'none'}")
+        _print("  • estimated_cost: requires a non-dry-run pass to count selected slides/questions")
+        return True
+
     opts = V2RunOptions(
         google_slides_link=args.google_slides_link or "",
         google_slides_id=args.google_slides_id or "",
@@ -353,6 +365,10 @@ def _run_v2_pipeline(args: argparse.Namespace) -> bool:
         source_tag=args.source_tag or "",
         output_dir=Path(args.native_pack_dir) if args.native_pack_dir else OUTPUT_DIR,
         api_key=OPENAI_API_KEY,
+        slide_range=slide_range,
+        max_slides=args.max_slides,
+        max_questions=args.max_questions,
+        reprocess_slide=args.reprocess_slide,
     )
 
     try:

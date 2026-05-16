@@ -15,6 +15,7 @@ from app.v2_pipeline import (
     _coerce_comments,
     _filter_comments_by_slide,
     _stage2_cache_key,
+    run_v2_pipeline,
     run_v2_stages_1_and_2,
     stage1_raw_extract,
     stage2_detect,
@@ -114,9 +115,7 @@ def test_detect_happy_path(tmp_path):
 def test_detect_no_questions_slide(tmp_path):
     slide = _make_raw_slide(tmp_path)
     client = MagicMock()
-    client.responses.create.return_value = _stub_response(
-        {"questions": [], "no_question_reason": "Title slide"}
-    )
+    client.responses.create.return_value = _stub_response({"questions": [], "no_question_reason": "Title slide"})
     adapter = OpenAIDetectAdapter(api_key="sk-test", client=client)
     result = adapter.detect(slide)
     assert result.error == ""
@@ -149,6 +148,7 @@ def test_detect_low_confidence_marks_needs_review(tmp_path):
     result = adapter.detect(slide)
     assert result.questions[0].status == "needs_review"
     assert "unclear stem" in result.questions[0].detection_warnings
+    assert any("Low detection confidence" in warning for warning in result.questions[0].detection_warnings)
 
 
 def test_detect_invalid_json_returns_error(tmp_path, monkeypatch):
@@ -224,6 +224,44 @@ def test_build_questions_filters_image_refs(tmp_path):
     assert q.correct_answer == "A"  # uppercased
     assert q.stem_image_paths == slide.image_paths  # 99 dropped
     assert q.detect_model == "test-model"
+
+
+def test_build_questions_marks_structural_risks_needs_review(tmp_path):
+    slide = _make_raw_slide(tmp_path)
+    payload = {
+        "questions": [
+            {
+                "question_index": 1,
+                "stem_text": "",
+                "choices": [{"letter": "A)", "text": "Only one choice"}],
+                "correct_answer": "C",
+                "explanation_hint": "",
+                "stem_image_numbers": [],
+                "explanation_image_numbers": [],
+                "confidence": 90,
+                "warnings": [],
+            }
+        ]
+    }
+
+    questions = _build_questions(slide, payload, model_name="test-model")
+
+    assert questions[0].status == "needs_review"
+    assert questions[0].choices == {"A": "Only one choice"}
+    assert "Missing detected question stem." in questions[0].detection_warnings
+    assert "Fewer than four detected answer choices." in questions[0].detection_warnings
+    assert "Detected correct answer 'C' is not present in choices." in questions[0].detection_warnings
+
+
+def test_detect_payload_labels_multimodal_images(tmp_path):
+    slide = _make_raw_slide(tmp_path)
+    adapter = OpenAIDetectAdapter(api_key="sk-test", client=MagicMock())
+
+    payload = adapter._build_user_payload(slide)
+    labels = [item["text"] for item in payload if item.get("type") == "input_text"]
+
+    assert "SLIDE SCREENSHOT" in labels
+    assert "EXTRACTED IMAGE 1" in labels
 
 
 def test_adapter_requires_api_key():
@@ -395,17 +433,13 @@ def test_stage2_cache_hit_skips_api(tmp_path):
 
     # First run populates the cache
     stub1 = _StubDetectAdapter()
-    opts1 = V2RunOptions(
-        pptx_path="x", output_dir=out, api_key="sk-test", detect_adapter=stub1
-    )
+    opts1 = V2RunOptions(pptx_path="x", output_dir=out, api_key="sk-test", detect_adapter=stub1)
     stage2_detect([slide], opts1, V2RunStats())
     assert stub1.calls == 1
 
     # Second run with same content should hit the cache and skip the API
     stub2 = _StubDetectAdapter()
-    opts2 = V2RunOptions(
-        pptx_path="x", output_dir=out, api_key="sk-test", detect_adapter=stub2
-    )
+    opts2 = V2RunOptions(pptx_path="x", output_dir=out, api_key="sk-test", detect_adapter=stub2)
     stats2 = V2RunStats()
     detected, _errors = stage2_detect([slide], opts2, stats2)
     assert stub2.calls == 0
@@ -480,9 +514,7 @@ def test_stage2_records_error_on_adapter_error(tmp_path):
         model_name = "failing"
 
         def detect(self, slide):
-            return DetectionResult(
-                slide_number=slide.slide_number, questions=[], error="rate limited"
-            )
+            return DetectionResult(slide_number=slide.slide_number, questions=[], error="rate limited")
 
     slide = RawSlide(slide_number=1, deck_id="d", text_blocks=["q"], image_paths=[])
     stats = V2RunStats()
@@ -534,3 +566,73 @@ def test_run_v2_stages_1_and_2_smoke(tmp_path):
     stats_blob = json.loads((out / "v2_run_stats.json").read_text())
     assert stats_blob["ai_calls"] == 1
     assert "duration_seconds" in stats_blob
+
+
+def test_run_v2_filters_slides_before_detection(tmp_path):
+    pptx = tmp_path / "deck.pptx"
+    pptx.write_bytes(b"fake")
+    out = tmp_path / "run"
+    slide_contents = [SlideContent(slide_number=i, texts=[f"Q{i}?"]) for i in range(1, 6)]
+    screenshots = [str(tmp_path / f"shot{i}.png") for i in range(1, 6)]
+    stub = _StubDetectAdapter()
+    opts = V2RunOptions(
+        pptx_path=str(pptx),
+        output_dir=out,
+        rotation="Pediatrics",
+        api_key="sk-test",
+        slide_range=(2, 5),
+        max_slides=2,
+        parse_pptx_fn=_fake_parse_pptx_factory(slide_contents),
+        pptx_to_images_fn=_fake_pptx_to_images_factory(screenshots),
+        detect_adapter=stub,
+    )
+
+    result = run_v2_stages_1_and_2(opts)
+
+    assert stub.calls == 2
+    assert [q.slide_number for q in result.detected_questions] == [2, 3]
+    assert result.metadata["selected_slide_numbers"] == [2, 3]
+    assert result.metadata["selected_slide_count"] == 2
+
+
+def test_run_v2_dry_run_does_not_call_ai_or_export(tmp_path):
+    pptx = tmp_path / "deck.pptx"
+    pptx.write_bytes(b"fake")
+    out = tmp_path / "run"
+    slide_contents = [SlideContent(slide_number=1, texts=["Q?"], images=[])]
+    screenshots = [str(tmp_path / "shot1.png")]
+
+    class _ExplodingDetectAdapter:
+        model_name = "explode"
+
+        def detect(self, slide):
+            raise AssertionError("detect adapter should not be called in dry-run")
+
+    class _ExplodingRewriteAdapter:
+        model_name = "explode"
+
+        def rewrite(self, detected, rotation):
+            raise AssertionError("rewrite adapter should not be called in dry-run")
+
+    def _export_fn(**kwargs):
+        raise AssertionError("export should not be called in dry-run")
+
+    opts = V2RunOptions(
+        pptx_path=str(pptx),
+        output_dir=out,
+        rotation="Pediatrics",
+        api_key="sk-test",
+        dry_run=True,
+        parse_pptx_fn=_fake_parse_pptx_factory(slide_contents),
+        pptx_to_images_fn=_fake_pptx_to_images_factory(screenshots),
+        detect_adapter=_ExplodingDetectAdapter(),
+        rewrite_adapter=_ExplodingRewriteAdapter(),
+    )
+
+    result = run_v2_pipeline(opts, export_fn=_export_fn)
+
+    assert len(result.raw_slides) == 1
+    assert result.detected_questions == []
+    assert result.rewritten_questions == []
+    assert result.stats.ai_calls == 0
+    assert result.metadata["dry_run"] is True

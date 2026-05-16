@@ -473,7 +473,7 @@ def _finalize_format_stats(source_label: str) -> None:
         console.print(f"   • AI calls: {summary['ai_summary']['total_calls']}")
         console.print(f"   • Web search calls: {summary['ai_summary']['total_web_search_calls']}")
         console.print(f"   • Estimated cost: ${summary['cost_estimate']['total_cost_usd']:.4f}")
-        if update_cumulative_stats:
+        if callable(update_cumulative_stats):
             update_cumulative_stats(summary)
     except Exception as e:
         console.print(f"[yellow]⚠️ Could not generate format stats report for {source_label}: {e}[/yellow]")
